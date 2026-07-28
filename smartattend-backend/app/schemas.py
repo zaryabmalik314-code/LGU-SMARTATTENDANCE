@@ -66,6 +66,8 @@ class FacultyOut(BaseModel):
     teacher_id: str
     department: Optional[str] = None
     approval_status: str
+    review_note: Optional[str] = None
+    is_active: bool = True
     profile_photo: Optional[str] = None
     face_photos: Optional[List[str]] = None  # up to 3 small thumbnails, one per enrolled angle — admin review only
 
@@ -133,6 +135,20 @@ class ReEnrollFaceResponse(BaseModel):
 
 class ApprovalRequest(BaseModel):
     approval_status: str  # "approved" | "rejected"
+    note: Optional[str] = None  # shown to the faculty on their pending/rejected screen — required in practice when rejecting so they know what to fix
+
+
+class ManualAttendanceRequest(BaseModel):
+    faculty_id: int
+    type: str  # "check_in" | "check_out" — matches AttendanceRecord.record_type values
+    note: Optional[str] = None
+
+    @field_validator("type")
+    @classmethod
+    def validate_type(cls, v):
+        if v not in ("check_in", "check_out"):
+            raise ValueError('type must be "check_in" or "check_out"')
+        return v
 
 
 class CheckOutRequest(BaseModel):
@@ -267,4 +283,3 @@ class LeaveRequestOut(BaseModel):
 
     class Config:
         from_attributes = True
-
