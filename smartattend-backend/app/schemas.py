@@ -265,6 +265,7 @@ class LeaveRequestOut(BaseModel):
     created_at: datetime
     reviewed_by: Optional[str] = None
     reviewed_at: Optional[datetime] = None
+    decision_note: Optional[str] = None
     faculty_name: Optional[str] = None
     department: Optional[str] = None
 
@@ -300,6 +301,7 @@ class LeaveRequestOut(BaseModel):
 
 class LeaveDecisionRequest(BaseModel):
     status: str  # "approved" | "rejected"
+    note: Optional[str] = None  # shown back to the faculty on their leave-request list — especially useful on rejection so they know why
 
     @field_validator("status")
     @classmethod
