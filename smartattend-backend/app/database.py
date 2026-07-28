@@ -123,3 +123,7 @@ def run_simple_migrations():
                 conn.execute(text("ALTER TABLE leave_requests ADD COLUMN reviewed_at TIMESTAMP"))
                 conn.commit()
                 print("[migration] Added missing column: leave_requests.reviewed_at")
+            if "decision_note" not in existing_columns:
+                conn.execute(text("ALTER TABLE leave_requests ADD COLUMN decision_note TEXT"))
+                conn.commit()
+                print("[migration] Added missing column: leave_requests.decision_note")
