@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SmartAttend — Bootstrap Admin</title>
+<style>
+  body{font-family:system-ui,sans-serif;background:#0b1220;color:#e5e7eb;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}
+  .card{background:#131b2e;padding:32px;border-radius:14px;width:340px;box-shadow:0 8px 30px rgba(0,0,0,.4)}
+  h1{font-size:18px;margin:0 0 6px}
+  p{font-size:13px;color:#9ca3af;margin:0 0 20px}
+  label{font-size:12px;color:#9ca3af;display:block;margin-bottom:4px}
+  input{width:100%;padding:9px 10px;border-radius:8px;border:1px solid #2a3550;background:#0f1626;color:#fff;margin-bottom:14px;box-sizing:border-box}
+  button{width:100%;padding:11px;border-radius:8px;border:none;background:#d4af37;color:#111;font-weight:600;cursor:pointer}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  .msg{margin-top:14px;font-size:13px;padding:10px;border-radius:8px;display:none;word-break:break-word}
+  .ok{background:rgba(16,185,129,.12);color:#34d399;display:block}
+  .err{background:rgba(239,68,68,.12);color:#f87171;display:block}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Bootstrap Admin Account</h1>
+  <p>Creates the first admin. Only works once — the backend blocks this endpoint after one admin exists. Delete this file from your repo after you're done.</p>
+
+  <label>Backend URL</label>
+  <input id="url" value="https://lgu-smartattendance-production.up.railway.app">
+
+  <label>Email</label>
+  <input id="email" value="zaryabmalik314@gmail.com">
+
+  <label>Password</label>
+  <input id="password" type="text" value="admin123">
+
+  <label>Name</label>
+  <input id="name" value="Admin">
+
+  <button id="go">Create Admin</button>
+  <div id="msg" class="msg"></div>
+</div>
+
+<script>
+document.getElementById('go').onclick = async function(){
+  var btn=this, msg=document.getElementById('msg');
+  btn.disabled=true; btn.textContent='Creating…';
+  msg.className='msg'; msg.textContent='';
+  try{
+    var res = await fetch(document.getElementById('url').value + '/api/admin/bootstrap', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        email: document.getElementById('email').value,
+        password: document.getElementById('password').value,
+        name: document.getElementById('name').value
+      })
+    });
+    var data = await res.json().catch(function(){return {};});
+    if(res.ok){
+      msg.className='msg ok';
+      msg.textContent='Admin created. You can log in now with the email/password above.';
+    } else {
+      msg.className='msg err';
+      msg.textContent='Failed: ' + (data.detail || res.status + ' ' + res.statusText);
+    }
+  }catch(e){
+    msg.className='msg err';
+    msg.textContent='Network error: ' + e.message + ' — check the backend URL and that it is online.';
+  }
+  btn.disabled=false; btn.textContent='Create Admin';
+};
+</script>
+</body>
+</html>
