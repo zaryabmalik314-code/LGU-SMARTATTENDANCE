@@ -24,6 +24,7 @@ class Faculty(Base):
     approval_status = Column(String, default="pending", nullable=False)  # "pending" | "approved" | "rejected"
     review_note = Column(Text, nullable=True)  # admin's feedback when rejecting/flagging an enrollment — shown to the faculty on their pending/rejected screen
     is_active = Column(Boolean, default=True, nullable=False)  # False once admin has deactivated/offboarded this faculty
+    last_device_ip = Column(String, nullable=True)  # set once a device switch is approved; enforcement (blocking login from a new IP) is a separate follow-up, not wired in yet
     profile_photo = Column(Text, nullable=True)  # base64-encoded image (data URL), synced across devices
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -139,6 +140,71 @@ class LeaveRequest(Base):
     end_date = Column(DateTime, nullable=False)
     reason = Column(Text, nullable=False)
     status = Column(String, default="pending", nullable=False)  # "pending" | "approved" | "rejected"
+    reviewed_by = Column(String, nullable=True)  # email of the HOD/admin who decided this, for the audit trail
+    reviewed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     faculty = relationship("Faculty")
+
+
+class HOD(Base):
+    """
+    One HOD per department (18 departments total). Deliberately a separate
+    table/login from Admin, not a shared account with a role flag — the
+    two were specified as fully separate systems, and keeping them apart
+    means an HOD account can never accidentally end up with admin-wide
+    reach through a bug in a shared permissions check.
+    """
+    __tablename__ = "hods"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=True)
+    email = Column(String, unique=True, index=True, nullable=False)
+    password_hash = Column(String, nullable=False)
+    department = Column(String, nullable=False, index=True)  # which department this HOD reviews
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class HODSession(Base):
+    """Same opaque-token pattern as AdminSession, kept as its own table
+    so an HOD's session can never be mistaken for an admin's."""
+    __tablename__ = "hod_sessions"
+
+    token = Column(String, primary_key=True, index=True)
+    hod_id = Column(Integer, ForeignKey("hods.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=False)
+
+
+class DeviceSwitchRequest(Base):
+    """
+    Created automatically when a faculty member's login IP doesn't match
+    their last recorded device IP — enforces one active device per
+    account. Sits pending until an admin approves or rejects it.
+    """
+    __tablename__ = "device_switch_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    faculty_id = Column(Integer, ForeignKey("faculty.id"), nullable=False, index=True)
+    new_ip = Column(String, nullable=False)
+    status = Column(String, default="pending", nullable=False)  # "pending" | "approved" | "rejected"
+    created_at = Column(DateTime, default=datetime.utcnow)
+    reviewed_at = Column(DateTime, nullable=True)
+
+    faculty = relationship("Faculty")
+
+
+class Holiday(Base):
+    """
+    University holiday calendar. A date here is excluded from absence
+    counts everywhere attendance is tallied (analytics, monthly HR
+    report). department=None means it applies university-wide; a
+    specific department name scopes it to just that department.
+    """
+    __tablename__ = "holidays"
+
+    id = Column(Integer, primary_key=True, index=True)
+    date = Column(String, nullable=False, index=True)  # "YYYY-MM-DD" — stored as a plain date string, no time component needed
+    label = Column(String, nullable=True)
+    department = Column(String, nullable=True)  # None = applies to every department
+    created_at = Column(DateTime, default=datetime.utcnow)
