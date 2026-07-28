@@ -264,9 +264,98 @@ def approve_faculty(
         raise HTTPException(status_code=404, detail="Faculty not found")
 
     faculty.approval_status = payload.approval_status
+    # A note only makes sense while something is still unresolved for the
+    # faculty to act on. Clear it on approval so an old rejection reason
+    # doesn't linger and confuse someone who is now fully approved.
+    if payload.approval_status == "approved":
+        faculty.review_note = None
+    else:
+        faculty.review_note = payload.note
     db.commit()
     db.refresh(faculty)
     return faculty
+
+
+@app.post("/api/faculty/{faculty_id}/deactivate", response_model=schemas.FacultyOut)
+def deactivate_faculty(
+    faculty_id: int,
+    db: Session = Depends(get_db),
+    admin: models.Admin = Depends(get_current_admin),
+):
+    """
+    Admin-only offboarding. The account can no longer log in or check in,
+    but every AttendanceRecord/LeaveRequest tied to them is left untouched —
+    this only flips a flag, it never deletes history.
+    """
+    faculty = db.query(models.Faculty).filter(models.Faculty.id == faculty_id).first()
+    if not faculty:
+        raise HTTPException(status_code=404, detail="Faculty not found")
+    faculty.is_active = False
+    db.commit()
+    db.refresh(faculty)
+    return faculty
+
+
+@app.post("/api/faculty/{faculty_id}/reactivate", response_model=schemas.FacultyOut)
+def reactivate_faculty(
+    faculty_id: int,
+    db: Session = Depends(get_db),
+    admin: models.Admin = Depends(get_current_admin),
+):
+    """Admin-only — undoes a deactivation if it was done by mistake."""
+    faculty = db.query(models.Faculty).filter(models.Faculty.id == faculty_id).first()
+    if not faculty:
+        raise HTTPException(status_code=404, detail="Faculty not found")
+    faculty.is_active = True
+    db.commit()
+    db.refresh(faculty)
+    return faculty
+
+
+@app.post("/api/attendance/manual", response_model=schemas.CheckInResponse)
+def mark_manual_attendance(
+    payload: schemas.ManualAttendanceRequest,
+    db: Session = Depends(get_db),
+    admin: models.Admin = Depends(get_current_admin),
+):
+    """
+    Admin-only. Covers the case where a faculty member's phone isn't
+    working and they called HR/admin to mark them present, or any other
+    case needing a manual override. Skips GPS/face verification entirely —
+    the admin session token itself is the authorization for this record.
+    """
+    faculty = db.query(models.Faculty).filter(models.Faculty.id == payload.faculty_id).first()
+    if not faculty:
+        raise HTTPException(status_code=404, detail="Faculty not found")
+
+    # GPS/face columns are non-nullable on this table since every normal
+    # record goes through real verification. A manual entry has neither, so
+    # it uses sentinel values (0.0 / "manual_review") rather than loosening
+    # those columns for every other record — the note+status makes it clear
+    # this one was an admin override, not a real geofenced check-in.
+    record = models.AttendanceRecord(
+        faculty_id=faculty.id,
+        record_type=payload.type,
+        status="present",
+        timestamp=datetime.utcnow(),
+        latitude=0.0,
+        longitude=0.0,
+        gps_accuracy=0.0,
+        readings_used=0,
+        wifi_ssid=None,
+        face_match_score=0.0,
+        face_verified="manual_review",
+        notes=f"Manual entry by admin ({admin.email}). {payload.note or ''}".strip(),
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    return schemas.CheckInResponse(
+        status="present",
+        record_id=record.id,
+        face_match_score=None,
+        gps_accuracy_used=None,
+    )
 
 
 @app.post("/api/auth/login", response_model=schemas.LoginResponse)
