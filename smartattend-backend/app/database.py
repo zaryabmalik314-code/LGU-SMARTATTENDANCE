@@ -84,6 +84,11 @@ def run_simple_migrations():
                 conn.commit()
                 print("[migration] Added missing column: faculty.is_active")
 
+            if "last_device_ip" not in existing_columns:
+                conn.execute(text("ALTER TABLE faculty ADD COLUMN last_device_ip TEXT"))
+                conn.commit()
+                print("[migration] Added missing column: faculty.last_device_ip")
+
         if "attendance_records" in table_names:
             existing_columns = {col["name"] for col in inspector.get_columns("attendance_records")}
             if "flagged_suspicious" not in existing_columns:
@@ -107,3 +112,14 @@ def run_simple_migrations():
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_salary_records_faculty_id ON salary_records (faculty_id)"))
             conn.commit()
             print("[migration] Verified indexes on salary_records table")
+
+        if "leave_requests" in table_names:
+            existing_columns = {col["name"] for col in inspector.get_columns("leave_requests")}
+            if "reviewed_by" not in existing_columns:
+                conn.execute(text("ALTER TABLE leave_requests ADD COLUMN reviewed_by TEXT"))
+                conn.commit()
+                print("[migration] Added missing column: leave_requests.reviewed_by")
+            if "reviewed_at" not in existing_columns:
+                conn.execute(text("ALTER TABLE leave_requests ADD COLUMN reviewed_at TIMESTAMP"))
+                conn.commit()
+                print("[migration] Added missing column: leave_requests.reviewed_at")
