@@ -373,28 +373,38 @@ def login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
 @app.post("/api/auth/re-enroll-face", response_model=schemas.ReEnrollFaceResponse)
 def re_enroll_face(payload: schemas.ReEnrollFaceRequest, db: Session = Depends(get_db)):
     """
-    Lets an already-approved teacher replace their stored face descriptor —
-    e.g. if it was captured incorrectly before, lighting was bad, or they
-    just want to refresh it. Requires teacher_id + PIN, same as login, so a
-    stranger can't overwrite someone else's biometric data.
+    Lets a teacher replace their stored face descriptor — either an
+    already-approved teacher refreshing it (bad lighting, wants to redo
+    it), or a rejected/flagged one retrying enrollment after reading the
+    admin's note. Requires teacher_id + PIN, same as login, so a stranger
+    can't overwrite someone else's biometric data.
     """
     faculty = db.query(models.Faculty).filter(models.Faculty.teacher_id == payload.teacher_id).first()
     if not faculty or not verify_pin(payload.pin, faculty.pin_hash):
         return schemas.ReEnrollFaceResponse(status="invalid_credentials", faculty=None)
 
-    if faculty.approval_status != "approved":
+    if faculty.approval_status not in ("approved", "rejected"):
+        # "pending" already has a fresh enrollment sitting with the admin —
+        # nothing useful to replace it with here.
         return schemas.ReEnrollFaceResponse(status="not_approved", faculty=faculty)
 
     enroll_result = enroll_from_frames(payload.face_images)
     if not enroll_result["embeddings"]:
         raise HTTPException(status_code=400, detail=f"No usable face detected in any submitted frame: {enroll_result['reason']}")
 
+    was_rejected = faculty.approval_status == "rejected"
     faculty.face_embeddings = embeddings_to_str(enroll_result["embeddings"])
     faculty.face_photos = json.dumps(enroll_result["thumbnails"])
+    if was_rejected:
+        # Retrying after a rejection puts them back in the review queue —
+        # the admin's earlier note has been addressed, so clear it rather
+        # than leaving stale feedback attached to a fresh attempt.
+        faculty.approval_status = "pending"
+        faculty.review_note = None
     db.commit()
     db.refresh(faculty)
 
-    return schemas.ReEnrollFaceResponse(status="ok", faculty=faculty)
+    return schemas.ReEnrollFaceResponse(status="resubmitted" if was_rejected else "ok", faculty=faculty)
 
 
 MAX_PHOTO_BASE64_CHARS = 500_000  # ~375KB binary — plenty for a resized profile pic, keeps DB rows small
