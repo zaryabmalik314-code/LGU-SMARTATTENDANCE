@@ -642,6 +642,7 @@ def hod_decide_leave_request(
     req.status = payload.status
     req.reviewed_by = hod.email
     req.reviewed_at = datetime.utcnow()
+    req.decision_note = payload.note
 
     if payload.status == "approved":
         balance = get_or_create_leave_balance(db, req.faculty_id)
@@ -680,6 +681,7 @@ def admin_decide_leave_request(
     req.status = payload.status
     req.reviewed_by = admin.email
     req.reviewed_at = datetime.utcnow()
+    req.decision_note = payload.note
 
     if payload.status == "approved":
         balance = get_or_create_leave_balance(db, req.faculty_id)
