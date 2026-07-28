@@ -74,6 +74,16 @@ def run_simple_migrations():
                 conn.commit()
                 print("[migration] Added missing column: faculty.face_photos")
 
+            if "review_note" not in existing_columns:
+                conn.execute(text("ALTER TABLE faculty ADD COLUMN review_note TEXT"))
+                conn.commit()
+                print("[migration] Added missing column: faculty.review_note")
+
+            if "is_active" not in existing_columns:
+                conn.execute(text("ALTER TABLE faculty ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE"))
+                conn.commit()
+                print("[migration] Added missing column: faculty.is_active")
+
         if "attendance_records" in table_names:
             existing_columns = {col["name"] for col in inspector.get_columns("attendance_records")}
             if "flagged_suspicious" not in existing_columns:
