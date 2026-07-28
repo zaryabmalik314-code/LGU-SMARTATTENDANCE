@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SmartAttend — HOD Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy-950:#0a0e1a; --navy-900:#10162a; --navy-850:#141b32; --navy-800:#1a2138; --navy-700:#232b47;
+    --gold-400:#d4af6a; --gold-300:#e0c085;
+    --slate-300:#94a3b8; --slate-400:#64748b;
+    --white:#f4f6fb;
+    --green-500:#34d399; --green-bg:rgba(52,211,153,.12);
+    --red-500:#f87171; --red-bg:rgba(248,113,113,.12);
+    --amber-500:#fbbf24; --amber-bg:rgba(251,191,36,.12);
+    --font-display:'Space Grotesk',sans-serif; --font-body:'Inter',sans-serif; --font-mono:'JetBrains Mono',monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--navy-950);color:var(--white);font-family:var(--font-body);font-size:14px}
+  button{font-family:inherit;border:none;cursor:pointer;background:none;color:inherit}
+  input,select{font-family:inherit}
+
+  #login-view{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+  .login-card{width:100%;max-width:380px;background:var(--navy-900);border:1px solid var(--navy-700);border-radius:14px;padding:36px 32px}
+  .login-title{font-family:var(--font-display);font-size:22px;font-weight:600;margin-bottom:4px}
+  .login-sub{color:var(--slate-400);font-size:13.5px;margin-bottom:28px}
+  .field{margin-bottom:16px}
+  .field label{display:block;font-size:12.5px;color:var(--slate-300);margin-bottom:6px;font-weight:500;text-transform:uppercase;letter-spacing:.04em}
+  .field input{width:100%;background:var(--navy-850);border:1px solid var(--navy-700);border-radius:8px;padding:11px 12px;color:var(--white);font-size:14.5px;outline:none}
+  .field input:focus{border-color:var(--gold-400)}
+  .btn-primary{width:100%;background:var(--gold-400);color:var(--navy-950);font-weight:600;font-size:14.5px;padding:12px;border-radius:8px;margin-top:8px}
+  .btn-primary:hover{background:var(--gold-300)}
+  .btn-primary:disabled{opacity:.55;cursor:not-allowed}
+  .login-error{font-size:13px;color:var(--red-500);margin-top:12px;display:none}
+
+  #app-view{display:none;min-height:100vh}
+  .shell{display:flex;min-height:100vh}
+  .sidebar{width:220px;flex-shrink:0;background:var(--navy-900);border-right:1px solid var(--navy-800);padding:20px 14px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column}
+  .brand-name{font-family:var(--font-display);font-weight:600;font-size:15px;margin-bottom:2px}
+  .brand-sub{font-size:10.5px;color:var(--slate-400);letter-spacing:.04em;margin-bottom:22px}
+  .nav-item{display:flex;align-items:center;gap:9px;width:100%;text-align:left;padding:10px 12px;border-radius:8px;color:var(--slate-300);font-size:13.5px;font-weight:500;margin-bottom:2px}
+  .nav-item:hover{background:var(--navy-800);color:var(--white)}
+  .nav-item.active{background:var(--navy-800);color:var(--gold-300)}
+  .nav-badge{margin-left:auto;background:var(--red-bg);color:var(--red-500);font-size:11px;font-weight:600;padding:1px 7px;border-radius:10px}
+  .sidebar-footer{margin-top:auto;padding-top:14px;border-top:1px solid var(--navy-800)}
+  .hod-chip{font-size:12px;color:var(--slate-300);margin-bottom:10px;word-break:break-word}
+  .hod-dept{color:var(--gold-300);font-weight:600}
+  .logout-btn{width:100%;padding:9px;border-radius:8px;background:var(--navy-800);color:var(--slate-300);font-size:12.5px}
+  .logout-btn:hover{color:var(--white)}
+
+  .main{flex:1;padding:28px 32px;min-width:0}
+  .page-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap;gap:10px}
+  .page-title{font-family:var(--font-display);font-size:20px;font-weight:600}
+  .page-desc{font-size:13px;color:var(--slate-400);margin-top:3px}
+  .btn-ghost{padding:8px 14px;border-radius:8px;background:var(--navy-800);color:var(--slate-300);font-size:12.5px}
+  .btn-ghost:hover{color:var(--white)}
+
+  .view{display:none}
+  .view.active{display:block}
+
+  .table-wrap{background:var(--navy-900);border:1px solid var(--navy-800);border-radius:12px;overflow:hidden}
+  table{width:100%;border-collapse:collapse}
+  th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--slate-400);padding:12px 14px;border-bottom:1px solid var(--navy-800)}
+  td{padding:12px 14px;border-bottom:1px solid var(--navy-800);font-size:13.5px}
+  tr:last-child td{border-bottom:none}
+  .loading-row{padding:24px;text-align:center;color:var(--slate-400)}
+  .empty-state{padding:40px 20px;text-align:center}
+  .empty-title{font-size:14px;color:var(--slate-300);margin-bottom:4px}
+  .empty-sub{font-size:12.5px;color:var(--slate-400)}
+
+  .status-pill{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11.5px;font-weight:600;text-transform:capitalize}
+  .status-present{background:var(--green-bg);color:var(--green-500)}
+  .status-absent{background:var(--red-bg);color:var(--red-500)}
+  .status-pending{background:var(--amber-bg);color:var(--amber-500)}
+
+  .btn-approve,.btn-reject{padding:5px 12px;border-radius:6px;font-size:12px;font-weight:600}
+  .btn-approve{background:var(--green-bg);color:var(--green-500);margin-right:6px}
+  .btn-approve:hover{opacity:.75}
+  .btn-reject{background:var(--red-bg);color:var(--red-500)}
+  .btn-reject:hover{opacity:.75}
+  .btn-approve:disabled,.btn-reject:disabled{opacity:.4;cursor:not-allowed}
+
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--navy-800);color:var(--white);padding:11px 20px;border-radius:8px;font-size:13px;z-index:999;box-shadow:0 6px 20px rgba(0,0,0,.4)}
+  .toast.error{background:var(--red-bg);color:var(--red-500);border:1px solid var(--red-500)}
+
+  .stat-row{display:flex;gap:14px;margin-bottom:20px;flex-wrap:wrap}
+  .stat-box{background:var(--navy-900);border:1px solid var(--navy-800);border-radius:10px;padding:14px 18px;min-width:120px}
+  .stat-label{font-size:11px;color:var(--slate-400);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px}
+  .stat-value{font-family:var(--font-display);font-size:22px;font-weight:600}
+
+  @media (max-width:720px){
+    .shell{flex-direction:column}
+    .sidebar{width:100%;height:auto;position:relative;flex-direction:row;flex-wrap:wrap;gap:4px}
+    .brand-name,.brand-sub{display:none}
+    .sidebar-footer{margin-top:0;border-top:none;padding-top:0;width:100%}
+    .main{padding:18px}
+  }
+</style>
+</head>
+<body>
+
+<div id="login-view">
+  <div class="login-card">
+    <div class="login-title">HOD Dashboard</div>
+    <div class="login-sub">Sign in to manage your department</div>
+    <form id="login-form">
+      <div class="field">
+        <label for="login-email">Email</label>
+        <input type="email" id="login-email" placeholder="hod@lgu.edu.pk" required>
+      </div>
+      <div class="field">
+        <label for="login-password">Password</label>
+        <input type="password" id="login-password" placeholder="••••••••" required>
+      </div>
+      <button type="submit" class="btn-primary" id="login-btn">Sign in</button>
+      <div class="login-error" id="login-error"></div>
+    </form>
+  </div>
+</div>
+
+<div id="app-view">
+  <div class="shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand-name">SmartAttend</div>
+      <div class="brand-sub">HOD CONSOLE</div>
+
+      <button class="nav-item active" data-view="attendance">◷ Attendance</button>
+      <button class="nav-item" data-view="leaves">📋 Leave Requests <span class="nav-badge" id="leave-count">0</span></button>
+
+      <div class="sidebar-footer">
+        <div class="hod-chip">Signed in as<br><span class="hod-dept" id="hod-dept-label">—</span></div>
+        <button class="logout-btn" id="logout-btn">Sign out</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <section class="view active" id="view-attendance">
+        <div class="page-header">
+          <div>
+            <div class="page-title">Department Attendance</div>
+            <div class="page-desc" id="dept-desc">Today's present/absent status for your faculty</div>
+          </div>
+          <button class="btn-ghost" onclick="loadFaculty()">Refresh</button>
+        </div>
+        <div class="stat-row">
+          <div class="stat-box"><div class="stat-label">Faculty</div><div class="stat-value" id="stat-total">0</div></div>
+          <div class="stat-box"><div class="stat-label">Present today</div><div class="stat-value" id="stat-present" style="color:var(--green-500)">0</div></div>
+          <div class="stat-box"><div class="stat-label">Absent today</div><div class="stat-value" id="stat-absent" style="color:var(--red-500)">0</div></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Name</th><th>Teacher ID</th><th>Email</th><th>Status</th></tr></thead>
+            <tbody id="faculty-tbody"><tr><td colspan="4" class="loading-row">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="view" id="view-leaves">
+        <div class="page-header">
+          <div>
+            <div class="page-title">Leave Requests</div>
+            <div class="page-desc">Requests from your department — rejected decisions are final</div>
+          </div>
+          <button class="btn-ghost" onclick="loadLeaveRequests()">Refresh</button>
+        </div>
+        <div id="leaves-container"><div class="loading-row">Loading…</div></div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<script>
+/* =========================================================================
+   CONFIG
+   ========================================================================= */
+const BASE_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.protocol === 'file:')
+  ? 'http://localhost:8000'
+  : 'https://lgu-smartattendance-production.up.railway.app';
+
+let authToken = localStorage.getItem('hod_token') || null;
+let hodInfo = JSON.parse(localStorage.getItem('hod_info') || 'null');
+let facultyCache = [];
+
+/* =========================================================================
+   API HELPER
+   ========================================================================= */
+async function api(path, options = {}) {
+  const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+  if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+  const res = await fetch(`${BASE_URL}${path}`, { ...options, headers });
+  if (!res.ok) {
+    let msg = `Request failed (${res.status})`;
+    try { const body = await res.json(); if (body.detail) msg = body.detail; } catch(e){}
+    throw new Error(msg);
+  }
+  if (res.status === 204) return null;
+  return res.json();
+}
+
+function showToast(message, isError = false) {
+  const el = document.createElement('div');
+  el.className = 'toast' + (isError ? ' error' : '');
+  el.textContent = message;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3200);
+}
+
+/* =========================================================================
+   LOGIN
+   ========================================================================= */
+document.getElementById('login-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  const btn = document.getElementById('login-btn');
+  const errEl = document.getElementById('login-error');
+  errEl.style.display = 'none';
+  btn.disabled = true;
+  btn.textContent = 'Signing in…';
+  try {
+    const data = await api('/api/hod/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password })
+    });
+    authToken = data.access_token;
+    hodInfo = data.hod || { email, department: '' };
+    localStorage.setItem('hod_token', authToken);
+    localStorage.setItem('hod_info', JSON.stringify(hodInfo));
+    enterApp();
+  } catch (err) {
+    errEl.textContent = err.message.includes('Failed to fetch')
+      ? "Couldn't reach the backend at " + BASE_URL + ". Is it running?"
+      : err.message;
+    errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Sign in';
+  }
+});
+
+document.getElementById('logout-btn').addEventListener('click', () => {
+  authToken = null; hodInfo = null;
+  localStorage.removeItem('hod_token');
+  localStorage.removeItem('hod_info');
+  document.getElementById('app-view').style.display = 'none';
+  document.getElementById('login-view').style.display = 'flex';
+});
+
+function enterApp() {
+  document.getElementById('login-view').style.display = 'none';
+  document.getElementById('app-view').style.display = 'block';
+  document.getElementById('hod-dept-label').textContent = hodInfo?.department || '—';
+  document.getElementById('dept-desc').textContent = `Today's present/absent status for ${hodInfo?.department || 'your department'}`;
+  loadFaculty();
+  loadLeaveRequests();
+}
+
+if (authToken && hodInfo) enterApp();
+
+/* =========================================================================
+   NAVIGATION
+   ========================================================================= */
+document.querySelectorAll('.nav-item[data-view]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.nav-item[data-view]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.getElementById('view-' + btn.dataset.view).classList.add('active');
+    if (btn.dataset.view === 'leaves') loadLeaveRequests();
+    if (btn.dataset.view === 'attendance') loadFaculty();
+  });
+});
+
+/* =========================================================================
+   DEPARTMENT ATTENDANCE
+   ========================================================================= */
+// Today's present/absent is derived client-side from each faculty's
+// attendance_records (already included when the backend returns Faculty
+// rows with relationships loaded) — if not present, this falls back to
+// showing everyone as "no record today" rather than guessing.
+async function loadFaculty() {
+  const tbody = document.getElementById('faculty-tbody');
+  tbody.innerHTML = '<tr><td colspan="4" class="loading-row">Loading…</td></tr>';
+  try {
+    facultyCache = await api('/api/hod/faculty');
+    renderFacultyTable();
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="4" class="loading-row">Couldn't load — ${err.message}</td></tr>`;
+  }
+}
+
+function isPresentToday(f) {
+  return f.checked_in_today === true;
+}
+
+function renderFacultyTable() {
+  const tbody = document.getElementById('faculty-tbody');
+  const active = facultyCache.filter(f => f.is_active !== false && f.approval_status === 'approved');
+  document.getElementById('stat-total').textContent = active.length;
+
+  let present = 0, absent = 0;
+  active.forEach(f => { if (isPresentToday(f)) present++; else absent++; });
+  document.getElementById('stat-present').textContent = present;
+  document.getElementById('stat-absent').textContent = absent;
+
+  if (!active.length) {
+    tbody.innerHTML = '<tr><td colspan="4"><div class="empty-state"><div class="empty-title">No approved faculty yet</div><div class="empty-sub">Faculty in your department will show up here once approved by admin.</div></div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = active.map(f => {
+    const present = isPresentToday(f);
+    return `<tr>
+      <td>${f.name || '—'}</td>
+      <td style="font-family:var(--font-mono)">${f.teacher_id || '—'}</td>
+      <td>${f.email || '—'}</td>
+      <td><span class="status-pill status-${present ? 'present' : 'absent'}">${present ? 'Present' : 'Absent'}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+/* =========================================================================
+   LEAVE REQUESTS
+   ========================================================================= */
+let allLeaveRequests = [];
+
+async function loadLeaveRequests() {
+  const container = document.getElementById('leaves-container');
+  container.innerHTML = '<div class="loading-row">Loading…</div>';
+  try {
+    allLeaveRequests = await api('/api/hod/leave-requests');
+    const pending = allLeaveRequests.filter(r => r.status === 'pending').length;
+    document.getElementById('leave-count').textContent = pending;
+    renderLeaveRequests();
+  } catch (err) {
+    container.innerHTML = `<div class="empty-state"><div class="empty-title">Couldn't load leave requests</div><div class="empty-sub">${err.message}</div></div>`;
+  }
+}
+
+function renderLeaveRequests() {
+  const container = document.getElementById('leaves-container');
+  if (!allLeaveRequests.length) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-title">No leave requests</div><div class="empty-sub">Requests from your department will appear here.</div></div>';
+    return;
+  }
+  container.innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Faculty</th><th>Start</th><th>End</th><th>Reason</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody>
+          ${allLeaveRequests.map(r => {
+            const statusClass = r.status === 'approved' ? 'present' : r.status === 'rejected' ? 'absent' : 'pending';
+            return `<tr>
+              <td>${r.faculty_name || r.faculty_id}</td>
+              <td>${r.start_date ? r.start_date.split('T')[0] : '—'}</td>
+              <td>${r.end_date ? r.end_date.split('T')[0] : '—'}</td>
+              <td style="max-width:220px;word-break:break-word">${r.reason || '—'}</td>
+              <td><span class="status-pill status-${statusClass}">${r.status}</span></td>
+              <td style="white-space:nowrap">
+                ${r.status === 'pending' ? `
+                  <button class="btn-approve" onclick="decideLeave(${r.id},'approved',this)">Approve</button>
+                  <button class="btn-reject" onclick="decideLeave(${r.id},'rejected',this)">Reject</button>
+                ` : `<span style="opacity:.4;font-size:12px">Decided</span>`}
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+async function decideLeave(id, status, btnEl) {
+  if (status === 'rejected' && !confirm('Reject this leave request? This is final and cannot be resubmitted.')) return;
+  const row = btnEl.closest('tr');
+  row.querySelectorAll('button').forEach(b => b.disabled = true);
+  try {
+    await api(`/api/hod/leave-requests/${id}`, {
+      method: 'POST',
+      body: JSON.stringify({ status })
+    });
+    showToast(`Leave request ${status}`);
+    loadLeaveRequests();
+  } catch (err) {
+    showToast('Failed: ' + err.message, true);
+    row.querySelectorAll('button').forEach(b => b.disabled = false);
+  }
+}
+</script>
+</body>
+</html>
