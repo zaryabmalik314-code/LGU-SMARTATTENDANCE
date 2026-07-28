@@ -22,6 +22,8 @@ class Faculty(Base):
     face_photos = Column(Text, nullable=True)
     pin_hash = Column(String, nullable=False)  # bcrypt hash of login PIN
     approval_status = Column(String, default="pending", nullable=False)  # "pending" | "approved" | "rejected"
+    review_note = Column(Text, nullable=True)  # admin's feedback when rejecting/flagging an enrollment — shown to the faculty on their pending/rejected screen
+    is_active = Column(Boolean, default=True, nullable=False)  # False once admin has deactivated/offboarded this faculty
     profile_photo = Column(Text, nullable=True)  # base64-encoded image (data URL), synced across devices
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -140,4 +142,3 @@ class LeaveRequest(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     faculty = relationship("Faculty")
-
