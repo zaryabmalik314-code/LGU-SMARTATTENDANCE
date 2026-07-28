@@ -328,6 +328,14 @@ def mark_manual_attendance(
     if not faculty:
         raise HTTPException(status_code=404, detail="Faculty not found")
 
+    if faculty.approval_status != "approved":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot mark attendance — this faculty member is '{faculty.approval_status}', not approved yet.",
+        )
+    if not faculty.is_active:
+        raise HTTPException(status_code=400, detail="Cannot mark attendance — this faculty account is deactivated.")
+
     # GPS/face columns are non-nullable on this table since every normal
     # record goes through real verification. A manual entry has neither, so
     # it uses sentinel values (0.0 / "manual_review") rather than loosening
