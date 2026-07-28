@@ -68,6 +68,7 @@ class FacultyOut(BaseModel):
     approval_status: str
     review_note: Optional[str] = None
     is_active: bool = True
+    checked_in_today: bool = False  # computed by the HOD endpoint — True if a "present" check-in record exists today (PKT)
     profile_photo: Optional[str] = None
     face_photos: Optional[List[str]] = None  # up to 3 small thumbnails, one per enrolled angle — admin review only
 
@@ -262,6 +263,10 @@ class LeaveRequestOut(BaseModel):
     reason: str
     status: str
     created_at: datetime
+    reviewed_by: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
+    faculty_name: Optional[str] = None
+    department: Optional[str] = None
 
     @field_serializer('start_date')
     def serialize_start_date(self, dt: datetime, _info):
@@ -280,6 +285,112 @@ class LeaveRequestOut(BaseModel):
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
         return dt.isoformat()
+
+    @field_serializer('reviewed_at')
+    def serialize_reviewed_at(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.isoformat()
+
+    class Config:
+        from_attributes = True
+
+
+class LeaveDecisionRequest(BaseModel):
+    status: str  # "approved" | "rejected"
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, v):
+        if v not in ("approved", "rejected"):
+            raise ValueError('status must be "approved" or "rejected"')
+        return v
+
+
+class HODLoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class HODCreateRequest(BaseModel):
+    email: str
+    password: str
+    department: str
+    name: Optional[str] = None
+
+
+class HODOut(BaseModel):
+    name: Optional[str] = None
+    email: str
+    department: str
+
+
+class HODLoginResponse(BaseModel):
+    access_token: str
+    hod: HODOut
+
+
+class DeviceSwitchRequestOut(BaseModel):
+    id: int
+    faculty_id: int
+    new_ip: str
+    status: str
+    created_at: datetime
+    reviewed_at: Optional[datetime] = None
+    faculty_name: Optional[str] = None
+    department: Optional[str] = None
+
+    @field_serializer('created_at')
+    def serialize_created_at(self, dt: datetime, _info):
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.isoformat()
+
+    @field_serializer('reviewed_at')
+    def serialize_reviewed_at(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.isoformat()
+
+    class Config:
+        from_attributes = True
+
+
+class DeviceSwitchDecisionRequest(BaseModel):
+    status: str  # "approved" | "rejected"
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, v):
+        if v not in ("approved", "rejected"):
+            raise ValueError('status must be "approved" or "rejected"')
+        return v
+
+
+class HolidayCreate(BaseModel):
+    date: str  # "YYYY-MM-DD"
+    label: Optional[str] = None
+    department: Optional[str] = None
+
+    @field_validator("date")
+    @classmethod
+    def validate_date_format(cls, v):
+        try:
+            datetime.strptime(v, "%Y-%m-%d")
+        except ValueError:
+            raise ValueError('date must be in "YYYY-MM-DD" format')
+        return v
+
+
+class HolidayOut(BaseModel):
+    id: int
+    date: str
+    label: Optional[str] = None
+    department: Optional[str] = None
 
     class Config:
         from_attributes = True
