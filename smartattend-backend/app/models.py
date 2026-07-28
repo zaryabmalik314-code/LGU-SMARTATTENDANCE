@@ -142,6 +142,7 @@ class LeaveRequest(Base):
     status = Column(String, default="pending", nullable=False)  # "pending" | "approved" | "rejected"
     reviewed_by = Column(String, nullable=True)  # email of the HOD/admin who decided this, for the audit trail
     reviewed_at = Column(DateTime, nullable=True)
+    decision_note = Column(Text, nullable=True)  # optional note from the HOD/admin, shown back to the faculty (esp. useful on rejection)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     faculty = relationship("Faculty")
