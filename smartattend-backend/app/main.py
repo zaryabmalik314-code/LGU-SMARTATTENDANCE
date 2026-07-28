@@ -1,210 +1,1082 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text, Boolean
-from sqlalchemy.orm import relationship
-from datetime import datetime
-from .database import Base
+from fastapi import FastAPI, Depends, HTTPException, Header, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.orm import Session, joinedload
+from datetime import datetime, timedelta, timezone
+from typing import List, Optional
+import asyncio
+import json
+import secrets
+
+from . import models, schemas
+from .database import engine, get_db, run_simple_migrations, SessionLocal
+from .geofence import pick_best_reading, check_location, check_impossible_movement
+from .face_verify import verify_face_from_frames, enroll_from_frames, embeddings_to_str
+from .auth import hash_pin, verify_pin, hash_password, verify_password
+from .ws_manager import manager
+
+models.Base.metadata.create_all(bind=engine)
+run_simple_migrations()
+
+app = FastAPI(title="SmartAttend API")
 
 
-class Faculty(Base):
-    __tablename__ = "faculty"
-
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False)
-    email = Column(String, unique=True, index=True, nullable=False)
-    teacher_id = Column(String, unique=True, index=True, nullable=False)  # roll number / employee ID, used for login
-    department = Column(String, nullable=True)
-    # Up to 3 ArcFace (InsightFace) embeddings, one per angle bucket
-    # (left/center/right), stored as a JSON-encoded list of float lists.
-    # Legacy rows may still hold a single comma-separated face-api.js
-    # descriptor — face_verify.str_to_embeddings() handles both formats.
-    face_embeddings = Column(Text, nullable=False)
-    # Small compressed JPEG thumbnails (one per angle bucket), JSON list of
-    # data: URLs — for admin approval review only, not used in matching.
-    face_photos = Column(Text, nullable=True)
-    pin_hash = Column(String, nullable=False)  # bcrypt hash of login PIN
-    approval_status = Column(String, default="pending", nullable=False)  # "pending" | "approved" | "rejected"
-    review_note = Column(Text, nullable=True)  # admin's feedback when rejecting/flagging an enrollment — shown to the faculty on their pending/rejected screen
-    is_active = Column(Boolean, default=True, nullable=False)  # False once admin has deactivated/offboarded this faculty
-    last_device_ip = Column(String, nullable=True)  # set once a device switch is approved; enforcement (blocking login from a new IP) is a separate follow-up, not wired in yet
-    profile_photo = Column(Text, nullable=True)  # base64-encoded image (data URL), synced across devices
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-    attendance_records = relationship("AttendanceRecord", back_populates="faculty")
+@app.on_event("startup")
+async def on_startup():
+    manager.set_loop(asyncio.get_running_loop())
 
 
-class AttendanceRecord(Base):
-    __tablename__ = "attendance_records"
+# Locked to actual known frontend origins — GitHub Pages (teacher app +
+# admin dashboard, same host) and the Netlify fallback used during testing.
+# Add any new real domain here before pointing a frontend at this backend.
+ALLOWED_ORIGINS = [
+    "https://zaryabmalik314-code.github.io",
+    "https://preeminent-kulfi-f8576a.netlify.app",
+    "https://brilliant-pothos-ee9a7a.netlify.app",
+    "http://localhost:5500",
+    "http://127.0.0.1:5500",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
 
-    id = Column(Integer, primary_key=True, index=True)
-    faculty_id = Column(Integer, ForeignKey("faculty.id"), nullable=False, index=True)
-    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
-
-    # GPS data
-    latitude = Column(Float, nullable=False)
-    longitude = Column(Float, nullable=False)
-    gps_accuracy = Column(Float, nullable=False)  # meters, from navigator.geolocation
-    readings_used = Column(Integer, default=1)  # how many GPS samples were averaged
-
-    # Secondary signal
-    wifi_ssid = Column(String, nullable=True)
-
-    # Face verification
-    face_match_score = Column(Float, nullable=False)  # cosine similarity 0-1
-    face_verified = Column(String, nullable=False)  # "pass" | "fail" | "manual_review"
-
-    # Final decision
-    status = Column(String, nullable=False)  # "present" | "rejected_location" | "rejected_face"
-    notes = Column(Text, nullable=True)
-    record_type = Column(String, default="check_in", nullable=False)  # "check_in" | "check_out"
-
-    # Anti-spoofing: flagged (not blocked) if the implied travel speed since
-    # this faculty's last recorded location was physically impossible.
-    flagged_suspicious = Column(Boolean, default=False, nullable=False)
-    flag_reason = Column(Text, nullable=True)
-
-    faculty = relationship("Faculty", back_populates="attendance_records")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
-class LeaveBalance(Base):
+def get_or_create_leave_balance(db: Session, faculty_id: int) -> models.LeaveBalance:
+    balance = db.query(models.LeaveBalance).filter(models.LeaveBalance.faculty_id == faculty_id).first()
+    if not balance:
+        balance = models.LeaveBalance(faculty_id=faculty_id)
+        db.add(balance)
+        db.commit()
+        db.refresh(balance)
+    return balance
+
+
+MAX_OFFLINE_QUEUE_HOURS = 24  # how far in the past a queued offline check-in's captured_at can be
+CLOCK_SKEW_TOLERANCE_MINUTES = 2  # small allowance for device clock drift
+
+
+def to_utc_iso(dt: datetime) -> str:
+    """Serialize a stored (naive, but always-UTC) datetime with an explicit
+    UTC offset, so clients don't misparse it as their own local time."""
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.isoformat()
+
+
+def resolve_record_timestamp(captured_at: Optional[datetime]) -> datetime:
     """
-    One row per faculty per semester. Admin dashboard (separate app) would
-    normally seed/adjust these; for now a default row is auto-created on
-    first read if none exists, using the constants below.
+    Offline-queued check-ins send the ORIGINAL capture time (when the
+    teacher actually scanned, before connectivity returned), so late-arrival
+    and movement calculations stay fair — not penalized by sync delay.
+
+    Validates captured_at against abuse/clock issues:
+      - more than a couple minutes in the future -> untrusted, ignore it
+      - more than MAX_OFFLINE_QUEUE_HOURS in the past -> too old to be a
+        reasonable offline queue delay, ignore it
+    Falls back to the server's current time in either case.
     """
-    __tablename__ = "leave_balances"
+    if captured_at is None:
+        return datetime.utcnow()
 
-    DEFAULT_CASUAL_LEAVE_TOTAL = 20
-    DEFAULT_WORKING_DAYS_TOTAL = 100
-    DEFAULT_LATE_MARGIN_MINUTES = 480  # 8 hours
-
-    id = Column(Integer, primary_key=True, index=True)
-    faculty_id = Column(Integer, ForeignKey("faculty.id"), nullable=False, unique=True)
-    semester_label = Column(String, default="Current Semester", nullable=False)
-
-    casual_leave_total = Column(Integer, default=DEFAULT_CASUAL_LEAVE_TOTAL, nullable=False)
-    casual_leave_used = Column(Integer, default=0, nullable=False)
-
-    working_days_total = Column(Integer, default=DEFAULT_WORKING_DAYS_TOTAL, nullable=False)
-    working_days_attended = Column(Integer, default=0, nullable=False)
-
-    late_margin_total_minutes = Column(Integer, default=DEFAULT_LATE_MARGIN_MINUTES, nullable=False)
-    late_margin_used_minutes = Column(Integer, default=0, nullable=False)
-
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    now = datetime.utcnow()
+    if captured_at > now + timedelta(minutes=CLOCK_SKEW_TOLERANCE_MINUTES):
+        return now
+    if captured_at < now - timedelta(hours=MAX_OFFLINE_QUEUE_HOURS):
+        return now
+    return captured_at
 
 
-class SalaryRecord(Base):
+def check_movement_against_last_record(db: Session, faculty_id: int, new_lat: float, new_lng: float, new_time: datetime) -> dict:
     """
-    Placeholder table — no payroll logic exists yet. Admin dashboard would
-    populate/update these manually until a real payroll integration exists.
+    Looks up this faculty's most recent attendance record (check-in or
+    check-out, any status) and checks whether traveling from there to the
+    new location in the elapsed time was physically plausible. Returns the
+    same shape as check_impossible_movement — {"flagged", "reason", "speed_kmh"}.
+    If there's no prior record, nothing to compare against, so not flagged.
     """
-    __tablename__ = "salary_records"
+    last_record = (
+        db.query(models.AttendanceRecord)
+        .filter(models.AttendanceRecord.faculty_id == faculty_id)
+        .order_by(models.AttendanceRecord.timestamp.desc())
+        .first()
+    )
+    if not last_record:
+        return {"flagged": False, "reason": None, "speed_kmh": None}
 
-    id = Column(Integer, primary_key=True, index=True)
-    faculty_id = Column(Integer, ForeignKey("faculty.id"), nullable=False, index=True)
-    month_label = Column(String, nullable=False)  # e.g. "July 2026"
-    amount = Column(Float, nullable=True)  # nullable since not all apps show exact figures to teachers
-    status = Column(String, default="pending", nullable=False)  # "paid" | "pending" | "processing"
-    pay_date = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-
-class Admin(Base):
-    __tablename__ = "admins"
-
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=True)
-    email = Column(String, unique=True, index=True, nullable=False)
-    password_hash = Column(String, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    return check_impossible_movement(
+        last_record.latitude, last_record.longitude, last_record.timestamp,
+        new_lat, new_lng, new_time,
+    )
 
 
-class AdminSession(Base):
+ADMIN_SESSION_TTL_HOURS = 24
+
+# Late-arrival tracking — fixed daily start time for everyone (Pakistan local time).
+# Server timestamps are stored in UTC, so we convert before comparing.
+PKT_OFFSET_HOURS = 5  # Pakistan Standard Time is UTC+5, no daylight saving
+EXPECTED_ARRIVAL_HOUR = 8   # 8:00 AM local — actual campus start time
+EXPECTED_ARRIVAL_MINUTE = 0
+LATE_GRACE_MINUTES = 10  # arriving up to 10 min after 8:00 doesn't count as "late"
+
+
+def compute_late_minutes(utc_timestamp: datetime) -> int:
     """
-    Simple opaque-token session store (not JWT) — plenty for a small admin
-    dashboard. Token is a random string; check table + expiry to validate.
+    Returns how many minutes past the 8:00 AM (+ grace period) local arrival
+    time this check-in was, or 0 if on time / early. Fixed schedule for
+    everyone — no per-teacher or per-class schedule support (yet).
     """
-    __tablename__ = "admin_sessions"
-
-    token = Column(String, primary_key=True, index=True)
-    admin_id = Column(Integer, ForeignKey("admins.id"), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    expires_at = Column(DateTime, nullable=False)
-
-
-class LeaveRequest(Base):
-    __tablename__ = "leave_requests"
-
-    id = Column(Integer, primary_key=True, index=True)
-    faculty_id = Column(Integer, ForeignKey("faculty.id"), nullable=False, index=True)
-    start_date = Column(DateTime, nullable=False)
-    end_date = Column(DateTime, nullable=False)
-    reason = Column(Text, nullable=False)
-    status = Column(String, default="pending", nullable=False)  # "pending" | "approved" | "rejected"
-    reviewed_by = Column(String, nullable=True)  # email of the HOD/admin who decided this, for the audit trail
-    reviewed_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-    faculty = relationship("Faculty")
+    local_time = utc_timestamp + timedelta(hours=PKT_OFFSET_HOURS)
+    expected = local_time.replace(
+        hour=EXPECTED_ARRIVAL_HOUR, minute=EXPECTED_ARRIVAL_MINUTE, second=0, microsecond=0
+    )
+    grace_deadline = expected + timedelta(minutes=LATE_GRACE_MINUTES)
+    if local_time <= grace_deadline:
+        return 0
+    return int((local_time - grace_deadline).total_seconds() // 60)
 
 
-class HOD(Base):
+def get_current_admin(authorization: Optional[str] = Header(None), db: Session = Depends(get_db)) -> models.Admin:
     """
-    One HOD per department (18 departments total). Deliberately a separate
-    table/login from Admin, not a shared account with a role flag — the
-    two were specified as fully separate systems, and keeping them apart
-    means an HOD account can never accidentally end up with admin-wide
-    reach through a bug in a shared permissions check.
+    Protects admin-only endpoints. Expects header: Authorization: Bearer <token>
+    Token comes from POST /api/admin/login.
     """
-    __tablename__ = "hods"
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or malformed Authorization header")
 
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=True)
-    email = Column(String, unique=True, index=True, nullable=False)
-    password_hash = Column(String, nullable=False)
-    department = Column(String, nullable=False, index=True)  # which department this HOD reviews
-    created_at = Column(DateTime, default=datetime.utcnow)
+    token = authorization.removeprefix("Bearer ").strip()
+    session = db.query(models.AdminSession).filter(models.AdminSession.token == token).first()
+    if not session or session.expires_at < datetime.utcnow():
+        raise HTTPException(status_code=401, detail="Invalid or expired admin session")
 
-
-class HODSession(Base):
-    """Same opaque-token pattern as AdminSession, kept as its own table
-    so an HOD's session can never be mistaken for an admin's."""
-    __tablename__ = "hod_sessions"
-
-    token = Column(String, primary_key=True, index=True)
-    hod_id = Column(Integer, ForeignKey("hods.id"), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    expires_at = Column(DateTime, nullable=False)
+    admin = db.query(models.Admin).filter(models.Admin.id == session.admin_id).first()
+    if not admin:
+        raise HTTPException(status_code=401, detail="Admin account not found")
+    return admin
 
 
-class DeviceSwitchRequest(Base):
+def validate_admin_token(token: str, db: Session) -> Optional[models.Admin]:
+    """Shared validation logic used by both the HTTP admin-auth dependency and the WebSocket endpoint."""
+    session = db.query(models.AdminSession).filter(models.AdminSession.token == token).first()
+    if not session or session.expires_at < datetime.utcnow():
+        return None
+    return db.query(models.Admin).filter(models.Admin.id == session.admin_id).first()
+
+
+@app.websocket("/ws/admin")
+async def admin_websocket(websocket: WebSocket, token: str):
     """
-    Created automatically when a faculty member's login IP doesn't match
-    their last recorded device IP — enforces one active device per
-    account. Sits pending until an admin approves or rejects it.
+    Admin dashboard connects here (after logging in) to receive live
+    attendance events instead of needing to refresh the page. Pass the
+    admin access token as a query param: wss://.../ws/admin?token=<token>
     """
-    __tablename__ = "device_switch_requests"
+    db = SessionLocal()
+    try:
+        admin = validate_admin_token(token, db)
+    finally:
+        db.close()
 
-    id = Column(Integer, primary_key=True, index=True)
-    faculty_id = Column(Integer, ForeignKey("faculty.id"), nullable=False, index=True)
-    new_ip = Column(String, nullable=False)
-    status = Column(String, default="pending", nullable=False)  # "pending" | "approved" | "rejected"
-    created_at = Column(DateTime, default=datetime.utcnow)
-    reviewed_at = Column(DateTime, nullable=True)
+    if not admin:
+        # Must accept() before close(), otherwise uvicorn/websockets never
+        # completes the WS handshake and the browser just sees a raw HTTP 403
+        # instead of a proper close frame — the frontend can't tell "expired
+        # token" apart from "network blip" and retries forever.
+        await websocket.accept()
+        await websocket.close(code=4401)  # custom code — invalid/expired token
+        return
 
-    faculty = relationship("Faculty")
+    await manager.connect(websocket)
+    try:
+        while True:
+            # We don't expect the client to send anything meaningful, but we
+            # need to keep awaiting to detect disconnects.
+            await websocket.receive_text()
+    except Exception:
+        pass
+    finally:
+        manager.disconnect(websocket)
 
 
-class Holiday(Base):
+@app.get("/")
+def root():
+    return {"status": "ok", "service": "smartattend-backend"}
+
+
+@app.post("/api/faculty/enroll", response_model=schemas.FacultyOut)
+def enroll_faculty(payload: schemas.FacultyEnrollRequest, db: Session = Depends(get_db)):
+    existing = db.query(models.Faculty).filter(
+        (models.Faculty.email == payload.email) | (models.Faculty.teacher_id == payload.teacher_id)
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Faculty with this email or teacher ID already enrolled")
+
+    enroll_result = enroll_from_frames(payload.face_images)
+    if not enroll_result["embeddings"]:
+        raise HTTPException(status_code=400, detail=f"No usable face detected in any submitted frame: {enroll_result['reason']}")
+
+    faculty = models.Faculty(
+        name=payload.name,
+        email=payload.email,
+        teacher_id=payload.teacher_id,
+        department=payload.department,
+        face_embeddings=embeddings_to_str(enroll_result["embeddings"]),
+        face_photos=json.dumps(enroll_result["thumbnails"]),
+        pin_hash=hash_pin(payload.pin),
+        approval_status="pending",
+    )
+    db.add(faculty)
+    db.commit()
+    db.refresh(faculty)
+    return faculty
+
+
+@app.get("/api/faculty", response_model=List[schemas.FacultyOut])
+def list_faculty(
+    approval_status: str = None,
+    db: Session = Depends(get_db),
+    admin: models.Admin = Depends(get_current_admin),
+):
+    q = db.query(models.Faculty)
+    if approval_status:
+        q = q.filter(models.Faculty.approval_status == approval_status)
+    return q.all()
+
+
+@app.post("/api/faculty/{faculty_id}/approve", response_model=schemas.FacultyOut)
+def approve_faculty(
+    faculty_id: int,
+    payload: schemas.ApprovalRequest,
+    db: Session = Depends(get_db),
+    admin: models.Admin = Depends(get_current_admin),
+):
+    """Admin-only — requires a valid admin session token."""
+    if payload.approval_status not in ("approved", "rejected"):
+        raise HTTPException(status_code=400, detail="approval_status must be 'approved' or 'rejected'")
+
+    faculty = db.query(models.Faculty).filter(models.Faculty.id == faculty_id).first()
+    if not faculty:
+        raise HTTPException(status_code=404, detail="Faculty not found")
+
+    faculty.approval_status = payload.approval_status
+    # A note only makes sense while something is still unresolved for the
+    # faculty to act on. Clear it on approval so an old rejection reason
+    # doesn't linger and confuse someone who is now fully approved.
+    if payload.approval_status == "approved":
+        faculty.review_note = None
+    else:
+        faculty.review_note = payload.note
+    db.commit()
+    db.refresh(faculty)
+    return faculty
+
+
+@app.post("/api/faculty/{faculty_id}/deactivate", response_model=schemas.FacultyOut)
+def deactivate_faculty(
+    faculty_id: int,
+    db: Session = Depends(get_db),
+    admin: models.Admin = Depends(get_current_admin),
+):
     """
-    University holiday calendar. A date here is excluded from absence
-    counts everywhere attendance is tallied (analytics, monthly HR
-    report). department=None means it applies university-wide; a
-    specific department name scopes it to just that department.
+    Admin-only offboarding. The account can no longer log in or check in,
+    but every AttendanceRecord/LeaveRequest tied to them is left untouched —
+    this only flips a flag, it never deletes history.
     """
-    __tablename__ = "holidays"
+    faculty = db.query(models.Faculty).filter(models.Faculty.id == faculty_id).first()
+    if not faculty:
+        raise HTTPException(status_code=404, detail="Faculty not found")
+    faculty.is_active = False
+    db.commit()
+    db.refresh(faculty)
+    return faculty
 
-    id = Column(Integer, primary_key=True, index=True)
-    date = Column(String, nullable=False, index=True)  # "YYYY-MM-DD" — stored as a plain date string, no time component needed
-    label = Column(String, nullable=True)
-    department = Column(String, nullable=True)  # None = applies to every department
-    created_at = Column(DateTime, default=datetime.utcnow)
+
+@app.post("/api/faculty/{faculty_id}/reactivate", response_model=schemas.FacultyOut)
+def reactivate_faculty(
+    faculty_id: int,
+    db: Session = Depends(get_db),
+    admin: models.Admin = Depends(get_current_admin),
+):
+    """Admin-only — undoes a deactivation if it was done by mistake."""
+    faculty = db.query(models.Faculty).filter(models.Faculty.id == faculty_id).first()
+    if not faculty:
+        raise HTTPException(status_code=404, detail="Faculty not found")
+    faculty.is_active = True
+    db.commit()
+    db.refresh(faculty)
+    return faculty
+
+
+@app.post("/api/attendance/manual", response_model=schemas.CheckInResponse)
+def mark_manual_attendance(
+    payload: schemas.ManualAttendanceRequest,
+    db: Session = Depends(get_db),
+    admin: models.Admin = Depends(get_current_admin),
+):
+    """
+    Admin-only. Covers the case where a faculty member's phone isn't
+    working and they called HR/admin to mark them present, or any other
+    case needing a manual override. Skips GPS/face verification entirely —
+    the admin session token itself is the authorization for this record.
+    """
+    faculty = db.query(models.Faculty).filter(models.Faculty.id == payload.faculty_id).first()
+    if not faculty:
+        raise HTTPException(status_code=404, detail="Faculty not found")
+
+    if faculty.approval_status != "approved":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot mark attendance — this faculty member is '{faculty.approval_status}', not approved yet.",
+        )
+    if not faculty.is_active:
+        raise HTTPException(status_code=400, detail="Cannot mark attendance — this faculty account is deactivated.")
+
+    # GPS/face columns are non-nullable on this table since every normal
+    # record goes through real verification. A manual entry has neither, so
+    # it uses sentinel values (0.0 / "manual_review") rather than loosening
+    # those columns for every other record — the note+status makes it clear
+    # this one was an admin override, not a real geofenced check-in.
+    record = models.AttendanceRecord(
+        faculty_id=faculty.id,
+        record_type=payload.type,
+        status="present",
+        timestamp=datetime.utcnow(),
+        latitude=0.0,
+        longitude=0.0,
+        gps_accuracy=0.0,
+        readings_used=0,
+        wifi_ssid=None,
+        face_match_score=0.0,
+        face_verified="manual_review",
+        notes=f"Manual entry by admin ({admin.email}). {payload.note or ''}".strip(),
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    return schemas.CheckInResponse(
+        status="present",
+        record_id=record.id,
+        face_match_score=None,
+        gps_accuracy_used=None,
+    )
+
+
+@app.post("/api/auth/login", response_model=schemas.LoginResponse)
+def login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
+    faculty = db.query(models.Faculty).filter(models.Faculty.teacher_id == payload.teacher_id).first()
+    if not faculty or not verify_pin(payload.pin, faculty.pin_hash):
+        return schemas.LoginResponse(status="invalid_credentials", faculty=None)
+
+    if faculty.approval_status != "approved":
+        return schemas.LoginResponse(status=faculty.approval_status, faculty=faculty)
+
+    return schemas.LoginResponse(status="approved", faculty=faculty)
+
+
+@app.post("/api/auth/re-enroll-face", response_model=schemas.ReEnrollFaceResponse)
+def re_enroll_face(payload: schemas.ReEnrollFaceRequest, db: Session = Depends(get_db)):
+    """
+    Lets a teacher replace their stored face descriptor — either an
+    already-approved teacher refreshing it (bad lighting, wants to redo
+    it), or a rejected/flagged one retrying enrollment after reading the
+    admin's note. Requires teacher_id + PIN, same as login, so a stranger
+    can't overwrite someone else's biometric data.
+    """
+    faculty = db.query(models.Faculty).filter(models.Faculty.teacher_id == payload.teacher_id).first()
+    if not faculty or not verify_pin(payload.pin, faculty.pin_hash):
+        return schemas.ReEnrollFaceResponse(status="invalid_credentials", faculty=None)
+
+    if faculty.approval_status not in ("approved", "rejected"):
+        # "pending" already has a fresh enrollment sitting with the admin —
+        # nothing useful to replace it with here.
+        return schemas.ReEnrollFaceResponse(status="not_approved", faculty=faculty)
+
+    enroll_result = enroll_from_frames(payload.face_images)
+    if not enroll_result["embeddings"]:
+        raise HTTPException(status_code=400, detail=f"No usable face detected in any submitted frame: {enroll_result['reason']}")
+
+    was_rejected = faculty.approval_status == "rejected"
+    faculty.face_embeddings = embeddings_to_str(enroll_result["embeddings"])
+    faculty.face_photos = json.dumps(enroll_result["thumbnails"])
+    if was_rejected:
+        # Retrying after a rejection puts them back in the review queue —
+        # the admin's earlier note has been addressed, so clear it rather
+        # than leaving stale feedback attached to a fresh attempt.
+        faculty.approval_status = "pending"
+        faculty.review_note = None
+    db.commit()
+    db.refresh(faculty)
+
+    return schemas.ReEnrollFaceResponse(status="resubmitted" if was_rejected else "ok", faculty=faculty)
+
+
+MAX_PHOTO_BASE64_CHARS = 500_000  # ~375KB binary — plenty for a resized profile pic, keeps DB rows small
+
+
+@app.post("/api/faculty/upload-photo", response_model=schemas.UploadPhotoResponse)
+def upload_photo(payload: schemas.UploadPhotoRequest, db: Session = Depends(get_db)):
+    """
+    Lets a teacher upload/replace their own profile picture, synced across
+    devices via the backend instead of being stuck in one device's local
+    storage. Requires teacher_id + PIN, same pattern as re-enroll-face.
+    Frontend should resize/compress the image (e.g. to ~200x200) before
+    sending, to keep payloads small.
+    """
+    faculty = db.query(models.Faculty).filter(models.Faculty.teacher_id == payload.teacher_id).first()
+    if not faculty or not verify_pin(payload.pin, faculty.pin_hash):
+        return schemas.UploadPhotoResponse(status="invalid_credentials", faculty=None)
+
+    if faculty.approval_status != "approved":
+        return schemas.UploadPhotoResponse(status="not_approved", faculty=faculty)
+
+    if len(payload.photo_base64) > MAX_PHOTO_BASE64_CHARS:
+        return schemas.UploadPhotoResponse(status="too_large", faculty=faculty)
+
+    faculty.profile_photo = payload.photo_base64
+    db.commit()
+    db.refresh(faculty)
+
+    return schemas.UploadPhotoResponse(status="ok", faculty=faculty)
+
+
+@app.post("/api/admin/bootstrap", response_model=schemas.AdminLoginResponse)
+def bootstrap_admin(payload: schemas.AdminBootstrapRequest, db: Session = Depends(get_db)):
+    """
+    Creates the FIRST admin account. Only works if no admin exists yet.
+    The dashboard has no signup UI, so run this once yourself via curl/Postman:
+      curl -X POST <backend-url>/api/admin/bootstrap -H "Content-Type: application/json" \
+        -d '{"email":"you@example.com","password":"yourpassword","name":"Your Name"}'
+    Then log in normally through the dashboard.
+    """
+    existing_count = db.query(models.Admin).count()
+    if existing_count > 0:
+        raise HTTPException(status_code=400, detail="An admin already exists — use the dashboard login instead")
+
+    admin = models.Admin(
+        email=payload.email,
+        name=payload.name or payload.email,
+        password_hash=hash_password(payload.password),
+    )
+    db.add(admin)
+    db.commit()
+    db.refresh(admin)
+
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.utcnow() + timedelta(hours=ADMIN_SESSION_TTL_HOURS)
+    db.add(models.AdminSession(token=token, admin_id=admin.id, expires_at=expires_at))
+    db.commit()
+
+    return schemas.AdminLoginResponse(
+        access_token=token,
+        admin=schemas.AdminOut(name=admin.name, email=admin.email),
+    )
+
+
+@app.post("/api/admin/login", response_model=schemas.AdminLoginResponse)
+def admin_login(payload: schemas.AdminLoginRequest, db: Session = Depends(get_db)):
+    admin = db.query(models.Admin).filter(models.Admin.email == payload.email).first()
+    if not admin or not verify_password(payload.password, admin.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.utcnow() + timedelta(hours=ADMIN_SESSION_TTL_HOURS)
+    db.add(models.AdminSession(token=token, admin_id=admin.id, expires_at=expires_at))
+    db.commit()
+
+    return schemas.AdminLoginResponse(
+        access_token=token,
+        admin=schemas.AdminOut(name=admin.name, email=admin.email),
+    )
+
+
+HOD_SESSION_TTL_HOURS = 24
+
+
+def get_current_hod(authorization: Optional[str] = Header(None), db: Session = Depends(get_db)) -> models.HOD:
+    """
+    Protects HOD-only endpoints. Same opaque-token pattern as
+    get_current_admin, but checked against HODSession/HOD — the two
+    account systems never share a session table, so an admin token can
+    never accidentally pass as an HOD token or vice versa.
+    """
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or malformed Authorization header")
+
+    token = authorization.removeprefix("Bearer ").strip()
+    session = db.query(models.HODSession).filter(models.HODSession.token == token).first()
+    if not session or session.expires_at < datetime.utcnow():
+        raise HTTPException(status_code=401, detail="Invalid or expired HOD session")
+
+    hod = db.query(models.HOD).filter(models.HOD.id == session.hod_id).first()
+    if not hod:
+        raise HTTPException(status_code=401, detail="HOD account not found")
+    return hod
+
+
+@app.post("/api/hod/login", response_model=schemas.HODLoginResponse)
+def hod_login(payload: schemas.HODLoginRequest, db: Session = Depends(get_db)):
+    hod = db.query(models.HOD).filter(models.HOD.email == payload.email).first()
+    if not hod or not verify_password(payload.password, hod.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.utcnow() + timedelta(hours=HOD_SESSION_TTL_HOURS)
+    db.add(models.HODSession(token=token, hod_id=hod.id, expires_at=expires_at))
+    db.commit()
+
+    return schemas.HODLoginResponse(
+        access_token=token,
+        hod=schemas.HODOut(name=hod.name, email=hod.email, department=hod.department),
+    )
+
+
+@app.post("/api/admin/hods", response_model=schemas.HODOut)
+def create_hod(
+    payload: schemas.HODCreateRequest,
+    db: Session = Depends(get_db),
+    admin: models.Admin = Depends(get_current_admin),
+):
+    """Admin-only. One of these per department (18 total) — creates the login an HOD uses."""
+    existing = db.query(models.HOD).filter(models.HOD.email == payload.email).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="An HOD with this email already exists")
+
+    hod = models.HOD(
+        email=payload.email,
+        name=payload.name or payload.email,
+        department=payload.department,
+        password_hash=hash_password(payload.password),
+    )
+    db.add(hod)
+    db.commit()
+    db.refresh(hod)
+    return schemas.HODOut(name=hod.name, email=hod.email, department=hod.department)
+
+
+@app.get("/api/admin/hods", response_model=List[schemas.HODOut])
+def list_hods(db: Session = Depends(get_db), admin: models.Admin = Depends(get_current_admin)):
+    hods = db.query(models.HOD).all()
+    return [schemas.HODOut(name=h.name, email=h.email, department=h.department) for h in hods]
+
+
+@app.get("/api/hod/faculty", response_model=List[schemas.FacultyOut])
+def hod_department_faculty(db: Session = Depends(get_db), hod: models.HOD = Depends(get_current_hod)):
+    """
+    Department-scoped by construction — an HOD's token only ever resolves
+    to their own department, so there's no query parameter a client could
+    tamper with to see another department's faculty.
+    """
+    faculty_rows = db.query(models.Faculty).filter(models.Faculty.department == hod.department).all()
+
+    # PKT calendar-day boundary, same conversion used everywhere else in
+    # this file — reused here rather than duplicated logic drifting apart.
+    local_now = datetime.utcnow() + timedelta(hours=PKT_OFFSET_HOURS)
+    local_today_start = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start_utc = local_today_start - timedelta(hours=PKT_OFFSET_HOURS)
+
+    faculty_ids = [f.id for f in faculty_rows]
+    present_today_ids = set()
+    if faculty_ids:
+        present_rows = (
+            db.query(models.AttendanceRecord.faculty_id)
+            .filter(
+                models.AttendanceRecord.faculty_id.in_(faculty_ids),
+                models.AttendanceRecord.timestamp >= today_start_utc,
+                models.AttendanceRecord.status == "present",
+            )
+            .distinct()
+            .all()
+        )
+        present_today_ids = {row[0] for row in present_rows}
+
+    out = []
+    for f in faculty_rows:
+        item = schemas.FacultyOut.model_validate(f)
+        item.checked_in_today = f.id in present_today_ids
+        out.append(item)
+    return out
+
+
+def _leave_request_out(r: models.LeaveRequest) -> schemas.LeaveRequestOut:
+    out = schemas.LeaveRequestOut.model_validate(r)
+    out.faculty_name = r.faculty.name if r.faculty else None
+    out.department = r.faculty.department if r.faculty else None
+    return out
+
+
+@app.get("/api/hod/leave-requests", response_model=List[schemas.LeaveRequestOut])
+def hod_leave_requests(db: Session = Depends(get_db), hod: models.HOD = Depends(get_current_hod)):
+    rows = (
+        db.query(models.LeaveRequest)
+        .join(models.Faculty, models.LeaveRequest.faculty_id == models.Faculty.id)
+        .filter(models.Faculty.department == hod.department)
+        .order_by(models.LeaveRequest.created_at.desc())
+        .all()
+    )
+    return [_leave_request_out(r) for r in rows]
+
+
+@app.post("/api/hod/leave-requests/{request_id}", response_model=schemas.LeaveRequestOut)
+def hod_decide_leave_request(
+    request_id: int,
+    payload: schemas.LeaveDecisionRequest,
+    db: Session = Depends(get_db),
+    hod: models.HOD = Depends(get_current_hod),
+):
+    req = (
+        db.query(models.LeaveRequest)
+        .join(models.Faculty, models.LeaveRequest.faculty_id == models.Faculty.id)
+        .filter(models.LeaveRequest.id == request_id, models.Faculty.department == hod.department)
+        .first()
+    )
+    if not req:
+        raise HTTPException(status_code=404, detail="Leave request not found in your department")
+    if req.status != "pending":
+        raise HTTPException(status_code=400, detail=f"This request was already {req.status} — rejected decisions are final and pending ones can't be redecided twice")
+
+    req.status = payload.status
+    req.reviewed_by = hod.email
+    req.reviewed_at = datetime.utcnow()
+
+    if payload.status == "approved":
+        balance = get_or_create_leave_balance(db, req.faculty_id)
+        days = (req.end_date.date() - req.start_date.date()).days + 1
+        balance.casual_leave_used = min(balance.casual_leave_total, balance.casual_leave_used + max(days, 1))
+
+    db.commit()
+    db.refresh(req)
+    return _leave_request_out(req)
+
+
+@app.get("/api/admin/leave-requests", response_model=List[schemas.LeaveRequestOut])
+def admin_leave_requests(db: Session = Depends(get_db), admin: models.Admin = Depends(get_current_admin)):
+    """
+    Admin sees every department's leave requests, not just one — this is
+    the fallback path for when an HOD is unavailable and someone still
+    needs a decision made.
+    """
+    rows = db.query(models.LeaveRequest).order_by(models.LeaveRequest.created_at.desc()).all()
+    return [_leave_request_out(r) for r in rows]
+
+
+@app.post("/api/admin/leave-requests/{request_id}", response_model=schemas.LeaveRequestOut)
+def admin_decide_leave_request(
+    request_id: int,
+    payload: schemas.LeaveDecisionRequest,
+    db: Session = Depends(get_db),
+    admin: models.Admin = Depends(get_current_admin),
+):
+    req = db.query(models.LeaveRequest).filter(models.LeaveRequest.id == request_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Leave request not found")
+    if req.status != "pending":
+        raise HTTPException(status_code=400, detail=f"This request was already {req.status} — rejected decisions are final")
+
+    req.status = payload.status
+    req.reviewed_by = admin.email
+    req.reviewed_at = datetime.utcnow()
+
+    if payload.status == "approved":
+        balance = get_or_create_leave_balance(db, req.faculty_id)
+        days = (req.end_date.date() - req.start_date.date()).days + 1
+        balance.casual_leave_used = min(balance.casual_leave_total, balance.casual_leave_used + max(days, 1))
+
+    db.commit()
+    db.refresh(req)
+    return _leave_request_out(req)
+
+
+@app.get("/api/admin/device-switch-requests", response_model=List[schemas.DeviceSwitchRequestOut])
+def admin_device_switch_requests(db: Session = Depends(get_db), admin: models.Admin = Depends(get_current_admin)):
+    rows = db.query(models.DeviceSwitchRequest).order_by(models.DeviceSwitchRequest.created_at.desc()).all()
+    out = []
+    for r in rows:
+        item = schemas.DeviceSwitchRequestOut.model_validate(r)
+        item.faculty_name = r.faculty.name if r.faculty else None
+        item.department = r.faculty.department if r.faculty else None
+        out.append(item)
+    return out
+
+
+@app.post("/api/admin/device-switch-requests/{request_id}", response_model=schemas.DeviceSwitchRequestOut)
+def admin_decide_device_switch(
+    request_id: int,
+    payload: schemas.DeviceSwitchDecisionRequest,
+    db: Session = Depends(get_db),
+    admin: models.Admin = Depends(get_current_admin),
+):
+    req = db.query(models.DeviceSwitchRequest).filter(models.DeviceSwitchRequest.id == request_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Device switch request not found")
+    if req.status != "pending":
+        raise HTTPException(status_code=400, detail=f"This request was already {req.status}")
+
+    req.status = payload.status
+    req.reviewed_at = datetime.utcnow()
+    if payload.status == "approved" and req.faculty:
+        req.faculty.last_device_ip = req.new_ip
+    db.commit()
+    db.refresh(req)
+
+    item = schemas.DeviceSwitchRequestOut.model_validate(req)
+    item.faculty_name = req.faculty.name if req.faculty else None
+    item.department = req.faculty.department if req.faculty else None
+    return item
+
+
+@app.get("/api/holidays", response_model=List[schemas.HolidayOut])
+def list_holidays(db: Session = Depends(get_db), admin: models.Admin = Depends(get_current_admin)):
+    return db.query(models.Holiday).order_by(models.Holiday.date).all()
+
+
+@app.post("/api/holidays", response_model=schemas.HolidayOut)
+def create_holiday(
+    payload: schemas.HolidayCreate,
+    db: Session = Depends(get_db),
+    admin: models.Admin = Depends(get_current_admin),
+):
+    holiday = models.Holiday(date=payload.date, label=payload.label, department=payload.department)
+    db.add(holiday)
+    db.commit()
+    db.refresh(holiday)
+    return holiday
+
+
+@app.delete("/api/holidays/{holiday_id}", status_code=204)
+def delete_holiday(
+    holiday_id: int,
+    db: Session = Depends(get_db),
+    admin: models.Admin = Depends(get_current_admin),
+):
+    holiday = db.query(models.Holiday).filter(models.Holiday.id == holiday_id).first()
+    if not holiday:
+        raise HTTPException(status_code=404, detail="Holiday not found")
+    db.delete(holiday)
+    db.commit()
+    return None
+
+
+@app.post("/api/attendance/check-in", response_model=schemas.CheckInResponse)
+def check_in(payload: schemas.CheckInRequest, db: Session = Depends(get_db)):
+    faculty = db.query(models.Faculty).filter(models.Faculty.id == payload.faculty_id).first()
+    if not faculty:
+        raise HTTPException(status_code=404, detail="Faculty not found")
+
+    if faculty.approval_status != "approved":
+        raise HTTPException(status_code=403, detail=f"Faculty is not approved (status: {faculty.approval_status})")
+
+    # 1. Pick best GPS reading from the batch sent by frontend
+    if not payload.gps_readings:
+        raise HTTPException(status_code=400, detail="At least one GPS reading is required")
+    best_reading = pick_best_reading(payload.gps_readings)
+
+    # 2. Check geofence
+    location_check = check_location(best_reading)
+
+    # 3. Verify face
+    face_result = verify_face_from_frames(payload.face_images, faculty.face_embeddings)
+
+    # 4. Decide final status
+    if not location_check["allowed"]:
+        status = "rejected_location"
+    elif face_result["verified"] != "pass":
+        status = "rejected_face"
+    else:
+        status = "present"
+
+    # 5. Flag (don't block) if travel since last known location was implausibly fast
+    now = resolve_record_timestamp(payload.captured_at)
+    movement_check = check_movement_against_last_record(
+        db, faculty.id, best_reading.latitude, best_reading.longitude, now
+    )
+
+    record = models.AttendanceRecord(
+        faculty_id=faculty.id,
+        timestamp=now,
+        latitude=best_reading.latitude,
+        longitude=best_reading.longitude,
+        gps_accuracy=best_reading.accuracy,
+        readings_used=len(payload.gps_readings),
+        wifi_ssid=payload.wifi_ssid,
+        face_match_score=face_result["score"],
+        face_verified=face_result["verified"],
+        status=status,
+        notes=location_check["reason"],
+        record_type="check_in",
+        flagged_suspicious=movement_check["flagged"],
+        flag_reason=movement_check["reason"],
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+
+    # Count this as an attended working day (once per calendar day, only if present)
+    # and track late-arrival minutes against the fixed 9:00 AM start time.
+    if status == "present":
+        # Calculate PKT calendar day boundary in UTC
+        local_now = datetime.utcnow() + timedelta(hours=PKT_OFFSET_HOURS)
+        local_today_start = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+        today_start = local_today_start - timedelta(hours=PKT_OFFSET_HOURS)
+        already_counted_today = (
+            db.query(models.AttendanceRecord)
+            .filter(
+                models.AttendanceRecord.faculty_id == faculty.id,
+                models.AttendanceRecord.record_type == "check_in",
+                models.AttendanceRecord.status == "present",
+                models.AttendanceRecord.timestamp >= today_start,
+                models.AttendanceRecord.id != record.id,
+            )
+            .first()
+        )
+        if not already_counted_today:
+            balance = get_or_create_leave_balance(db, faculty.id)
+            balance.working_days_attended += 1
+
+            late_minutes = compute_late_minutes(record.timestamp)
+            if late_minutes > 0:
+                balance.late_margin_used_minutes += late_minutes
+
+            db.commit()
+
+    manager.broadcast_threadsafe({
+        "event": "attendance",
+        "data": {
+            "record_id": record.id,
+            "faculty_id": faculty.id,
+            "faculty_name": faculty.name,
+            "department": faculty.department,
+            "record_type": "check_in",
+            "status": status,
+            "timestamp": to_utc_iso(record.timestamp),
+            "face_match_score": face_result["score"],
+            "distance_to_boundary_m": location_check["distance_to_boundary_m"],
+            "flagged_suspicious": movement_check["flagged"],
+            "flag_reason": movement_check["reason"],
+        },
+    })
+
+    return schemas.CheckInResponse(
+        status=status,
+        reason=location_check["reason"] if status != "present" else face_result.get("reason"),
+        distance_to_boundary_m=location_check["distance_to_boundary_m"],
+        face_match_score=face_result["score"],
+        gps_accuracy_used=best_reading.accuracy,
+        record_id=record.id,
+    )
+
+
+@app.get("/api/attendance", response_model=List[schemas.AttendanceOut])
+def list_attendance(
+    faculty_id: int = None,
+    db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(None),
+):
+    if faculty_id is None:
+        if not authorization or not authorization.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Missing or malformed Authorization header for bulk query")
+        token = authorization.removeprefix("Bearer ").strip()
+        admin = validate_admin_token(token, db)
+        if not admin:
+            raise HTTPException(status_code=401, detail="Invalid or expired admin session")
+
+    q = db.query(models.AttendanceRecord)
+    if faculty_id:
+        q = q.filter(models.AttendanceRecord.faculty_id == faculty_id)
+    records = q.options(joinedload(models.AttendanceRecord.faculty)).order_by(models.AttendanceRecord.timestamp.desc()).all()
+
+    return [
+        schemas.AttendanceOut(
+            id=r.id,
+            faculty_id=r.faculty_id,
+            faculty_name=r.faculty.name if r.faculty else None,
+            department=r.faculty.department if r.faculty else None,
+            timestamp=r.timestamp,
+            latitude=r.latitude,
+            longitude=r.longitude,
+            gps_accuracy=r.gps_accuracy,
+            wifi_ssid=r.wifi_ssid,
+            face_match_score=r.face_match_score,
+            status=r.status,
+            record_type=r.record_type,
+            flagged_suspicious=r.flagged_suspicious,
+            flag_reason=r.flag_reason,
+        )
+        for r in records
+    ]
+
+
+@app.post("/api/attendance/check-out", response_model=schemas.CheckInResponse)
+def check_out(payload: schemas.CheckOutRequest, db: Session = Depends(get_db)):
+    """
+    Marks the teacher's exit from campus. Same GPS + face verification as
+    check-in, but does NOT log the teacher out of the app and does NOT
+    affect leave/attendance counters — it's just an exit timestamp record.
+    """
+    faculty = db.query(models.Faculty).filter(models.Faculty.id == payload.faculty_id).first()
+    if not faculty:
+        raise HTTPException(status_code=404, detail="Faculty not found")
+
+    if faculty.approval_status != "approved":
+        raise HTTPException(status_code=403, detail=f"Faculty is not approved (status: {faculty.approval_status})")
+
+    if not payload.gps_readings:
+        raise HTTPException(status_code=400, detail="At least one GPS reading is required")
+    best_reading = pick_best_reading(payload.gps_readings)
+    location_check = check_location(best_reading)
+    face_result = verify_face_from_frames(payload.face_images, faculty.face_embeddings)
+
+    if not location_check["allowed"]:
+        status = "rejected_location"
+    elif face_result["verified"] != "pass":
+        status = "rejected_face"
+    else:
+        status = "present"  # "present" here just means "exit successfully logged"
+
+    now = resolve_record_timestamp(payload.captured_at)
+    movement_check = check_movement_against_last_record(
+        db, faculty.id, best_reading.latitude, best_reading.longitude, now
+    )
+
+    record = models.AttendanceRecord(
+        faculty_id=faculty.id,
+        timestamp=now,
+        latitude=best_reading.latitude,
+        longitude=best_reading.longitude,
+        gps_accuracy=best_reading.accuracy,
+        readings_used=len(payload.gps_readings),
+        wifi_ssid=payload.wifi_ssid,
+        face_match_score=face_result["score"],
+        face_verified=face_result["verified"],
+        status=status,
+        notes=location_check["reason"],
+        record_type="check_out",
+        flagged_suspicious=movement_check["flagged"],
+        flag_reason=movement_check["reason"],
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+
+    manager.broadcast_threadsafe({
+        "event": "attendance",
+        "data": {
+            "record_id": record.id,
+            "faculty_id": faculty.id,
+            "faculty_name": faculty.name,
+            "department": faculty.department,
+            "record_type": "check_out",
+            "status": status,
+            "timestamp": to_utc_iso(record.timestamp),
+            "face_match_score": face_result["score"],
+            "distance_to_boundary_m": location_check["distance_to_boundary_m"],
+            "flagged_suspicious": movement_check["flagged"],
+            "flag_reason": movement_check["reason"],
+        },
+    })
+
+    return schemas.CheckInResponse(
+        status=status,
+        reason=location_check["reason"] if status != "present" else face_result.get("reason"),
+        distance_to_boundary_m=location_check["distance_to_boundary_m"],
+        face_match_score=face_result["score"],
+        gps_accuracy_used=best_reading.accuracy,
+        record_id=record.id,
+    )
+
+
+@app.get("/api/leave-balance", response_model=schemas.LeaveBalanceOut)
+def get_leave_balance(faculty_id: int, db: Session = Depends(get_db)):
+    faculty = db.query(models.Faculty).filter(models.Faculty.id == faculty_id).first()
+    if not faculty:
+        raise HTTPException(status_code=404, detail="Faculty not found")
+
+    b = get_or_create_leave_balance(db, faculty_id)
+
+    return schemas.LeaveBalanceOut(
+        faculty_id=b.faculty_id,
+        semester_label=b.semester_label,
+        casual_leave_total=b.casual_leave_total,
+        casual_leave_used=b.casual_leave_used,
+        casual_leave_remaining=b.casual_leave_total - b.casual_leave_used,
+        working_days_total=b.working_days_total,
+        working_days_attended=b.working_days_attended,
+        working_days_remaining=max(0, b.working_days_total - b.working_days_attended),
+        late_margin_total=b.late_margin_total_minutes,
+        late_margin_used=b.late_margin_used_minutes,
+        late_margin_remaining=max(0, b.late_margin_total_minutes - b.late_margin_used_minutes),
+    )
+
+
+@app.get("/api/salary", response_model=List[schemas.SalaryOut])
+def get_salary_records(faculty_id: int, db: Session = Depends(get_db)):
+    """
+    Placeholder — no payroll system wired up yet. Returns whatever rows
+    exist in salary_records for this faculty (admin dashboard would need
+    to create these; nothing auto-generates them yet).
+    """
+    faculty = db.query(models.Faculty).filter(models.Faculty.id == faculty_id).first()
+    if not faculty:
+        raise HTTPException(status_code=404, detail="Faculty not found")
+
+    records = (
+        db.query(models.SalaryRecord)
+        .filter(models.SalaryRecord.faculty_id == faculty_id)
+        .order_by(models.SalaryRecord.created_at.desc())
+        .all()
+    )
+    return [
+        schemas.SalaryOut(
+            id=r.id,
+            faculty_id=r.faculty_id,
+            month=r.month_label,
+            amount=r.amount,
+            status=r.status,
+            pay_date=r.pay_date,
+        )
+        for r in records
+    ]
+
+
+@app.post("/api/leave-request", response_model=schemas.LeaveRequestOut)
+def create_leave_request(payload: schemas.LeaveRequestCreate, db: Session = Depends(get_db)):
+    faculty = db.query(models.Faculty).filter(models.Faculty.id == payload.faculty_id).first()
+    if not faculty:
+        raise HTTPException(status_code=404, detail="Faculty not found")
+
+    if payload.start_date > payload.end_date:
+        raise HTTPException(status_code=400, detail="Start date must be before or equal to end date")
+
+    start_utc = payload.start_date.replace(tzinfo=None) if payload.start_date.tzinfo else payload.start_date
+    end_utc = payload.end_date.replace(tzinfo=None) if payload.end_date.tzinfo else payload.end_date
+
+    req = models.LeaveRequest(
+        faculty_id=payload.faculty_id,
+        start_date=start_utc,
+        end_date=end_utc,
+        reason=payload.reason,
+        status="pending",
+    )
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+    return req
+
+
+@app.get("/api/leave-requests", response_model=List[schemas.LeaveRequestOut])
+def get_leave_requests(faculty_id: int, db: Session = Depends(get_db)):
+    faculty = db.query(models.Faculty).filter(models.Faculty.id == faculty_id).first()
+    if not faculty:
+        raise HTTPException(status_code=404, detail="Faculty not found")
+
+    requests = (
+        db.query(models.LeaveRequest)
+        .filter(models.LeaveRequest.faculty_id == faculty_id)
+        .order_by(models.LeaveRequest.created_at.desc())
+        .all()
+    )
+    return requests
