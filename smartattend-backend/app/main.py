@@ -183,19 +183,45 @@ async def admin_websocket(websocket: WebSocket, token: str):
         db.close()
 
     if not admin:
-        # Must accept() before close(), otherwise uvicorn/websockets never
-        # completes the WS handshake and the browser just sees a raw HTTP 403
-        # instead of a proper close frame — the frontend can't tell "expired
-        # token" apart from "network blip" and retries forever.
         await websocket.accept()
-        await websocket.close(code=4401)  # custom code — invalid/expired token
+        await websocket.close(code=4401)
         return
 
     await manager.connect(websocket)
     try:
         while True:
-            # We don't expect the client to send anything meaningful, but we
-            # need to keep awaiting to detect disconnects.
+            await websocket.receive_text()
+    except Exception:
+        pass
+    finally:
+        manager.disconnect(websocket)
+
+
+@app.websocket("/ws/hod")
+async def hod_websocket(websocket: WebSocket, token: str):
+    """
+    HOD dashboard connects here to receive the same live broadcast stream
+    as the admin dashboard. Both share the same ConnectionManager pool,
+    so every event (check-in, new leave request, etc.) goes to all
+    connected dashboards simultaneously regardless of account type.
+    The HOD does its own client-side filtering by department so it only
+    reacts to events relevant to its own faculty.
+    """
+    db = SessionLocal()
+    try:
+        session = db.query(models.HODSession).filter(models.HODSession.token == token).first()
+        hod = db.query(models.HOD).filter(models.HOD.id == session.hod_id).first() if session and session.expires_at > datetime.utcnow() else None
+    finally:
+        db.close()
+
+    if not hod:
+        await websocket.accept()
+        await websocket.close(code=4401)
+        return
+
+    await manager.connect(websocket)
+    try:
+        while True:
             await websocket.receive_text()
     except Exception:
         pass
@@ -233,10 +259,11 @@ def enroll_faculty(payload: schemas.FacultyEnrollRequest, db: Session = Depends(
     db.add(faculty)
     db.commit()
     db.refresh(faculty)
+    manager.broadcast_threadsafe({
+        "event": "new_enrollment",
+        "data": {"faculty_id": faculty.id, "faculty_name": faculty.name, "department": faculty.department}
+    })
     return faculty
-
-
-@app.get("/api/faculty", response_model=List[schemas.FacultyOut])
 def list_faculty(
     approval_status: str = None,
     db: Session = Depends(get_db),
@@ -273,10 +300,11 @@ def approve_faculty(
         faculty.review_note = payload.note
     db.commit()
     db.refresh(faculty)
+    manager.broadcast_threadsafe({
+        "event": "approval_update",
+        "data": {"faculty_id": faculty.id, "faculty_name": faculty.name, "status": faculty.approval_status}
+    })
     return faculty
-
-
-@app.post("/api/faculty/{faculty_id}/deactivate", response_model=schemas.FacultyOut)
 def deactivate_faculty(
     faculty_id: int,
     db: Session = Depends(get_db),
@@ -651,6 +679,12 @@ def hod_decide_leave_request(
 
     db.commit()
     db.refresh(req)
+    manager.broadcast_threadsafe({
+        "event": "leave_decided",
+        "data": {"request_id": req.id, "status": req.status,
+                  "faculty_id": req.faculty_id,
+                  "department": req.faculty.department if req.faculty else None}
+    })
     return _leave_request_out(req)
 
 
@@ -690,6 +724,12 @@ def admin_decide_leave_request(
 
     db.commit()
     db.refresh(req)
+    manager.broadcast_threadsafe({
+        "event": "leave_decided",
+        "data": {"request_id": req.id, "status": req.status,
+                  "faculty_id": req.faculty_id,
+                  "department": req.faculty.department if req.faculty else None}
+    })
     return _leave_request_out(req)
 
 
@@ -1066,11 +1106,15 @@ def create_leave_request(payload: schemas.LeaveRequestCreate, db: Session = Depe
     db.add(req)
     db.commit()
     db.refresh(req)
+    manager.broadcast_threadsafe({
+        "event": "new_leave_request",
+        "data": {
+            "request_id": req.id,
+            "faculty_id": req.faculty_id,
+            "department": req.faculty.department if req.faculty else None,
+        }
+    })
     return req
-
-
-@app.get("/api/leave-requests", response_model=List[schemas.LeaveRequestOut])
-def get_leave_requests(faculty_id: int, db: Session = Depends(get_db)):
     faculty = db.query(models.Faculty).filter(models.Faculty.id == faculty_id).first()
     if not faculty:
         raise HTTPException(status_code=404, detail="Faculty not found")
