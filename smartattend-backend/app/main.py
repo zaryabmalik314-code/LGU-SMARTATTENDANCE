@@ -1074,6 +1074,11 @@ def check_in(payload: schemas.CheckInRequest, db: Session = Depends(get_db)):
         db, faculty.id, best_reading.latitude, best_reading.longitude, now
     )
 
+    # Late minutes belong to THIS check-in event, independent of whether it's
+    # the day's first (that distinction only matters for the running
+    # LeaveBalance totals below, not for what happened at this specific time).
+    record_late_minutes = compute_late_minutes(now, db, faculty.department) if status == "present" else 0
+
     record = models.AttendanceRecord(
         faculty_id=faculty.id,
         timestamp=now,
@@ -1087,6 +1092,7 @@ def check_in(payload: schemas.CheckInRequest, db: Session = Depends(get_db)):
         status=status,
         notes=location_check["reason"],
         record_type="check_in",
+        late_minutes=record_late_minutes,
         flagged_suspicious=movement_check["flagged"],
         flag_reason=movement_check["reason"],
     )
@@ -1116,9 +1122,8 @@ def check_in(payload: schemas.CheckInRequest, db: Session = Depends(get_db)):
             balance = get_or_create_leave_balance(db, faculty.id)
             balance.working_days_attended += 1
 
-            late_minutes = compute_late_minutes(record.timestamp, db, faculty.department)
-            if late_minutes > 0:
-                balance.late_margin_used_minutes += late_minutes
+            if record_late_minutes > 0:
+                balance.late_margin_used_minutes += record_late_minutes
 
             db.commit()
 
@@ -1155,18 +1160,42 @@ def list_attendance(
     db: Session = Depends(get_db),
     authorization: Optional[str] = Header(None),
 ):
-    if faculty_id is None:
-        if not authorization or not authorization.startswith("Bearer "):
-            raise HTTPException(status_code=401, detail="Missing or malformed Authorization header for bulk query")
+    # The faculty app has no session-token system anywhere (check-in itself
+    # only trusts a faculty_id in the body) - so a single-faculty_id query
+    # stays open here too, to not break that flow. What changed: an HOD
+    # bearer token, if presented, is now actually validated and scoped to
+    # that HOD's department, instead of silently ignored. Bulk (no
+    # faculty_id) queries still require either admin or HOD.
+    admin = None
+    hod = None
+    if authorization and authorization.startswith("Bearer "):
         token = authorization.removeprefix("Bearer ").strip()
         admin = validate_admin_token(token, db)
         if not admin:
-            raise HTTPException(status_code=401, detail="Invalid or expired admin session")
+            hod_session = db.query(models.HODSession).filter(models.HODSession.token == token).first()
+            if hod_session and hod_session.expires_at > datetime.utcnow():
+                hod = db.query(models.HOD).filter(models.HOD.id == hod_session.hod_id).first()
+
+    if faculty_id is None and not admin and not hod:
+        raise HTTPException(status_code=401, detail="Missing or malformed Authorization header for bulk query")
 
     q = db.query(models.AttendanceRecord)
     if faculty_id:
         q = q.filter(models.AttendanceRecord.faculty_id == faculty_id)
+    elif hod:
+        # HOD bulk queries are scoped to their own department - a raw
+        # SELECT * across every faculty was never their access level.
+        q = q.join(models.Faculty).filter(models.Faculty.department == hod.department)
+
     records = q.options(joinedload(models.AttendanceRecord.faculty)).order_by(models.AttendanceRecord.timestamp.desc()).all()
+
+    if hod and faculty_id:
+        # An HOD who supplied a token AND a specific faculty_id must be
+        # that person's own HOD - prevents one HOD reading another
+        # department's faculty one id at a time.
+        target = records[0].faculty if records else None
+        if target and target.department != hod.department:
+            raise HTTPException(status_code=403, detail="That faculty member is not in your department")
 
     return [
         schemas.AttendanceOut(
@@ -1182,6 +1211,7 @@ def list_attendance(
             face_match_score=r.face_match_score,
             status=r.status,
             record_type=r.record_type,
+            late_minutes=r.late_minutes,
             flagged_suspicious=r.flagged_suspicious,
             flag_reason=r.flag_reason,
         )
