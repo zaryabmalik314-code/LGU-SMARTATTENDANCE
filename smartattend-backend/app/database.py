@@ -125,6 +125,13 @@ def run_simple_migrations():
             conn.commit()
             print("[migration] Verified indexes on salary_records table")
 
+        # semesters and semester_snapshots are new tables created by
+        # create_all() above — no ALTER TABLE needed since they're fresh.
+        # The active-semester constraint (at most one is_active row) is
+        # enforced in application code, not as a DB unique index, so that
+        # closing one semester and activating another can happen atomically
+        # in a single transaction without a temporary constraint violation.
+
         if "leave_requests" in table_names:
             existing_columns = {col["name"] for col in inspector.get_columns("leave_requests")}
             if "reviewed_by" not in existing_columns:
