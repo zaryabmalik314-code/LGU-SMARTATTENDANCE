@@ -487,3 +487,59 @@ class TimeWindowOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class SemesterCreate(BaseModel):
+    label: str
+    start_date: str
+    end_date: str
+
+    @field_validator("label")
+    @classmethod
+    def validate_label(cls, v):
+        v = (v or "").strip()
+        if not v:
+            raise ValueError("label is required")
+        if len(v) > 80:
+            raise ValueError("label must be 80 characters or fewer")
+        return v
+
+    @field_validator("start_date", "end_date")
+    @classmethod
+    def validate_date(cls, v):
+        try:
+            datetime.strptime(v, "%Y-%m-%d")
+        except ValueError:
+            raise ValueError('date must be in "YYYY-MM-DD" format')
+        return v
+
+
+class SemesterOut(BaseModel):
+    id: int
+    label: str
+    start_date: str
+    end_date: str
+    is_active: bool
+    is_closed: bool
+    created_at: datetime
+    closed_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class SemesterSnapshotOut(BaseModel):
+    id: int
+    semester_id: int
+    faculty_id: int
+    faculty_name: Optional[str] = None
+    teacher_id: Optional[str] = None
+    department: Optional[str] = None
+    late_minutes: int
+    deduction_days: int
+    days_attended: int
+    casual_leave_used: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
