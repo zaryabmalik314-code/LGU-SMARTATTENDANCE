@@ -181,6 +181,7 @@ class AttendanceOut(BaseModel):
     face_match_score: float
     status: str
     record_type: str
+    late_minutes: int = 0
     flagged_suspicious: bool = False
     flag_reason: Optional[str] = None
 
