@@ -209,3 +209,32 @@ class Holiday(Base):
     label = Column(String, nullable=True)
     department = Column(String, nullable=True)  # None = applies to every department
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class TimeWindow(Base):
+    """
+    A named working-hours preset (e.g. "Normal", "Ramadan", "Spring").
+
+    Exactly one row should have is_active=True at a time — that's the preset
+    late-arrival calculation runs against. Previously these presets lived in
+    the admin browser's localStorage, which meant they were per-browser and
+    never reached the server, so compute_late_minutes() silently fell back to
+    a hardcoded 8:00 start. Storing them here makes them authoritative.
+
+    `overrides` is a JSON object keyed by lowercase weekday name, e.g.
+        {"friday": {"start": "08:00", "end": "13:00"},
+         "saturday": {"off": true},
+         "sunday": {"off": true}}
+    A day marked {"off": true} is a non-working day: arrivals on it never
+    accrue late minutes. Days absent from the object use start_time/end_time.
+    """
+    __tablename__ = "time_windows"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, nullable=False, index=True)
+    start_time = Column(String, nullable=False)   # "HH:MM" local (PKT)
+    end_time = Column(String, nullable=False)     # "HH:MM" local (PKT)
+    grace_minutes = Column(Integer, default=10, nullable=False)
+    overrides = Column(Text, nullable=True)       # JSON string, see above
+    is_active = Column(Boolean, default=False, nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
