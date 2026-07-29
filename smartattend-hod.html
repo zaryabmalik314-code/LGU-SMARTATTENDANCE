@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SmartAttend — HOD Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy-950:#0a0e1a; --navy-900:#10162a; --navy-850:#141b32; --navy-800:#1a2138; --navy-700:#232b47;
+    --gold-400:#d4af6a; --gold-300:#e0c085;
+    --slate-300:#94a3b8; --slate-400:#64748b;
+    --white:#f4f6fb;
+    --green-500:#34d399; --green-bg:rgba(52,211,153,.12);
+    --red-500:#f87171; --red-bg:rgba(248,113,113,.12);
+    --amber-500:#fbbf24; --amber-bg:rgba(251,191,36,.12);
+    --font-display:'Space Grotesk',sans-serif; --font-body:'Inter',sans-serif; --font-mono:'JetBrains Mono',monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--navy-950);color:var(--white);font-family:var(--font-body);font-size:14px}
+  button{font-family:inherit;border:none;cursor:pointer;background:none;color:inherit}
+  input,select{font-family:inherit}
+
+  #login-view{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+  .login-card{width:100%;max-width:380px;background:var(--navy-900);border:1px solid var(--navy-700);border-radius:14px;padding:36px 32px}
+  .login-title{font-family:var(--font-display);font-size:22px;font-weight:600;margin-bottom:4px}
+  .login-sub{color:var(--slate-400);font-size:13.5px;margin-bottom:28px}
+  .field{margin-bottom:16px}
+  .field label{display:block;font-size:12.5px;color:var(--slate-300);margin-bottom:6px;font-weight:500;text-transform:uppercase;letter-spacing:.04em}
+  .field input{width:100%;background:var(--navy-850);border:1px solid var(--navy-700);border-radius:8px;padding:11px 12px;color:var(--white);font-size:14.5px;outline:none}
+  .field input:focus{border-color:var(--gold-400)}
+  .field input:-webkit-autofill,
+  .field input:-webkit-autofill:hover,
+  .field input:-webkit-autofill:focus,
+  .field input:-webkit-autofill:active{
+    -webkit-box-shadow:0 0 0 1000px var(--navy-850) inset !important;
+    box-shadow:0 0 0 1000px var(--navy-850) inset !important;
+    -webkit-text-fill-color:var(--white) !important;
+    caret-color:var(--white);
+    transition:background-color 9999s ease-in-out 0s;
+  }
+  .btn-primary{width:100%;background:var(--gold-400);color:var(--navy-950);font-weight:600;font-size:14.5px;padding:12px;border-radius:8px;margin-top:8px}
+  .btn-primary:hover{background:var(--gold-300)}
+  .btn-primary:disabled{opacity:.55;cursor:not-allowed}
+  .login-error{font-size:13px;color:var(--red-500);margin-top:12px;display:none}
+
+  #app-view{display:none;min-height:100vh}
+  .shell{display:flex;min-height:100vh}
+  .sidebar{width:220px;flex-shrink:0;background:var(--navy-900);border-right:1px solid var(--navy-800);padding:20px 14px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column}
+  .brand-name{font-family:var(--font-display);font-weight:600;font-size:15px;margin-bottom:2px}
+  .brand-sub{font-size:10.5px;color:var(--slate-400);letter-spacing:.04em;margin-bottom:22px}
+  .nav-item{display:flex;align-items:center;gap:9px;width:100%;text-align:left;padding:10px 12px;border-radius:8px;color:var(--slate-300);font-size:13.5px;font-weight:500;margin-bottom:2px}
+  .nav-svg{width:17px;height:17px;flex-shrink:0;opacity:.7}
+  .nav-item.active .nav-svg, .nav-item:hover .nav-svg{opacity:1}
+  .nav-item:hover{background:var(--navy-800);color:var(--white)}
+  .nav-item.active{background:var(--navy-800);color:var(--gold-300)}
+  .nav-badge{margin-left:auto;background:var(--red-bg);color:var(--red-500);font-size:11px;font-weight:600;padding:1px 7px;border-radius:10px}
+  .sidebar-footer{margin-top:auto;padding-top:14px;border-top:1px solid var(--navy-800)}
+  .hod-chip{font-size:12px;color:var(--slate-300);margin-bottom:10px;word-break:break-word}
+  .hod-dept{color:var(--gold-300);font-weight:600}
+  .logout-btn{width:100%;padding:9px;border-radius:8px;background:var(--navy-800);color:var(--slate-300);font-size:12.5px}
+  .logout-btn:hover{color:var(--white)}
+
+  .main{flex:1;padding:28px 32px;min-width:0}
+  .page-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap;gap:10px}
+  .page-title{font-family:var(--font-display);font-size:20px;font-weight:600}
+  .page-desc{font-size:13px;color:var(--slate-400);margin-top:3px}
+  .btn-ghost{padding:8px 14px;border-radius:8px;background:var(--navy-800);color:var(--slate-300);font-size:12.5px}
+  .btn-ghost:hover{color:var(--white)}
+
+  .view{display:none}
+  .view.active{display:block}
+
+  .table-wrap{background:var(--navy-900);border:1px solid var(--navy-800);border-radius:12px;overflow:hidden}
+  table{width:100%;border-collapse:collapse}
+  th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--slate-400);padding:12px 14px;border-bottom:1px solid var(--navy-800)}
+  td{padding:12px 14px;border-bottom:1px solid var(--navy-800);font-size:13.5px}
+  tr:last-child td{border-bottom:none}
+  .loading-row{padding:24px;text-align:center;color:var(--slate-400)}
+  .empty-state{padding:40px 20px;text-align:center}
+  .empty-title{font-size:14px;color:var(--slate-300);margin-bottom:4px}
+  .empty-sub{font-size:12.5px;color:var(--slate-400)}
+
+  .status-pill{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11.5px;font-weight:600;text-transform:capitalize}
+  .status-present{background:var(--green-bg);color:var(--green-500)}
+  .status-absent{background:var(--red-bg);color:var(--red-500)}
+  .status-pending{background:var(--amber-bg);color:var(--amber-500)}
+
+  .btn-approve,.btn-reject{padding:5px 12px;border-radius:6px;font-size:12px;font-weight:600}
+  .btn-approve{background:var(--green-bg);color:var(--green-500);margin-right:6px}
+  .btn-approve:hover{opacity:.75}
+  .btn-reject{background:var(--red-bg);color:var(--red-500)}
+  .btn-reject:hover{opacity:.75}
+  .btn-approve:disabled,.btn-reject:disabled{opacity:.4;cursor:not-allowed}
+
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--navy-800);color:var(--white);padding:11px 20px;border-radius:8px;font-size:13px;z-index:999;box-shadow:0 6px 20px rgba(0,0,0,.4)}
+  .toast.error{background:var(--red-bg);color:var(--red-500);border:1px solid var(--red-500)}
+
+  .stat-row{display:flex;gap:14px;margin-bottom:20px;flex-wrap:wrap}
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .toolbar input[type=search]{
+    background:var(--navy-850);border:1px solid var(--navy-700);
+    border-radius:8px;padding:9px 12px;color:var(--white);
+    font-size:13.5px;outline:none;min-width:260px;
+    -webkit-appearance:none;appearance:none;
+  }
+  .toolbar input::placeholder{color:var(--slate-400)}
+  .toolbar input:focus{border-color:var(--gold-400)}
+  .toolbar input[type=search]::-webkit-search-cancel-button{
+    -webkit-appearance:none;appearance:none;
+    width:12px;height:12px;cursor:pointer;
+    background:var(--slate-400);
+    -webkit-mask:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M18 6L6 18M6 6l12 12' stroke='black' stroke-width='3' stroke-linecap='round'/></svg>") center/contain no-repeat;
+    mask:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M18 6L6 18M6 6l12 12' stroke='black' stroke-width='3' stroke-linecap='round'/></svg>") center/contain no-repeat;
+  }
+  .toolbar input[type=search]::-webkit-search-cancel-button:hover{background:var(--white)}
+  .toolbar input:-webkit-autofill,
+  .toolbar input:-webkit-autofill:hover,
+  .toolbar input:-webkit-autofill:focus{
+    -webkit-box-shadow:0 0 0 1000px var(--navy-850) inset !important;
+    box-shadow:0 0 0 1000px var(--navy-850) inset !important;
+    -webkit-text-fill-color:var(--white) !important;
+    caret-color:var(--white);
+    transition:background-color 9999s ease-in-out 0s;
+  }
+  .stat-box{background:var(--navy-900);border:1px solid var(--navy-800);border-radius:10px;padding:14px 18px;min-width:120px}
+  .stat-label{font-size:11px;color:var(--slate-400);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px}
+  .stat-value{font-family:var(--font-display);font-size:22px;font-weight:600}
+
+  @media (max-width:720px){
+    .shell{flex-direction:column}
+    .sidebar{width:100%;height:auto;position:relative;flex-direction:row;flex-wrap:wrap;gap:4px}
+    .brand-name,.brand-sub{display:none}
+    .sidebar-footer{margin-top:0;border-top:none;padding-top:0;width:100%}
+    .main{padding:18px}
+  }
+  .overlay{
+    position:fixed;inset:0;background:rgba(6,9,18,0.65);
+    display:none;align-items:stretch;justify-content:flex-end;
+    z-index:100;
+  }
+  .overlay.active{display:flex}
+  .detail-panel{
+    width:min(560px,100%);
+    background:var(--navy-950);
+    border-left:1px solid var(--navy-800);
+    height:100vh;overflow-y:auto;
+    padding:28px 30px 60px;
+  }
+  .detail-close{
+    background:var(--navy-900);border:1px solid var(--navy-800);
+    width:32px;height:32px;border-radius:8px;color:var(--slate-300);
+    font-size:16px;float:right;
+  }
+  .detail-close:hover{color:var(--white);border-color:var(--gold-400)}
+</style>
+</head>
+<body>
+
+<div id="login-view">
+  <div class="login-card">
+    <div class="login-title">HOD Dashboard</div>
+    <div class="login-sub">Sign in to manage your department</div>
+    <form id="login-form">
+      <div class="field">
+        <label for="login-email">Email</label>
+        <input type="email" id="login-email" placeholder="hod@lgu.edu.pk" required>
+      </div>
+      <div class="field">
+        <label for="login-password">Password</label>
+        <input type="password" id="login-password" placeholder="••••••••" required>
+      </div>
+      <button type="submit" class="btn-primary" id="login-btn">Sign in</button>
+      <div class="login-error" id="login-error"></div>
+    </form>
+  </div>
+</div>
+
+<div id="app-view">
+  <div class="shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand-name">SmartAttend</div>
+      <div class="brand-sub">HOD CONSOLE</div>
+
+      <button class="nav-item active" data-view="attendance">
+        <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4" width="14" height="13" rx="2"/><path d="M7 2v4M13 2v4M3 9h14"/><path d="M7 13h2M11 13h2" stroke-linecap="round"/></svg>
+        Attendance
+      </button>
+      <button class="nav-item" data-view="analytics">
+        <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 15l4-5 4 3 4-6" stroke-linecap="round" stroke-linejoin="round"/><rect x="2" y="2" width="16" height="14" rx="2"/></svg>
+        Department Analytics
+      </button>
+      <button class="nav-item" data-view="leaves">
+        <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 4h12v2H4zM4 9h12v2H4zM4 14h8v2H4z" stroke-linejoin="round"/></svg>
+        Leave Requests <span class="nav-badge" id="leave-count">0</span>
+      </button>
+
+      <div class="sidebar-footer">
+        <div class="hod-chip">Signed in as<br><span class="hod-dept" id="hod-dept-label">—</span></div>
+        <button class="logout-btn" id="logout-btn">Sign out</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <section class="view active" id="view-attendance">
+        <div class="page-header">
+          <div>
+            <div class="page-title">Department Attendance</div>
+            <div class="page-desc" id="dept-desc">Today's present/absent status for your faculty</div>
+          </div>
+          <button class="btn-ghost" onclick="loadFaculty()">Refresh</button>
+        </div>
+        <div class="stat-row">
+          <div class="stat-box"><div class="stat-label">Faculty</div><div class="stat-value" id="stat-total">0</div></div>
+          <div class="stat-box"><div class="stat-label">Present today</div><div class="stat-value" id="stat-present" style="color:var(--green-500)">0</div></div>
+          <div class="stat-box"><div class="stat-label">Absent today</div><div class="stat-value" id="stat-absent" style="color:var(--red-500)">0</div></div>
+        </div>
+        <div class="toolbar" style="margin-bottom:14px">
+          <input autocomplete="off" type="search" id="att-search" placeholder="Search by name or teacher ID…" oninput="renderFacultyTable()">
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Name</th><th>Teacher ID</th><th>Email</th><th>Status</th></tr></thead>
+            <tbody id="faculty-tbody"><tr><td colspan="4" class="loading-row">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="view" id="view-leaves">
+        <div class="page-header">
+          <div>
+            <div class="page-title">Leave Requests</div>
+            <div class="page-desc">Requests from your department — rejected decisions are final</div>
+          </div>
+          <button class="btn-ghost" onclick="loadLeaveRequests()">Refresh</button>
+        </div>
+        <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+          <input type="text" id="leave-search" placeholder="Search by faculty name…" oninput="renderLeaveRequests()" style="padding:8px 12px;border-radius:8px;border:1px solid var(--navy-700);background:var(--navy-900);color:var(--white);flex:1;min-width:180px">
+          <select id="leave-status-filter" onchange="renderLeaveRequests()" style="padding:8px 12px;border-radius:8px;border:1px solid var(--navy-700);background:var(--navy-900);color:var(--white)">
+            <option value="">All statuses</option>
+            <option value="pending">Pending</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+          </select>
+        </div>
+        <div id="leaves-container"><div class="loading-row">Loading…</div></div>
+      </section>
+
+      <section class="view" id="view-analytics">
+        <div class="page-header">
+          <div>
+            <div class="page-title">Department Analytics</div>
+            <div class="page-desc">Late-arrival totals across your department this semester</div>
+          </div>
+          <button class="btn-ghost" onclick="loadDeptAnalytics()">Refresh</button>
+        </div>
+        <div class="stat-row">
+          <div class="stat-box"><div class="stat-label">Total late minutes</div><div class="stat-value" id="dept-late-total" style="color:var(--amber-500)">0</div></div>
+          <div class="stat-box"><div class="stat-label">Faculty with lateness</div><div class="stat-value" id="dept-late-count">0</div></div>
+          <div class="stat-box"><div class="stat-label">Avg late minutes / faculty</div><div class="stat-value" id="dept-late-avg">0</div></div>
+        </div>
+        <div class="toolbar" style="margin-bottom:14px">
+          <input autocomplete="off" type="search" id="dept-analytics-search" placeholder="Search by name or teacher ID…" oninput="renderDeptAnalytics()">
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Name</th><th>Teacher ID</th><th>Check-ins</th><th>Late days</th><th>Late minutes</th><th>Deduction days</th></tr></thead>
+            <tbody id="dept-analytics-tbody"><tr><td colspan="6" class="loading-row">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<!-- ============ PERSONAL ANALYTICS OVERLAY ============ -->
+<div class="overlay" id="detail-overlay">
+  <div class="detail-panel">
+    <button class="detail-close" id="detail-close-btn">✕</button>
+    <div id="detail-content"></div>
+  </div>
+</div>
+
+<script>
+/* =========================================================================
+   CONFIG
+   ========================================================================= */
+const BASE_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  ? 'http://localhost:8000'
+  : 'https://lgu-smartattendance-production.up.railway.app';
+
+let authToken = localStorage.getItem('hod_token') || null;
+let hodInfo = JSON.parse(localStorage.getItem('hod_info') || 'null');
+let facultyCache = [];
+
+/* =========================================================================
+   API HELPER
+   ========================================================================= */
+async function api(path, options = {}) {
+  const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+  if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+  const res = await fetch(`${BASE_URL}${path}`, { ...options, headers });
+  if (!res.ok) {
+    let msg = `Request failed (${res.status})`;
+    try { const body = await res.json(); if (body.detail) msg = body.detail; } catch(e){}
+    throw new Error(msg);
+  }
+  if (res.status === 204) return null;
+  return res.json();
+}
+
+function showToast(message, isError = false) {
+  const el = document.createElement('div');
+  el.className = 'toast' + (isError ? ' error' : '');
+  el.textContent = message;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3200);
+}
+
+/* =========================================================================
+   LOGIN
+   ========================================================================= */
+document.getElementById('login-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  const btn = document.getElementById('login-btn');
+  const errEl = document.getElementById('login-error');
+  errEl.style.display = 'none';
+  btn.disabled = true;
+  btn.textContent = 'Signing in…';
+  try {
+    const data = await api('/api/hod/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password })
+    });
+    authToken = data.access_token;
+    hodInfo = data.hod || { email, department: '' };
+    localStorage.setItem('hod_token', authToken);
+    localStorage.setItem('hod_info', JSON.stringify(hodInfo));
+    enterApp();
+  } catch (err) {
+    errEl.textContent = err.message.includes('Failed to fetch')
+      ? "Couldn't reach the backend at " + BASE_URL + ". Is it running?"
+      : err.message;
+    errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Sign in';
+  }
+});
+
+document.getElementById('logout-btn').addEventListener('click', () => {
+  if (ws) { ws.onclose = null; ws.close(); ws = null; }
+  clearTimeout(wsReconnectTimer);
+  authToken = null; hodInfo = null;
+  localStorage.removeItem('hod_token');
+  localStorage.removeItem('hod_info');
+  document.getElementById('app-view').style.display = 'none';
+  document.getElementById('login-view').style.display = 'flex';
+});
+
+/* =========================================================================
+   WEBSOCKET — live updates without refreshing
+   ========================================================================= */
+let ws = null;
+let wsReconnectTimer = null;
+
+function connectWebSocket() {
+  if (!authToken) return;
+  const wsBase = BASE_URL.replace(/^https:/, 'wss:').replace(/^http:/, 'ws:');
+  const url = `${wsBase}/ws/hod?token=${encodeURIComponent(authToken)}`;
+  ws = new WebSocket(url);
+
+  ws.onopen = () => console.log('[ws] HOD connected');
+
+  ws.onmessage = (evt) => {
+    let msg;
+    try { msg = JSON.parse(evt.data); } catch(e) { return; }
+
+    if (msg.event === 'new_leave_request') {
+      // New leave request from this HOD's department — bump badge and reload if visible.
+      if (!hodInfo || msg.data?.department !== hodInfo.department) return;
+      const badge = document.getElementById('leave-count');
+      if (badge) badge.textContent = (parseInt(badge.textContent,10)||0)+1;
+      const leavesView = document.getElementById('view-leaves');
+      if (leavesView && leavesView.classList.contains('active')) loadLeaveRequests();
+      showToast('New leave request in your department');
+    } else if (msg.event === 'attendance') {
+      // Faculty from this department checked in/out — reload attendance if visible.
+      if (!hodInfo || msg.data?.department !== hodInfo.department) return;
+      const attView = document.getElementById('view-attendance');
+      if (attView && attView.classList.contains('active')) loadFaculty();
+    }
+  };
+
+  ws.onerror = () => {};
+  ws.onclose = (evt) => {
+    if (evt.code === 4401) return; // session expired — don't reconnect
+    clearTimeout(wsReconnectTimer);
+    wsReconnectTimer = setTimeout(connectWebSocket, 3000);
+  };
+}
+
+function enterApp() {
+  document.getElementById('login-view').style.display = 'none';
+  document.getElementById('app-view').style.display = 'block';
+  document.getElementById('hod-dept-label').textContent = hodInfo?.department || '—';
+  document.getElementById('dept-desc').textContent = `Today's present/absent status for ${hodInfo?.department || 'your department'}`;
+  loadFaculty();
+  loadLeaveRequests();
+  connectWebSocket();
+}
+
+if (authToken && hodInfo) enterApp();
+
+/* =========================================================================
+   NAVIGATION
+   ========================================================================= */
+document.querySelectorAll('.nav-item[data-view]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.nav-item[data-view]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.getElementById('view-' + btn.dataset.view).classList.add('active');
+    if (btn.dataset.view === 'leaves') loadLeaveRequests();
+    if (btn.dataset.view === 'attendance') loadFaculty();
+    if (btn.dataset.view === 'analytics') loadDeptAnalytics();
+  });
+});
+
+/* =========================================================================
+   DEPARTMENT ATTENDANCE
+   ========================================================================= */
+// Today's present/absent is derived client-side from each faculty's
+// attendance_records (already included when the backend returns Faculty
+// rows with relationships loaded) — if not present, this falls back to
+// showing everyone as "no record today" rather than guessing.
+async function loadFaculty() {
+  const tbody = document.getElementById('faculty-tbody');
+  tbody.innerHTML = '<tr><td colspan="4" class="loading-row">Loading…</td></tr>';
+  try {
+    facultyCache = await api('/api/hod/faculty');
+    renderFacultyTable();
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="4" class="loading-row">Couldn't load — ${err.message}</td></tr>`;
+  }
+}
+
+function isPresentToday(f) {
+  return f.checked_in_today === true;
+}
+
+function renderFacultyTable() {
+  const tbody = document.getElementById('faculty-tbody');
+  let active = facultyCache.filter(f => f.is_active !== false && f.approval_status === 'approved');
+  document.getElementById('stat-total').textContent = active.length;
+
+  let present = 0, absent = 0;
+  active.forEach(f => { if (isPresentToday(f)) present++; else absent++; });
+  document.getElementById('stat-present').textContent = present;
+  document.getElementById('stat-absent').textContent = absent;
+
+  const q = (document.getElementById('att-search')?.value || '').trim().toLowerCase();
+  if (q) {
+    active = active.filter(f =>
+      (f.name || '').toLowerCase().includes(q) ||
+      (f.teacher_id || '').toLowerCase().includes(q)
+    );
+  }
+
+  if (!active.length) {
+    tbody.innerHTML = `<tr><td colspan="4"><div class="empty-state"><div class="empty-title">${q ? 'No matches' : 'No approved faculty yet'}</div><div class="empty-sub">${q ? 'Try a different name or teacher ID.' : 'Faculty in your department will show up here once approved by admin.'}</div></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = active.map(f => {
+    const present = isPresentToday(f);
+    return `<tr>
+      <td onclick="openPersonalAnalytics(${f.id},'${(f.name||'').replace(/'/g,"\\'")}')" style="cursor:pointer;color:var(--gold-300)">${f.name || '—'}</td>
+      <td style="font-family:var(--font-mono)">${f.teacher_id || '—'}</td>
+      <td>${f.email || '—'}</td>
+      <td><span class="status-pill status-${present ? 'present' : 'absent'}">${present ? 'Present' : 'Absent'}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+/* =========================================================================
+   DEPARTMENT ANALYTICS
+   Late-arrival totals per faculty, built from /api/attendance?faculty_id=X
+   (now properly HOD-scoped server-side - see main.py) rather than any
+   client-side late calculation, so this always matches what the active
+   Time Window preset actually computed at check-in time.
+   ========================================================================= */
+let deptAnalyticsCache = [];
+
+async function loadDeptAnalytics() {
+  const tbody = document.getElementById('dept-analytics-tbody');
+  tbody.innerHTML = '<tr><td colspan="6" class="loading-row">Loading…</td></tr>';
+  try {
+    const active = facultyCache.filter(f => f.is_active !== false && f.approval_status === 'approved');
+    if (!active.length) {
+      // facultyCache may not be populated yet if Analytics is opened before
+      // Attendance has ever loaded.
+      facultyCache = await api('/api/hod/faculty');
+    }
+    const faculty = facultyCache.filter(f => f.is_active !== false && f.approval_status === 'approved');
+
+    const perFaculty = await Promise.all(faculty.map(async f => {
+      let records = [];
+      try { records = await api(`/api/attendance?faculty_id=${f.id}`); } catch (e) { records = []; }
+      const checkIns = records.filter(r => r.record_type === 'check_in');
+      const lateDays = checkIns.filter(r => (r.late_minutes || 0) > 0).length;
+      const totalLateMin = checkIns.reduce((acc, r) => acc + (r.late_minutes || 0), 0);
+      return {
+        id: f.id, name: f.name, teacher_id: f.teacher_id,
+        checkIns: checkIns.length, lateDays, totalLateMin,
+        deductionDays: Math.floor(totalLateMin / 480),
+      };
+    }));
+
+    deptAnalyticsCache = perFaculty;
+    renderDeptAnalytics();
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="6" class="loading-row">Couldn't load — ${err.message}</td></tr>`;
+  }
+}
+
+function renderDeptAnalytics() {
+  const tbody = document.getElementById('dept-analytics-tbody');
+  const q = (document.getElementById('dept-analytics-search')?.value || '').trim().toLowerCase();
+  let rows = deptAnalyticsCache;
+  if (q) {
+    rows = rows.filter(r =>
+      (r.name || '').toLowerCase().includes(q) ||
+      (r.teacher_id || '').toLowerCase().includes(q)
+    );
+  }
+
+  const totalLate = deptAnalyticsCache.reduce((acc, r) => acc + r.totalLateMin, 0);
+  const lateCount = deptAnalyticsCache.filter(r => r.totalLateMin > 0).length;
+  document.getElementById('dept-late-total').textContent = totalLate;
+  document.getElementById('dept-late-count').textContent = lateCount;
+  document.getElementById('dept-late-avg').textContent = deptAnalyticsCache.length
+    ? Math.round(totalLate / deptAnalyticsCache.length) : 0;
+
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><div class="empty-title">${q ? 'No matches' : 'No faculty yet'}</div><div class="empty-sub">${q ? 'Try a different name or teacher ID.' : ''}</div></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map(r => `<tr>
+      <td onclick="openPersonalAnalytics(${r.id},'${(r.name||'').replace(/'/g,"\\'")}')" style="cursor:pointer;color:var(--gold-300)">${r.name || '—'}</td>
+      <td style="font-family:var(--font-mono)">${r.teacher_id || '—'}</td>
+      <td>${r.checkIns}</td>
+      <td style="color:${r.lateDays>0?'var(--amber-500)':'var(--slate-400)'}">${r.lateDays}</td>
+      <td style="color:${r.totalLateMin>0?'var(--amber-500)':'var(--slate-400)'}">${r.totalLateMin}</td>
+      <td style="color:${r.deductionDays>0?'var(--red-500)':'var(--green-500)'}">${r.deductionDays}</td>
+    </tr>`).join('');
+}
+
+/* =========================================================================
+   PERSONAL ANALYTICS (overlay panel) — mirrors the admin dashboard's
+   Faculty Directory personal analytics panel, scoped to this HOD's own
+   department server-side (see /api/attendance's HOD department check).
+   ========================================================================= */
+async function openPersonalAnalytics(facultyId, facultyName) {
+  const overlay = document.getElementById('detail-overlay');
+  const content = document.getElementById('detail-content');
+  if (!overlay || !content) return;
+  content.innerHTML = `<div style="font-family:var(--font-display);font-size:18px;font-weight:600;margin-bottom:4px">${facultyName}</div>
+    <div style="font-size:12px;color:var(--slate-400);margin-bottom:20px">Personal Attendance Analytics</div>
+    <div class="loading-row">Loading…</div>`;
+  overlay.classList.add('active');
+
+  try {
+    const [records, balance] = await Promise.all([
+      api(`/api/attendance?faculty_id=${facultyId}`),
+      api(`/api/leave-balance?faculty_id=${facultyId}`).catch(() => null),
+    ]);
+
+    const checkIns = records.filter(r => r.record_type === 'check_in');
+    const total = checkIns.length;
+    const present = checkIns.filter(r => r.status === 'present').length;
+    const late = checkIns.filter(r => (r.late_minutes || 0) > 0).length;
+    const totalLateMin = checkIns.reduce((acc, r) => acc + (r.late_minutes || 0), 0);
+    const deductionDays = Math.floor(totalLateMin / 480);
+
+    content.innerHTML = `
+      <div style="font-family:var(--font-display);font-size:18px;font-weight:600;margin-bottom:4px">${facultyName}</div>
+      <div style="font-size:12px;color:var(--slate-400);margin-bottom:20px">Personal Attendance Analytics</div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px;margin-bottom:20px">
+        <div class="stat-box"><div class="stat-label">Check-ins</div><div class="stat-value">${total}</div></div>
+        <div class="stat-box"><div class="stat-label">Present</div><div class="stat-value" style="color:var(--green-500)">${present}</div></div>
+        <div class="stat-box"><div class="stat-label">Late days</div><div class="stat-value" style="color:var(--amber-500)">${late}</div></div>
+        <div class="stat-box"><div class="stat-label">Late minutes</div><div class="stat-value" style="color:var(--amber-500)">${totalLateMin}</div></div>
+        <div class="stat-box"><div class="stat-label">Deduction days</div><div class="stat-value" style="color:${deductionDays>0?'var(--red-500)':'var(--green-500)'}">${deductionDays}</div></div>
+        ${balance?`<div class="stat-box"><div class="stat-label">Casual leave</div><div class="stat-value">${balance.casual_leave_total-(balance.casual_leave_used||0)} left</div></div>`:''}
+      </div>
+
+      ${deductionDays>0?`<div style="background:var(--red-bg);border:1px solid var(--red-500);border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:var(--red-500)">
+        ⚠ ${totalLateMin} late minutes = <strong>${deductionDays} day${deductionDays>1?'s':''}</strong> salary deduction (threshold: 480 min/semester)
+      </div>`:''}
+
+      <div style="font-size:12px;font-weight:600;color:var(--slate-400);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Recent Records</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Date</th><th>Type</th><th>Status</th><th>Late (min)</th></tr></thead>
+          <tbody>
+            ${records.slice(0, 20).map(r => `<tr>
+              <td>${new Date(r.timestamp).toLocaleString('en-PK',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</td>
+              <td style="text-transform:capitalize">${(r.record_type||'').replace('_',' ')}</td>
+              <td><span class="status-pill status-${r.status==='present'?'present':'absent'}">${r.status}</span></td>
+              <td style="color:${(r.late_minutes||0)>0?'var(--amber-500)':'var(--slate-400)'}">${r.late_minutes||0}</td>
+            </tr>`).join('') || '<tr><td colspan="4" class="loading-row">No records yet</td></tr>'}
+          </tbody>
+        </table>
+      </div>`;
+  } catch (err) {
+    content.innerHTML = `<div style="font-family:var(--font-display);font-size:18px;font-weight:600;margin-bottom:16px">${facultyName}</div>
+      <div class="empty-state"><div class="empty-title">Couldn't load analytics</div><div class="empty-sub">${err.message}</div></div>`;
+  }
+}
+
+document.getElementById('detail-close-btn').addEventListener('click', () => {
+  document.getElementById('detail-overlay').classList.remove('active');
+});
+document.getElementById('detail-overlay').addEventListener('click', (e) => {
+  if (e.target.id === 'detail-overlay') e.currentTarget.classList.remove('active');
+});
+
+/* =========================================================================
+   LEAVE REQUESTS
+   ========================================================================= */
+let allLeaveRequests = [];
+
+async function loadLeaveRequests() {
+  const container = document.getElementById('leaves-container');
+  container.innerHTML = '<div class="loading-row">Loading…</div>';
+  try {
+    allLeaveRequests = await api('/api/hod/leave-requests');
+    const pending = allLeaveRequests.filter(r => r.status === 'pending').length;
+    document.getElementById('leave-count').textContent = pending;
+    renderLeaveRequests();
+  } catch (err) {
+    container.innerHTML = `<div class="empty-state"><div class="empty-title">Couldn't load leave requests</div><div class="empty-sub">${err.message}</div></div>`;
+  }
+}
+
+function renderLeaveRequests() {
+  const container = document.getElementById('leaves-container');
+  if (!allLeaveRequests.length) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-title">No leave requests</div><div class="empty-sub">Requests from your department will appear here.</div></div>';
+    return;
+  }
+  const statusFilter = (document.getElementById('leave-status-filter') || {}).value || '';
+  const search = ((document.getElementById('leave-search') || {}).value || '').trim().toLowerCase();
+  const rows = allLeaveRequests.filter(r => {
+    const matchesStatus = !statusFilter || r.status === statusFilter;
+    const matchesSearch = !search || (r.faculty_name || '').toLowerCase().includes(search);
+    return matchesStatus && matchesSearch;
+  });
+  if (!rows.length) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-title">No matching requests</div><div class="empty-sub">Try a different search or filter.</div></div>';
+    return;
+  }
+  container.innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Faculty</th><th>Start</th><th>End</th><th>Reason</th><th>Status</th><th>Note</th><th>Actions</th></tr></thead>
+        <tbody>
+          ${rows.map(r => {
+            const statusClass = r.status === 'approved' ? 'present' : r.status === 'rejected' ? 'absent' : 'pending';
+            return `<tr>
+              <td>${r.faculty_name || r.faculty_id}</td>
+              <td>${r.start_date ? r.start_date.split('T')[0] : '—'}</td>
+              <td>${r.end_date ? r.end_date.split('T')[0] : '—'}</td>
+              <td style="max-width:220px;word-break:break-word">${r.reason || '—'}</td>
+              <td><span class="status-pill status-${statusClass}">${r.status}</span></td>
+              <td style="max-width:200px;word-break:break-word;color:var(--slate-300)">${r.decision_note || '—'}</td>
+              <td style="white-space:nowrap">
+                ${r.status === 'pending' ? `
+                  <button class="btn-approve" onclick="decideLeave(${r.id},'approved',this)">Approve</button>
+                  <button class="btn-reject" onclick="decideLeave(${r.id},'rejected',this)">Reject</button>
+                ` : `<span style="opacity:.4;font-size:12px">Decided</span>`}
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+async function decideLeave(id, status, btnEl) {
+  let note = null;
+  if (status === 'rejected') {
+    note = prompt('Reject this leave request. Optional note explaining why (shown to the faculty):');
+    if (note === null) return; // cancelled
+  }
+  const row = btnEl.closest('tr');
+  row.querySelectorAll('button').forEach(b => b.disabled = true);
+  try {
+    await api(`/api/hod/leave-requests/${id}`, {
+      method: 'POST',
+      body: JSON.stringify({ status, note: note || null })
+    });
+    showToast(`Leave request ${status}`);
+    loadLeaveRequests();
+  } catch (err) {
+    showToast('Failed: ' + err.message, true);
+    row.querySelectorAll('button').forEach(b => b.disabled = false);
+  }
+}
+</script>
+</body>
+</html>
