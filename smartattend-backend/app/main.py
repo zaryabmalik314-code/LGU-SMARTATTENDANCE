@@ -595,6 +595,44 @@ def list_hods(db: Session = Depends(get_db), admin: models.Admin = Depends(get_c
     return [schemas.HODOut(name=h.name, email=h.email, department=h.department) for h in hods]
 
 
+@app.patch("/api/admin/hods/{email}", response_model=schemas.HODOut)
+def update_hod(
+    email: str,
+    payload: schemas.HODUpdateRequest,
+    db: Session = Depends(get_db),
+    admin: models.Admin = Depends(get_current_admin),
+):
+    """Admin-only. Edit HOD name/department or reset their password."""
+    hod = db.query(models.HOD).filter(models.HOD.email == email).first()
+    if not hod:
+        raise HTTPException(status_code=404, detail="HOD not found")
+    if payload.name is not None:
+        hod.name = payload.name
+    if payload.department is not None:
+        hod.department = payload.department
+    if payload.password:
+        hod.password_hash = hash_password(payload.password)
+    db.commit()
+    db.refresh(hod)
+    return schemas.HODOut(name=hod.name, email=hod.email, department=hod.department)
+
+
+@app.delete("/api/admin/hods/{email}", status_code=204)
+def delete_hod(
+    email: str,
+    db: Session = Depends(get_db),
+    admin: models.Admin = Depends(get_current_admin),
+):
+    """Admin-only. Permanently removes the HOD account and invalidates all their sessions."""
+    hod = db.query(models.HOD).filter(models.HOD.email == email).first()
+    if not hod:
+        raise HTTPException(status_code=404, detail="HOD not found")
+    db.query(models.HODSession).filter(models.HODSession.hod_id == hod.id).delete()
+    db.delete(hod)
+    db.commit()
+    return None
+
+
 @app.get("/api/hod/faculty", response_model=List[schemas.FacultyOut])
 def hod_department_faculty(db: Session = Depends(get_db), hod: models.HOD = Depends(get_current_hod)):
     """
