@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException, Header, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import or_
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 import asyncio
@@ -126,17 +127,79 @@ EXPECTED_ARRIVAL_MINUTE = 0
 LATE_GRACE_MINUTES = 10  # arriving up to 10 min after 8:00 doesn't count as "late"
 
 
-def compute_late_minutes(utc_timestamp: datetime) -> int:
+def get_active_time_window(db: Session):
+    """The single preset late-arrival calculation runs against, or None."""
+    return db.query(models.TimeWindow).filter(models.TimeWindow.is_active == True).first()  # noqa: E712
+
+
+def _parse_overrides(window) -> dict:
+    if not window or not window.overrides:
+        return {}
+    try:
+        parsed = json.loads(window.overrides)
+        return parsed if isinstance(parsed, dict) else {}
+    except (ValueError, TypeError):
+        return {}
+
+
+def resolve_expected_start(local_time: datetime, db: Session, department: Optional[str] = None):
     """
-    Returns how many minutes past the 8:00 AM (+ grace period) local arrival
-    time this check-in was, or 0 if on time / early. Fixed schedule for
-    everyone — no per-teacher or per-class schedule support (yet).
+    Works out the expected arrival time for the local (PKT) day this
+    check-in falls on.
+
+    Returns (hour, minute, grace_minutes) — or None if it's a non-working
+    day, meaning no late minutes should ever accrue. A day is non-working
+    if the active preset marks that weekday {"off": true}, or if the date
+    is in the holiday calendar (university-wide, or for this department).
+    """
+    date_str = local_time.strftime("%Y-%m-%d")
+    holiday = (
+        db.query(models.Holiday)
+        .filter(
+            models.Holiday.date == date_str,
+            or_(models.Holiday.department.is_(None), models.Holiday.department == department),
+        )
+        .first()
+    )
+    if holiday:
+        return None
+
+    window = get_active_time_window(db)
+    if not window:
+        # No preset configured — fall back to the original fixed schedule so
+        # behaviour is unchanged for anyone who hasn't set one up yet.
+        return (EXPECTED_ARRIVAL_HOUR, EXPECTED_ARRIVAL_MINUTE, LATE_GRACE_MINUTES)
+
+    weekday = local_time.strftime("%A").lower()
+    day_cfg = _parse_overrides(window).get(weekday, {})
+    if day_cfg.get("off"):
+        return None
+
+    start = day_cfg.get("start") or window.start_time
+    try:
+        hour, minute = (int(p) for p in start.split(":"))
+    except (ValueError, AttributeError):
+        hour, minute = EXPECTED_ARRIVAL_HOUR, EXPECTED_ARRIVAL_MINUTE
+    return (hour, minute, window.grace_minutes)
+
+
+def compute_late_minutes(utc_timestamp: datetime, db: Session, department: Optional[str] = None) -> int:
+    """
+    Returns how many minutes past the expected local arrival time (+ grace)
+    this check-in was, or 0 if on time, early, or on a non-working day.
+
+    The schedule comes from the active TimeWindow preset — including that
+    weekday's override — rather than a hardcoded 8:00, and holidays and
+    days marked "off" never accrue late minutes.
     """
     local_time = utc_timestamp + timedelta(hours=PKT_OFFSET_HOURS)
-    expected = local_time.replace(
-        hour=EXPECTED_ARRIVAL_HOUR, minute=EXPECTED_ARRIVAL_MINUTE, second=0, microsecond=0
-    )
-    grace_deadline = expected + timedelta(minutes=LATE_GRACE_MINUTES)
+    resolved = resolve_expected_start(local_time, db, department)
+    if resolved is None:
+        return 0
+
+    hour, minute, grace = resolved
+    expected = local_time.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    grace_deadline = expected + timedelta(minutes=grace)
     if local_time <= grace_deadline:
         return 0
     return int((local_time - grace_deadline).total_seconds() // 60)
@@ -852,6 +915,129 @@ def delete_holiday(
     return None
 
 
+# ---------------------------------------------------------------------------
+# TIME WINDOWS — working-hour presets that drive late-arrival calculation.
+# ---------------------------------------------------------------------------
+
+def _time_window_out(w: models.TimeWindow) -> schemas.TimeWindowOut:
+    """Overrides live as a JSON string in the DB but go over the wire as an object."""
+    return schemas.TimeWindowOut(
+        id=w.id,
+        name=w.name,
+        start_time=w.start_time,
+        end_time=w.end_time,
+        grace_minutes=w.grace_minutes,
+        overrides=_parse_overrides(w),
+        is_active=w.is_active,
+    )
+
+
+@app.get("/api/time-windows", response_model=List[schemas.TimeWindowOut])
+def list_time_windows(
+    db: Session = Depends(get_db),
+    admin: models.Admin = Depends(get_current_admin),
+):
+    windows = db.query(models.TimeWindow).order_by(models.TimeWindow.name).all()
+    return [_time_window_out(w) for w in windows]
+
+
+@app.post("/api/time-windows", response_model=schemas.TimeWindowOut)
+def create_time_window(
+    payload: schemas.TimeWindowCreate,
+    db: Session = Depends(get_db),
+    admin: models.Admin = Depends(get_current_admin),
+):
+    existing = db.query(models.TimeWindow).filter(models.TimeWindow.name == payload.name).first()
+    if existing:
+        raise HTTPException(status_code=400, detail=f'A preset named "{payload.name}" already exists')
+
+    window = models.TimeWindow(
+        name=payload.name,
+        start_time=payload.start_time,
+        end_time=payload.end_time,
+        grace_minutes=payload.grace_minutes,
+        overrides=json.dumps(payload.overrides or {}),
+        # First preset created becomes active automatically, so late
+        # calculation never sits in the fallback state unnoticed.
+        is_active=db.query(models.TimeWindow).count() == 0,
+    )
+    db.add(window)
+    db.commit()
+    db.refresh(window)
+    return _time_window_out(window)
+
+
+@app.patch("/api/time-windows/{window_id}", response_model=schemas.TimeWindowOut)
+def update_time_window(
+    window_id: int,
+    payload: schemas.TimeWindowCreate,
+    db: Session = Depends(get_db),
+    admin: models.Admin = Depends(get_current_admin),
+):
+    window = db.query(models.TimeWindow).filter(models.TimeWindow.id == window_id).first()
+    if not window:
+        raise HTTPException(status_code=404, detail="Time window not found")
+
+    clash = (
+        db.query(models.TimeWindow)
+        .filter(models.TimeWindow.name == payload.name, models.TimeWindow.id != window_id)
+        .first()
+    )
+    if clash:
+        raise HTTPException(status_code=400, detail=f'A preset named "{payload.name}" already exists')
+
+    window.name = payload.name
+    window.start_time = payload.start_time
+    window.end_time = payload.end_time
+    window.grace_minutes = payload.grace_minutes
+    window.overrides = json.dumps(payload.overrides or {})
+    db.commit()
+    db.refresh(window)
+    return _time_window_out(window)
+
+
+@app.post("/api/time-windows/{window_id}/activate", response_model=schemas.TimeWindowOut)
+def activate_time_window(
+    window_id: int,
+    db: Session = Depends(get_db),
+    admin: models.Admin = Depends(get_current_admin),
+):
+    """Exactly one preset is active at a time — clear the rest in the same transaction."""
+    window = db.query(models.TimeWindow).filter(models.TimeWindow.id == window_id).first()
+    if not window:
+        raise HTTPException(status_code=404, detail="Time window not found")
+
+    db.query(models.TimeWindow).update({models.TimeWindow.is_active: False})
+    window.is_active = True
+    db.commit()
+    db.refresh(window)
+    return _time_window_out(window)
+
+
+@app.delete("/api/time-windows/{window_id}", status_code=204)
+def delete_time_window(
+    window_id: int,
+    db: Session = Depends(get_db),
+    admin: models.Admin = Depends(get_current_admin),
+):
+    window = db.query(models.TimeWindow).filter(models.TimeWindow.id == window_id).first()
+    if not window:
+        raise HTTPException(status_code=404, detail="Time window not found")
+
+    was_active = window.is_active
+    db.delete(window)
+    db.commit()
+
+    # Never leave the system with zero active presets if others remain —
+    # that would silently revert late calculation to the hardcoded fallback.
+    if was_active:
+        replacement = db.query(models.TimeWindow).order_by(models.TimeWindow.id).first()
+        if replacement:
+            replacement.is_active = True
+            db.commit()
+    return None
+
+
 @app.post("/api/attendance/check-in", response_model=schemas.CheckInResponse)
 def check_in(payload: schemas.CheckInRequest, db: Session = Depends(get_db)):
     faculty = db.query(models.Faculty).filter(models.Faculty.id == payload.faculty_id).first()
@@ -930,7 +1116,7 @@ def check_in(payload: schemas.CheckInRequest, db: Session = Depends(get_db)):
             balance = get_or_create_leave_balance(db, faculty.id)
             balance.working_days_attended += 1
 
-            late_minutes = compute_late_minutes(record.timestamp)
+            late_minutes = compute_late_minutes(record.timestamp, db, faculty.department)
             if late_minutes > 0:
                 balance.late_margin_used_minutes += late_minutes
 
