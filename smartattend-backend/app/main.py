@@ -264,6 +264,9 @@ def enroll_faculty(payload: schemas.FacultyEnrollRequest, db: Session = Depends(
         "data": {"faculty_id": faculty.id, "faculty_name": faculty.name, "department": faculty.department}
     })
     return faculty
+
+
+@app.get("/api/faculty", response_model=List[schemas.FacultyOut])
 def list_faculty(
     approval_status: str = None,
     db: Session = Depends(get_db),
