@@ -246,3 +246,57 @@ class TimeWindow(Base):
     overrides = Column(Text, nullable=True)       # JSON string, see above
     is_active = Column(Boolean, default=False, nullable=False, index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Semester(Base):
+    """
+    Admin-defined academic periods. Exactly one is active at a time.
+    Closing a semester:
+      1. Snapshots each faculty's late_margin_used_minutes into
+         SemesterSnapshot so HR numbers freeze permanently.
+      2. Resets LeaveBalance counters for the fresh period.
+    This model is the authority — "current semester" is always the row
+    where is_active=True. is_closed=True means locked; no new check-in
+    will change the snapshot for that period.
+    """
+    __tablename__ = "semesters"
+
+    id = Column(Integer, primary_key=True, index=True)
+    label = Column(String, nullable=False)             # e.g. "Spring 2026"
+    start_date = Column(String, nullable=False)        # "YYYY-MM-DD"
+    end_date = Column(String, nullable=False)          # "YYYY-MM-DD"
+    is_active = Column(Boolean, default=False, nullable=False, index=True)
+    is_closed = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    closed_at = Column(DateTime, nullable=True)
+
+    snapshots = relationship("SemesterSnapshot", back_populates="semester")
+
+
+class SemesterSnapshot(Base):
+    """
+    Immutable per-faculty record of what was owed at the moment a
+    semester was closed. Never updated after creation — it's the HR
+    source of truth for that period.
+    """
+    __tablename__ = "semester_snapshots"
+
+    id = Column(Integer, primary_key=True, index=True)
+    semester_id = Column(Integer, ForeignKey("semesters.id"), nullable=False, index=True)
+    faculty_id = Column(Integer, ForeignKey("faculty.id"), nullable=False, index=True)
+
+    # Copied verbatim from LeaveBalance at close time
+    late_minutes = Column(Integer, nullable=False, default=0)
+    deduction_days = Column(Integer, nullable=False, default=0)   # floor(late_minutes / 480)
+    days_attended = Column(Integer, nullable=False, default=0)
+    casual_leave_used = Column(Integer, nullable=False, default=0)
+
+    # Denormalised for HR readability without needing a join
+    faculty_name = Column(String, nullable=True)
+    teacher_id = Column(String, nullable=True)
+    department = Column(String, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    semester = relationship("Semester", back_populates="snapshots")
+    faculty = relationship("Faculty")
