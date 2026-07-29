@@ -56,6 +56,14 @@ class AttendanceRecord(Base):
     notes = Column(Text, nullable=True)
     record_type = Column(String, default="check_in", nullable=False)  # "check_in" | "check_out"
 
+    # How many minutes past the active TimeWindow's expected start (+ grace)
+    # this check-in was, or 0 for on-time/early/non-working-day/check-out
+    # records. Previously this was computed once at check-in and folded
+    # straight into LeaveBalance.late_margin_used_minutes with no date
+    # attached — meaning there was no way to see WHEN lateness happened, or
+    # slice it by semester/date range. Storing it per-record fixes both.
+    late_minutes = Column(Integer, default=0, nullable=False)
+
     # Anti-spoofing: flagged (not blocked) if the implied travel speed since
     # this faculty's last recorded location was physically impossible.
     flagged_suspicious = Column(Boolean, default=False, nullable=False)
