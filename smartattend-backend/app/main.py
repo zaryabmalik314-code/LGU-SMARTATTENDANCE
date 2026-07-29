@@ -1038,6 +1038,145 @@ def delete_time_window(
     return None
 
 
+# ---------------------------------------------------------------------------
+# SEMESTER MANAGEMENT
+# ---------------------------------------------------------------------------
+
+DEDUCTION_THRESHOLD_MINUTES = 480  # floor(late_minutes / threshold) = deduction days
+
+
+@app.get("/api/semesters", response_model=List[schemas.SemesterOut])
+def list_semesters(
+    db: Session = Depends(get_db),
+    admin: models.Admin = Depends(get_current_admin),
+):
+    return db.query(models.Semester).order_by(models.Semester.created_at.desc()).all()
+
+
+@app.post("/api/semesters", response_model=schemas.SemesterOut)
+def create_semester(
+    payload: schemas.SemesterCreate,
+    db: Session = Depends(get_db),
+    admin: models.Admin = Depends(get_current_admin),
+):
+    semester = models.Semester(
+        label=payload.label,
+        start_date=payload.start_date,
+        end_date=payload.end_date,
+        # First semester created becomes active automatically so the
+        # faculty app and HOD dashboard always have a current label.
+        is_active=db.query(models.Semester).count() == 0,
+        is_closed=False,
+    )
+    db.add(semester)
+    db.commit()
+    db.refresh(semester)
+    return semester
+
+
+@app.post("/api/semesters/{semester_id}/activate", response_model=schemas.SemesterOut)
+def activate_semester(
+    semester_id: int,
+    db: Session = Depends(get_db),
+    admin: models.Admin = Depends(get_current_admin),
+):
+    semester = db.query(models.Semester).filter(models.Semester.id == semester_id).first()
+    if not semester:
+        raise HTTPException(status_code=404, detail="Semester not found")
+    if semester.is_closed:
+        raise HTTPException(status_code=400, detail="Cannot activate a closed semester")
+    db.query(models.Semester).update({models.Semester.is_active: False})
+    semester.is_active = True
+    db.commit()
+    db.refresh(semester)
+    return semester
+
+
+@app.post("/api/semesters/{semester_id}/close", response_model=schemas.SemesterOut)
+def close_semester(
+    semester_id: int,
+    db: Session = Depends(get_db),
+    admin: models.Admin = Depends(get_current_admin),
+):
+    """
+    Closing a semester:
+      1. Locks it — no further changes to its HR numbers.
+      2. Snapshots every faculty member's current LeaveBalance into
+         SemesterSnapshot (immutable HR record).
+      3. Resets all LeaveBalance counters so the next semester starts fresh.
+
+    This is irreversible. The snapshot preserves the numbers permanently.
+    """
+    semester = db.query(models.Semester).filter(models.Semester.id == semester_id).first()
+    if not semester:
+        raise HTTPException(status_code=404, detail="Semester not found")
+    if semester.is_closed:
+        raise HTTPException(status_code=400, detail="Semester is already closed")
+
+    all_faculty = db.query(models.Faculty).filter(
+        models.Faculty.approval_status == "approved"
+    ).all()
+
+    for faculty in all_faculty:
+        balance = get_or_create_leave_balance(db, faculty.id)
+        late_min = balance.late_margin_used_minutes
+        deduction = late_min // DEDUCTION_THRESHOLD_MINUTES
+
+        snapshot = models.SemesterSnapshot(
+            semester_id=semester.id,
+            faculty_id=faculty.id,
+            faculty_name=faculty.name,
+            teacher_id=faculty.teacher_id,
+            department=faculty.department,
+            late_minutes=late_min,
+            deduction_days=deduction,
+            days_attended=balance.working_days_attended,
+            casual_leave_used=balance.casual_leave_used,
+        )
+        db.add(snapshot)
+
+        # Reset for the next semester
+        balance.late_margin_used_minutes = 0
+        balance.working_days_attended = 0
+        balance.casual_leave_used = 0
+        balance.semester_label = semester.label  # record what period just closed
+
+    semester.is_closed = True
+    semester.is_active = False
+    semester.closed_at = datetime.utcnow()
+    db.commit()
+    db.refresh(semester)
+    return semester
+
+
+@app.get("/api/semesters/active", response_model=schemas.SemesterOut)
+def get_active_semester(db: Session = Depends(get_db)):
+    """Public endpoint — faculty app and HOD dashboard call this to show
+    the current semester label next to late-minute stats."""
+    semester = db.query(models.Semester).filter(
+        models.Semester.is_active == True  # noqa: E712
+    ).first()
+    if not semester:
+        raise HTTPException(status_code=404, detail="No active semester")
+    return semester
+
+
+@app.get("/api/semesters/{semester_id}/snapshots",
+         response_model=List[schemas.SemesterSnapshotOut])
+def get_semester_snapshots(
+    semester_id: int,
+    db: Session = Depends(get_db),
+    admin: models.Admin = Depends(get_current_admin),
+):
+    """Full HR export for a closed semester."""
+    semester = db.query(models.Semester).filter(models.Semester.id == semester_id).first()
+    if not semester:
+        raise HTTPException(status_code=404, detail="Semester not found")
+    return db.query(models.SemesterSnapshot).filter(
+        models.SemesterSnapshot.semester_id == semester_id
+    ).order_by(models.SemesterSnapshot.department, models.SemesterSnapshot.faculty_name).all()
+
+
 @app.post("/api/attendance/check-in", response_model=schemas.CheckInResponse)
 def check_in(payload: schemas.CheckInRequest, db: Session = Depends(get_db)):
     faculty = db.query(models.Faculty).filter(models.Faculty.id == payload.faculty_id).first()
