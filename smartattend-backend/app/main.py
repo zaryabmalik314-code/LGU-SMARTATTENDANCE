@@ -308,6 +308,9 @@ def approve_faculty(
         "data": {"faculty_id": faculty.id, "faculty_name": faculty.name, "status": faculty.approval_status}
     })
     return faculty
+
+
+@app.post("/api/faculty/{faculty_id}/deactivate", response_model=schemas.FacultyOut)
 def deactivate_faculty(
     faculty_id: int,
     db: Session = Depends(get_db),
