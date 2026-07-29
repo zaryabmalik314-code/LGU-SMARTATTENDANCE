@@ -409,6 +409,11 @@ def login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
     if faculty.approval_status != "approved":
         return schemas.LoginResponse(status=faculty.approval_status, faculty=faculty)
 
+    # Offboarded accounts keep their approval_status and all their history,
+    # so approval_status alone can't gate them out — check the flag too.
+    if not faculty.is_active:
+        return schemas.LoginResponse(status="deactivated", faculty=faculty)
+
     return schemas.LoginResponse(status="approved", faculty=faculty)
 
 
@@ -855,6 +860,8 @@ def check_in(payload: schemas.CheckInRequest, db: Session = Depends(get_db)):
 
     if faculty.approval_status != "approved":
         raise HTTPException(status_code=403, detail=f"Faculty is not approved (status: {faculty.approval_status})")
+    if not faculty.is_active:
+        raise HTTPException(status_code=403, detail="This faculty account has been deactivated. Contact the admin.")
 
     # 1. Pick best GPS reading from the batch sent by frontend
     if not payload.gps_readings:
@@ -1009,6 +1016,8 @@ def check_out(payload: schemas.CheckOutRequest, db: Session = Depends(get_db)):
 
     if faculty.approval_status != "approved":
         raise HTTPException(status_code=403, detail=f"Faculty is not approved (status: {faculty.approval_status})")
+    if not faculty.is_active:
+        raise HTTPException(status_code=403, detail="This faculty account has been deactivated. Contact the admin.")
 
     if not payload.gps_readings:
         raise HTTPException(status_code=400, detail="At least one GPS reading is required")
