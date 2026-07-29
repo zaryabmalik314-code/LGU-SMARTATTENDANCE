@@ -323,6 +323,12 @@ class HODCreateRequest(BaseModel):
     name: Optional[str] = None
 
 
+class HODUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    department: Optional[str] = None
+    password: Optional[str] = None  # if provided, resets the HOD's password
+
+
 class HODOut(BaseModel):
     name: Optional[str] = None
     email: str
