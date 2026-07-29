@@ -101,6 +101,18 @@ def run_simple_migrations():
                 conn.execute(text("ALTER TABLE attendance_records ADD COLUMN flag_reason TEXT"))
                 conn.commit()
                 print("[migration] Added missing column: attendance_records.flag_reason")
+            if "late_minutes" not in existing_columns:
+                conn.execute(text(
+                    "ALTER TABLE attendance_records ADD COLUMN late_minutes INTEGER NOT NULL DEFAULT 0"
+                ))
+                conn.commit()
+                # Deliberately NOT backfilled: existing rows predate the
+                # TimeWindow system and were never scheduled against it, so
+                # recomputing "late" for them now would apply today's rules
+                # retroactively to attendance that happened under a different
+                # (or no) schedule. They start at 0; only new check-ins from
+                # this point forward get a real value.
+                print("[migration] Added missing column: attendance_records.late_minutes (existing rows default 0, not backfilled)")
             
             # Create indexes if they don't exist
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_attendance_records_faculty_id ON attendance_records (faculty_id)"))
