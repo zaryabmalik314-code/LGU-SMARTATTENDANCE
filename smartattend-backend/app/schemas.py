@@ -402,3 +402,87 @@ class HolidayOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+VALID_DAYS = {"monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"}
+
+
+def _validate_hhmm(v: str, field: str) -> str:
+    try:
+        datetime.strptime(v, "%H:%M")
+    except ValueError:
+        raise ValueError(f'{field} must be in "HH:MM" 24-hour format')
+    return v
+
+
+class TimeWindowCreate(BaseModel):
+    name: str
+    start_time: str = "08:00"
+    end_time: str = "16:00"
+    grace_minutes: int = 10
+    # {"friday": {"start": "08:00", "end": "13:00"}, "saturday": {"off": true}}
+    overrides: dict = {}
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v):
+        v = (v or "").strip()
+        if not v:
+            raise ValueError("name is required")
+        if len(v) > 60:
+            raise ValueError("name must be 60 characters or fewer")
+        return v
+
+    @field_validator("start_time")
+    @classmethod
+    def validate_start(cls, v):
+        return _validate_hhmm(v, "start_time")
+
+    @field_validator("end_time")
+    @classmethod
+    def validate_end(cls, v):
+        return _validate_hhmm(v, "end_time")
+
+    @field_validator("grace_minutes")
+    @classmethod
+    def validate_grace(cls, v):
+        if v < 0 or v > 240:
+            raise ValueError("grace_minutes must be between 0 and 240")
+        return v
+
+    @field_validator("overrides")
+    @classmethod
+    def validate_overrides(cls, v):
+        if not v:
+            return {}
+        cleaned = {}
+        for day, cfg in v.items():
+            day_l = str(day).lower()
+            if day_l not in VALID_DAYS:
+                raise ValueError(f"unknown day in overrides: {day}")
+            if not isinstance(cfg, dict):
+                raise ValueError(f"overrides.{day} must be an object")
+            if cfg.get("off"):
+                cleaned[day_l] = {"off": True}
+                continue
+            entry = {}
+            if cfg.get("start"):
+                entry["start"] = _validate_hhmm(cfg["start"], f"overrides.{day}.start")
+            if cfg.get("end"):
+                entry["end"] = _validate_hhmm(cfg["end"], f"overrides.{day}.end")
+            if entry:
+                cleaned[day_l] = entry
+        return cleaned
+
+
+class TimeWindowOut(BaseModel):
+    id: int
+    name: str
+    start_time: str
+    end_time: str
+    grace_minutes: int
+    overrides: dict = {}
+    is_active: bool
+
+    class Config:
+        from_attributes = True
