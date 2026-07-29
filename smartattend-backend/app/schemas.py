@@ -104,7 +104,7 @@ class LoginRequest(BaseModel):
 
 
 class LoginResponse(BaseModel):
-    status: str  # "approved" | "pending" | "rejected" | "invalid_credentials"
+    status: str  # "approved" | "pending" | "rejected" | "deactivated" | "invalid_credentials"
     faculty: Optional[FacultyOut] = None
 
 
