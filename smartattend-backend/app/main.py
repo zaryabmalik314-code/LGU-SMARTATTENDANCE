@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, Header, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Depends, HTTPException, Header, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_
@@ -464,7 +464,7 @@ def mark_manual_attendance(
 
 
 @app.post("/api/auth/login", response_model=schemas.LoginResponse)
-def login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
+def login(payload: schemas.LoginRequest, request: Request, db: Session = Depends(get_db)):
     faculty = db.query(models.Faculty).filter(models.Faculty.teacher_id == payload.teacher_id).first()
     if not faculty or not verify_pin(payload.pin, faculty.pin_hash):
         return schemas.LoginResponse(status="invalid_credentials", faculty=None)
@@ -472,10 +472,41 @@ def login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
     if faculty.approval_status != "approved":
         return schemas.LoginResponse(status=faculty.approval_status, faculty=faculty)
 
-    # Offboarded accounts keep their approval_status and all their history,
-    # so approval_status alone can't gate them out — check the flag too.
     if not faculty.is_active:
         return schemas.LoginResponse(status="deactivated", faculty=faculty)
+
+    # Device-switch enforcement: capture the real client IP (Railway sits
+    # behind a proxy so X-Forwarded-For is the real source address).
+    # On first login (no last_device_ip set), just record the IP and let
+    # them through — no request needed for the very first device.
+    forwarded_for = request.headers.get("x-forwarded-for")
+    client_ip = forwarded_for.split(",")[0].strip() if forwarded_for else (
+        request.client.host if request.client else None
+    )
+
+    if client_ip and faculty.last_device_ip and client_ip != faculty.last_device_ip:
+        # Different device — check if there's already a pending request for
+        # this exact new IP so we don't flood the admin with duplicates.
+        existing = db.query(models.DeviceSwitchRequest).filter(
+            models.DeviceSwitchRequest.faculty_id == faculty.id,
+            models.DeviceSwitchRequest.new_ip == client_ip,
+            models.DeviceSwitchRequest.status == "pending",
+        ).first()
+        if not existing:
+            db.add(models.DeviceSwitchRequest(faculty_id=faculty.id, new_ip=client_ip))
+            db.commit()
+            manager.broadcast_threadsafe({
+                "event": "device_switch_request",
+                "data": {"faculty_id": faculty.id, "faculty_name": faculty.name}
+            })
+        return schemas.LoginResponse(status="device_switch_pending", faculty=faculty)
+
+    # First login ever — record this IP so future logins from a different
+    # device will be caught. Also update if they were just approved via a
+    # device switch request (last_device_ip gets updated on approval).
+    if client_ip and not faculty.last_device_ip:
+        faculty.last_device_ip = client_ip
+        db.commit()
 
     return schemas.LoginResponse(status="approved", faculty=faculty)
 
@@ -932,6 +963,58 @@ def _time_window_out(w: models.TimeWindow) -> schemas.TimeWindowOut:
     )
 
 
+@app.get("/api/time-windows/today")
+def get_todays_schedule(db: Session = Depends(get_db)):
+    """
+    Public endpoint — no auth required. Faculty app calls this to show
+    the current working hours and grace period so teachers know exactly
+    what schedule their lateness is being judged against.
+    Returns the resolved schedule for today (PKT), respecting day
+    overrides and marking the day as off if applicable.
+    """
+    local_now = datetime.utcnow() + timedelta(hours=PKT_OFFSET_HOURS)
+    window = get_active_time_window(db)
+
+    if not window:
+        return {
+            "has_preset": False,
+            "is_day_off": False,
+            "start_time": "08:00",
+            "end_time": "16:00",
+            "grace_minutes": LATE_GRACE_MINUTES,
+            "preset_name": None,
+            "weekday": local_now.strftime("%A"),
+        }
+
+    resolved = resolve_expected_start(local_now, db)
+    if resolved is None:
+        return {
+            "has_preset": True,
+            "is_day_off": True,
+            "start_time": None,
+            "end_time": None,
+            "grace_minutes": window.grace_minutes,
+            "preset_name": window.name,
+            "weekday": local_now.strftime("%A"),
+        }
+
+    hour, minute, grace = resolved
+    overrides = _parse_overrides(window)
+    weekday = local_now.strftime("%A").lower()
+    day_cfg = overrides.get(weekday, {})
+    end_time = day_cfg.get("end") or window.end_time
+
+    return {
+        "has_preset": True,
+        "is_day_off": False,
+        "start_time": f"{hour:02d}:{minute:02d}",
+        "end_time": end_time,
+        "grace_minutes": grace,
+        "preset_name": window.name,
+        "weekday": local_now.strftime("%A"),
+    }
+
+
 @app.get("/api/time-windows", response_model=List[schemas.TimeWindowOut])
 def list_time_windows(
     db: Session = Depends(get_db),
@@ -1159,6 +1242,20 @@ def get_active_semester(db: Session = Depends(get_db)):
     if not semester:
         raise HTTPException(status_code=404, detail="No active semester")
     return semester
+
+
+@app.get("/api/time-windows/today", response_model=schemas.TimeWindowOut)
+def get_todays_time_window(db: Session = Depends(get_db)):
+    """
+    Public endpoint — returns the schedule details for today so the faculty
+    app can show teachers what time they're expected to arrive and whether
+    today is a working day. Returns 404 if no preset is active (faculty app
+    should show a graceful fallback, not an error).
+    """
+    window = get_active_time_window(db)
+    if not window:
+        raise HTTPException(status_code=404, detail="No active time window")
+    return _time_window_out(window)
 
 
 @app.get("/api/semesters/{semester_id}/snapshots",
