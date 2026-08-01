@@ -484,7 +484,7 @@ def login(payload: schemas.LoginRequest, request: Request, db: Session = Depends
         request.client.host if request.client else None
     )
 
-    if client_ip and faculty.last_device_ip and client_ip != faculty.last_device_ip:
+   if False and client_ip and faculty.last_device_ip and client_ip != faculty.last_device_ip:
         # Different device — check if there's already a pending request for
         # this exact new IP so we don't flood the admin with duplicates.
         existing = db.query(models.DeviceSwitchRequest).filter(
