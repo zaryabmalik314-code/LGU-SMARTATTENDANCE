@@ -44,7 +44,7 @@ def _get_face_app():
         from insightface.app import FaceAnalysis
 
         _face_app = FaceAnalysis(name="buffalo_l", providers=["CPUExecutionProvider"])
-        _face_app.prepare(ctx_id=0, det_size=(640, 640))
+        _face_app.prepare(ctx_id=0, det_size=(320, 320))
     return _face_app
 
 
@@ -128,7 +128,10 @@ def get_best_face_embedding(image_b64_list: List[str]) -> dict:
     best_img = None
     best_score = -1.0
 
-    for image_b64 in image_b64_list:
+    MAX_FRAMES = 10
+    frames_to_process = image_b64_list[:MAX_FRAMES]
+
+    for image_b64 in frames_to_process:
         try:
             img = decode_image(image_b64)
         except Exception:
@@ -147,6 +150,8 @@ def get_best_face_embedding(image_b64_list: List[str]) -> dict:
             best_score = score
             best_face = candidate
             best_img = img
+            if best_score > 0.85:
+                break
 
     if best_face is None or best_score < 0:
         return {"embedding": None, "quality": 0.0, "reason": "no_usable_face_detected", "thumbnail": None}
