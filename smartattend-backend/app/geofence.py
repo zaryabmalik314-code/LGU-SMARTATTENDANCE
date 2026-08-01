@@ -8,6 +8,7 @@ from .schemas import GPSReading
 
 # Real campus boundary — Lahore Garrison University, DHA Phase 6, Lahore.
 # Traced from actual satellite imagery of the campus perimeter wall (21 points).
+# ORIGINAL — do not modify.
 CAMPUS_BOUNDARY: List[Tuple[float, float]] = [
     (31.463801, 74.441493),
     (31.464043, 74.441724),
@@ -31,6 +32,23 @@ CAMPUS_BOUNDARY: List[Tuple[float, float]] = [
     (31.463656, 74.442015),
     (31.463745, 74.441712),
 ]
+
+# Home geofence — 50m octagon around Zaryab's house (31.490882, 74.407991).
+# Remove or swap this before production rollout to real faculty.
+HOME_BOUNDARY: List[Tuple[float, float]] = [
+    (31.491331, 74.407991),
+    (31.491200, 74.408363),
+    (31.490882, 74.408518),
+    (31.490564, 74.408363),
+    (31.490433, 74.407991),
+    (31.490564, 74.407619),
+    (31.490882, 74.407464),
+    (31.491200, 74.407619),
+    (31.491331, 74.407991),
+]
+
+# All allowed zones — point must be inside at least one.
+ALLOWED_BOUNDARIES = [CAMPUS_BOUNDARY, HOME_BOUNDARY]
 
 MAX_ACCEPTABLE_ACCURACY_M = 30.0  # reject readings noisier than this
 BOUNDARY_BUFFER_M = 15.0  # treat points within this distance of edge as "inside" too
@@ -70,6 +88,11 @@ def point_in_polygon(lat: float, lng: float, polygon: List[Tuple[float, float]])
     return inside
 
 
+def is_allowed_location(lat: float, lng: float) -> bool:
+    """Returns True if point is inside any of the allowed boundaries."""
+    return any(point_in_polygon(lat, lng, boundary) for boundary in ALLOWED_BOUNDARIES)
+
+
 def distance_to_polygon_edge_m(lat: float, lng: float, polygon: List[Tuple[float, float]]) -> float:
     """Shortest distance from point to any polygon edge, in meters."""
     min_dist = float("inf")
@@ -77,11 +100,18 @@ def distance_to_polygon_edge_m(lat: float, lng: float, polygon: List[Tuple[float
     for i in range(n):
         lat1, lng1 = polygon[i]
         lat2, lng2 = polygon[(i + 1) % n]
-        # approximate by checking distance to segment endpoints + midpoint (good enough at campus scale)
         for lat_p, lng_p in [(lat1, lng1), (lat2, lng2), ((lat1 + lat2) / 2, (lng1 + lng2) / 2)]:
             d = haversine_m(lat, lng, lat_p, lng_p)
             min_dist = min(min_dist, d)
     return min_dist
+
+
+def nearest_boundary_distance_m(lat: float, lng: float) -> float:
+    """Shortest distance to any allowed boundary edge."""
+    return min(
+        distance_to_polygon_edge_m(lat, lng, boundary)
+        for boundary in ALLOWED_BOUNDARIES
+    )
 
 
 def check_location(reading: GPSReading) -> dict:
@@ -89,8 +119,8 @@ def check_location(reading: GPSReading) -> dict:
     Returns dict: {allowed: bool, reason: str, distance_to_boundary_m: float}
     Logic:
       1. Reject if GPS accuracy too poor to trust.
-      2. Accept if strictly inside polygon.
-      3. If outside but within BOUNDARY_BUFFER_M of an edge, accept (accounts for GPS drift).
+      2. Accept if strictly inside any allowed polygon.
+      3. If outside but within BOUNDARY_BUFFER_M of any edge, accept (accounts for GPS drift).
       4. Otherwise reject.
     """
     if reading.accuracy > MAX_ACCEPTABLE_ACCURACY_M:
@@ -100,8 +130,8 @@ def check_location(reading: GPSReading) -> dict:
             "distance_to_boundary_m": None,
         }
 
-    inside = point_in_polygon(reading.latitude, reading.longitude, CAMPUS_BOUNDARY)
-    dist = distance_to_polygon_edge_m(reading.latitude, reading.longitude, CAMPUS_BOUNDARY)
+    inside = is_allowed_location(reading.latitude, reading.longitude)
+    dist = nearest_boundary_distance_m(reading.latitude, reading.longitude)
 
     if inside:
         return {"allowed": True, "reason": "inside_boundary", "distance_to_boundary_m": dist}
@@ -112,14 +142,10 @@ def check_location(reading: GPSReading) -> dict:
     return {"allowed": False, "reason": "outside_boundary", "distance_to_boundary_m": dist}
 
 
-# Anti-GPS-spoofing: impossible-movement detection. If a teacher's last
-# recorded location and this new one, given the time elapsed, imply a travel
-# speed no real vehicle could achieve, flag it for admin review. This does
-# NOT block the check-in — GPS drift near boundaries already causes enough
-# false-positive risk without also blocking on this, so it's a flag, not a gate.
-MAX_PLAUSIBLE_SPEED_KMH = 160.0  # generous — covers fast highway driving, catches teleportation
-MIN_MINUTES_TO_CHECK = 1.0  # ignore near-simultaneous readings (avoids division-by-near-zero noise)
-MAX_HOURS_SINCE_LAST_TO_CHECK = 12.0  # long gaps make speed comparison meaningless, skip those
+# Anti-GPS-spoofing: impossible-movement detection.
+MAX_PLAUSIBLE_SPEED_KMH = 160.0
+MIN_MINUTES_TO_CHECK = 1.0
+MAX_HOURS_SINCE_LAST_TO_CHECK = 12.0
 
 
 def check_impossible_movement(
