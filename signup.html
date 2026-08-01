@@ -1,0 +1,1136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+<meta name="theme-color" content="#0f2860">
+<link rel="icon" href="logo.png">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Smart Attendance">
+<meta name="theme-color" content="#0b1f4b">
+<title>Smart Attendance — Sign Up</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet">
+<style>
+#introSplash{position:fixed;top:0;left:0;width:100%;height:100%;background:#ffffff;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999999;transition:opacity 0.6s ease}
+#introSplash.hide{opacity:0;pointer-events:none}
+#introSplash img{width:180px;height:180px;object-fit:contain}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+.i{width:1em;height:1em;display:inline-block;vertical-align:-0.14em;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+:root{
+  --navy:#0b1f4b;--navy2:#132963;--navy3:#1e3a8a;
+  --gold:#c9a84c;--gold2:#f0d080;--gold3:#7a6028;
+  --cream:#faf9f6;--white:#fff;
+  --g50:#f8f7f4;--g100:#eeecea;--g300:#c8c5be;--g500:#888580;--g700:#4a4845;
+  --green:#0d7a52;--gbg:#e8f7f0;
+  --amber:#92600a;--abg:#fef4e0;
+  --red:#9b1c1c;--rbg:#fde8e8;
+  --r14:14px;--r10:10px;--r8:8px;--rpill:100px;
+}
+html,body{height:100%;overflow:hidden}
+body{font-family:'DM Sans',system-ui,sans-serif;background:#1a1a2e;color:var(--g700);display:flex;justify-content:center;align-items:center}
+.app-shell{width:100%;max-width:430px;height:100vh;height:100dvh;background:var(--cream);display:flex;flex-direction:column;position:relative;overflow:hidden}
+.status-bar{background:var(--navy);padding:10px 20px 7px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
+.status-time{color:rgba(255,255,255,.92);font-size:13px;font-weight:600}
+.status-icons{display:flex;gap:6px;align-items:center;font-size:12px;color:rgba(255,255,255,.8)}
+.screen{display:none;flex-direction:column;flex:1;min-height:0;animation:fadeIn .22s ease}
+.screen.active{display:flex}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.splash-bg{background:var(--navy);flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 28px 28px;overflow-y:auto}
+.splash-bg::-webkit-scrollbar{display:none}
+.logo-img{width:100px;height:100px;border-radius:50%;border:3px solid var(--gold);object-fit:cover;margin-bottom:16px;box-shadow:0 0 0 6px rgba(201,168,76,.15)}
+.app-title{font-family:'DM Serif Display',serif;font-size:26px;font-weight:400;color:#fff;letter-spacing:-.01em;margin-bottom:3px;text-align:center}
+.app-sub{font-size:12px;color:rgba(255,255,255,.45);text-align:center;margin-bottom:32px;letter-spacing:.03em}
+.login-card{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:24px 20px;width:100%}
+.login-label{font-size:10px;color:var(--gold2);letter-spacing:.1em;font-weight:600;margin-bottom:14px;text-align:center}
+.splash-footer{margin-top:22px;font-size:10px;color:rgba(255,255,255,.25);text-align:center;letter-spacing:.04em}
+.topnav{background:var(--navy);padding:0 16px;display:flex;align-items:center;justify-content:space-between;height:54px;flex-shrink:0;border-bottom:1px solid rgba(201,168,76,.2)}
+.nav-back{background:none;border:none;color:rgba(255,255,255,.7);cursor:pointer;display:flex;align-items:center;gap:3px;font-size:22px;padding:6px;border-radius:8px;transition:background .15s,transform .12s ease}
+.nav-back:active{background:rgba(255,255,255,.1);transform:scale(.93)}
+.nav-brand{display:flex;align-items:center;gap:9px}
+.nav-logo-img{width:32px;height:32px;border-radius:50%;border:1.5px solid var(--gold);object-fit:cover}
+.nav-title{color:#fff;font-size:13px;font-weight:600;line-height:1.2}
+.nav-title span{color:rgba(255,255,255,.45);font-weight:400;font-size:11px;display:block}
+.nav-pill{background:rgba(201,168,76,.18);border:1px solid rgba(201,168,76,.35);color:var(--gold2);font-size:10px;padding:4px 11px;border-radius:var(--rpill);font-weight:500;letter-spacing:.03em}
+.scroll{flex:1;overflow-y:auto;padding:18px 16px 28px;-webkit-overflow-scrolling:touch}
+.scroll::-webkit-scrollbar{display:none}
+.card{background:var(--white);border-radius:var(--r14);border:1px solid var(--g100);padding:16px;margin-bottom:14px;box-shadow:0 2px 10px rgba(11,31,75,.06);overflow-wrap:break-word}
+.card-title{font-size:14px;font-weight:600;color:var(--navy);margin-bottom:3px;display:flex;align-items:center;gap:7px}
+.card-title .ico{font-size:18px;color:var(--navy)}
+.card-sub{font-size:12px;color:var(--g500);margin-bottom:14px}
+.face-area{display:flex;flex-direction:column;align-items:center;padding:0}
+.face-val{font-size:12px;color:var(--g500);text-align:center;min-height:16px}
+.prog-wrap{background:var(--g100);border-radius:6px;height:6px;overflow:hidden;margin:8px 0}
+.prog-bar{height:6px;border-radius:6px;background:var(--navy);transition:width .08s linear;width:0}
+.prog-bar.green{background:var(--green)}
+.btn-primary{width:100%;padding:14px;border-radius:var(--r10);background:var(--navy);color:#fff;border:none;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:all .15s;font-family:inherit;margin-top:4px}
+.btn-primary:active{transform:scale(.97);background:var(--navy2)}
+.btn-primary:disabled{opacity:.45;cursor:not-allowed}
+.btn-primary.gold{background:var(--gold);color:var(--navy)}
+.btn-outline{width:100%;padding:12px;border-radius:var(--r10);background:transparent;color:var(--navy);border:1.5px solid var(--navy);font-size:13px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:all .15s;font-family:inherit;margin-top:8px}
+.btn-outline:active{background:var(--g50);transform:scale(.97)}
+.btn-ico{font-size:16px}
+.bphase{display:flex;align-items:center;gap:4px;font-size:10px;font-weight:500;padding:4px 9px;border-radius:var(--rpill);background:var(--g50);color:var(--g500);border:1px solid var(--g100);transition:all .4s}
+.bphase.active{background:#e8f4ff;color:#1260b3;border-color:#a8d0f5}
+.bphase.done{background:var(--gbg);color:var(--green);border-color:#a8e6cc}
+.bphase .tick{display:none}.bphase.done .tick{display:inline}
+@keyframes livePulse{0%,100%{opacity:1}50%{opacity:.25}}
+@keyframes bioScanDown{0%{top:10%;opacity:0}10%{opacity:1}90%{opacity:1}100%{top:88%;opacity:0}}
+.pending-hero{width:84px;height:84px;border-radius:26px;background:rgba(201,168,76,.15);border:1.5px solid rgba(201,168,76,.3);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:38px}
+.field-group{margin-bottom:14px}
+.field-label{font-size:11px;color:var(--gold2);letter-spacing:.04em;font-weight:600;margin-bottom:6px;display:block}
+.field-input{width:100%;padding:13px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.06);color:#fff;font-size:14px;font-family:inherit;transition:border-color .15s,background .15s}
+.field-input::placeholder{color:rgba(255,255,255,.32)}
+.field-input:focus{outline:none;border-color:rgba(201,168,76,.6);background:rgba(255,255,255,.09)}
+.field-select{width:100%;padding:13px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.06);color:#fff;font-size:14px;font-family:inherit;appearance:none;-webkit-appearance:none}
+.field-select option{background:#0b1f4b;color:#fff}
+.link-btn{background:none;border:none;color:var(--gold2);font-size:12px;font-family:inherit;cursor:pointer;text-decoration:underline;padding:6px}
+.form-err{font-size:11px;color:#f87171;margin-top:-8px;margin-bottom:10px;display:none}
+.face-alert{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:var(--r8);font-size:11px;font-weight:500;line-height:1.35;max-width:100%}
+.face-alert svg{flex-shrink:0}
+.face-alert.warn{background:var(--abg);color:var(--amber)}
+.face-alert.error{background:var(--rbg);color:var(--red)}
+#toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%) translateY(16px);background:var(--navy);color:#fff;padding:11px 22px;border-radius:var(--rpill);font-size:13px;font-weight:500;opacity:0;transition:all .28s;z-index:9999;white-space:nowrap;pointer-events:none;border:1px solid rgba(201,168,76,.4);box-shadow:0 4px 20px rgba(11,31,75,.3)}
+input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus,input:-webkit-autofill:active{
+  -webkit-box-shadow:0 0 0 1000px #0d1117 inset !important;
+  box-shadow:0 0 0 1000px #0d1117 inset !important;
+  -webkit-text-fill-color:#f0f6fc !important;
+  caret-color:#f0f6fc;
+  transition:background-color 9999s ease-in-out 0s;
+}
+</style>
+</head>
+<body>
+
+<svg style="display:none" aria-hidden="true">
+  <symbol id="ic-camera" viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></symbol>
+  <symbol id="ic-check" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></symbol>
+  <symbol id="ic-lock" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+  <symbol id="ic-user" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></symbol>
+  <symbol id="ic-alert" viewBox="0 0 24 24"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></symbol>
+  <symbol id="ic-refresh" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></symbol>
+  <symbol id="ic-loader" viewBox="0 0 24 24"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></symbol>
+  <symbol id="ic-chevron-left" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></symbol>
+  <symbol id="ic-wifi" viewBox="0 0 24 24"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></symbol>
+  <symbol id="ic-battery" viewBox="0 0 24 24"><rect x="1" y="7" width="18" height="10" rx="2"/><line x1="23" y1="11" x2="23" y2="13"/></symbol>
+</svg>
+
+<div id="introSplash">
+  <img class="app-logo-img" alt="Logo">
+</div>
+
+<div class="app-shell">
+  <div class="status-bar">
+    <div class="status-time" id="statusClock">9:41</div>
+    <div class="status-icons"><svg class="i"><use href="#ic-wifi"/></svg> <svg class="i"><use href="#ic-battery"/></svg></div>
+  </div>
+
+  <!-- ══════════════ SIGNUP STEP 1 ══════════════ -->
+  <div class="screen active" id="scr-signup">
+    <div class="splash-bg" style="justify-content:flex-start;padding-top:36px">
+      <img class="app-logo-img logo-img" alt="Logo">
+      <div class="app-title">Create Account</div>
+      <div class="app-sub">FACULTY REGISTRATION &nbsp;·&nbsp; ONE-TIME SETUP</div>
+      <div class="login-card">
+        <div class="login-label">STEP 1 · YOUR DETAILS</div>
+        <div class="field-group">
+          <label class="field-label">Full Name</label>
+          <input type="text" class="field-input" id="suName" placeholder="e.g. Dr. Ayesha Khan" autocomplete="name">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Teacher ID / Roll Number</label>
+          <input type="text" class="field-input" id="suTeacherId" placeholder="e.g. FAC-2026-0142">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Email</label>
+          <input type="email" class="field-input" id="suEmail" placeholder="name@university.edu.pk" autocomplete="email">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Department</label>
+          <select class="field-select" id="suDept">
+            <option value="">Select department&hellip;</option>
+            <option>Computer Science (CS)</option>
+            <option>Information Technology (IT)</option>
+            <option>Software Engineering (SE)</option>
+            <option>English</option>
+            <option>Psychology</option>
+            <option>Management Sciences</option>
+            <option>Criminology</option>
+            <option>Media &amp; Communication Studies</option>
+            <option>Humanities &amp; Arts</option>
+            <option>Mathematics</option>
+            <option>Physics</option>
+            <option>Chemistry</option>
+            <option>Biology</option>
+            <option>Urdu</option>
+            <option>Artificial Intelligence (AI)</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Choose a 4-digit Login PIN</label>
+          <input type="password" inputmode="numeric" maxlength="4" class="field-input" id="suPin" placeholder="&bull; &bull; &bull; &bull;">
+        </div>
+        <div class="form-err" id="suErr"></div>
+        <button class="btn-primary gold" id="suContinueBtn" onclick="signupGoFace()"><span class="btn-ico"><svg class="i"><use href="#ic-user"/></svg></span>Continue to Face Enrollment</button>
+      </div>
+      <div class="splash-footer">Already approved? <span class="link-btn" onclick="window.location.href='index.html'" style="cursor:pointer">Log in instead</span></div>
+    </div>
+  </div>
+
+  <!-- ══════════════ SIGNUP STEP 2: FACE ENROLLMENT ══════════════ -->
+  <div class="screen" id="scr-enroll">
+    <div class="topnav">
+      <button class="nav-back" onclick="goScreen('scr-signup')" aria-label="Back"><svg class="i"><use href="#ic-chevron-left"/></svg></button>
+      <div class="nav-brand">
+        <img class="app-logo-img nav-logo-img" alt="Logo">
+        <div class="nav-title">Face Enrollment<span>Step 2 of 2</span></div>
+      </div>
+      <span class="nav-pill">Signup</span>
+    </div>
+    <div class="scroll">
+      <div class="card">
+        <div class="card-title"><span class="ico"><svg class="i"><use href="#ic-camera"/></svg></span>Enroll Your Face</div>
+        <div class="card-sub">This creates your biometric profile for attendance check-ins. Just look at the camera, then tilt your head slightly to one side and the other &mdash; no need to turn far. The oval turns green while it&rsquo;s capturing.</div>
+        <div class="face-area">
+          <div id="enrollScanner" style="width:100%;background:#050a14;border-radius:14px;position:relative;overflow:hidden;height:300px;margin-bottom:12px;display:flex;align-items:center;justify-content:center">
+            <video id="enVideo" autoplay playsinline muted style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);display:none;z-index:1;clip-path:ellipse(80px 102px at 50% 50%)"></video>
+            <canvas id="enCanvas" style="position:absolute;inset:0;width:100%;height:100%;transform:scaleX(-1);z-index:4;pointer-events:none"></canvas>
+            <svg id="enMask" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none" style="position:absolute;inset:0;z-index:3;pointer-events:none">
+              <defs><mask id="enVignetteMask"><rect width="100" height="100" fill="white"/><ellipse cx="50" cy="50" rx="22.5" ry="34.5" fill="black"/></mask></defs>
+              <rect width="100" height="100" fill="rgba(0,0,0,.72)" mask="url(#enVignetteMask)"/>
+            </svg>
+            <div id="enOval" style="position:absolute;z-index:5;width:160px;height:205px;border-radius:50%;border:2.5px solid rgba(255,255,255,.3);transition:border-color .5s,box-shadow .5s;pointer-events:none"></div>
+            <div id="enBeam" style="position:absolute;z-index:6;width:140px;height:2px;background:linear-gradient(90deg,transparent,rgba(0,180,255,0),rgba(0,180,255,.9),rgba(0,180,255,.9),rgba(0,180,255,0),transparent);border-radius:2px;display:none;animation:bioScanDown 1.4s ease-in-out infinite;pointer-events:none"></div>
+            <div id="enProgress" style="position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:8;display:none">
+              <svg width="48" height="48" viewBox="0 0 48 48" style="transform:rotate(-90deg)">
+                <circle cx="24" cy="24" r="20" fill="none" stroke="rgba(255,255,255,.1)" stroke-width="3"/>
+                <circle id="enRing" cx="24" cy="24" r="20" fill="none" stroke="rgba(0,190,255,.85)" stroke-width="3" stroke-linecap="round" stroke-dasharray="125.6" stroke-dashoffset="125.6" style="transition:stroke-dashoffset .12s linear"/>
+              </svg>
+              <div id="enPct" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:11px;font-weight:700;color:rgba(0,200,255,.95)">0%</div>
+            </div>
+            <div id="enRec" style="position:absolute;top:14px;right:38px;display:flex;align-items:center;gap:4px;z-index:8;opacity:0;transition:opacity .4s"><div style="width:6px;height:6px;border-radius:50%;background:#e33;animation:livePulse 1s infinite"></div><span style="font-size:9px;font-weight:700;color:rgba(255,255,255,.82);letter-spacing:.09em">SCAN</span></div>
+            <div id="enLabel" style="position:absolute;bottom:12px;left:50%;transform:translateX(-50%);z-index:8;background:rgba(0,0,0,.58);padding:4px 16px;border-radius:20px;white-space:nowrap;backdrop-filter:blur(4px)"><span id="enLabelTxt" style="font-size:10px;font-weight:600;color:rgba(255,255,255,.82);letter-spacing:.04em">Tap Start to begin</span></div>
+            <div id="enIdle" style="position:absolute;z-index:2;display:flex;flex-direction:column;align-items:center;gap:8px"><div style="font-size:64px;opacity:.2"><svg class="i"><use href="#ic-user"/></svg></div><div style="font-size:11px;color:rgba(255,255,255,.28);letter-spacing:.05em">CAMERA READY</div></div>
+          </div>
+          <div id="enPhases" style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-bottom:8px;min-height:28px">
+            <div class="bphase" id="eph0"><span class="tick"><svg class="i"><use href="#ic-check"/></svg> </span>Camera Ready</div>
+            <div class="bphase" id="eph1"><span class="tick"><svg class="i"><use href="#ic-check"/></svg> </span>Centre</div>
+            <div class="bphase" id="eph2"><span class="tick"><svg class="i"><use href="#ic-check"/></svg> </span>Turn 1</div>
+            <div class="bphase" id="eph3"><span class="tick"><svg class="i"><use href="#ic-check"/></svg> </span>Turn 2</div>
+          </div>
+          <div class="face-val" id="enVal" style="margin-bottom:6px">Ready to scan</div>
+          <div class="prog-wrap" style="width:150px;margin:0 auto 4px"><div class="prog-bar green" id="enBar"></div></div>
+        </div>
+      </div>
+      <button class="btn-primary" id="enBtn" onclick="runEnrollFace()"><span class="btn-ico"><svg class="i"><use href="#ic-camera"/></svg></span>Start Face Capture</button>
+      <button class="btn-outline" id="enSubmitBtn" style="display:none" onclick="submitSignup()"><span class="btn-ico"><svg class="i"><use href="#ic-check"/></svg></span>Submit for Approval</button>
+      <div id="enSubmitErr" style="display:none;margin-top:10px;padding:10px 12px;border-radius:10px;background:rgba(227,51,51,.1);border:1px solid rgba(227,51,51,.35);color:#e33;font-size:12px;line-height:1.5"></div>
+    </div>
+  </div>
+
+  <!-- ══════════════ PENDING APPROVAL ══════════════ -->
+  <div class="screen" id="scr-pending">
+    <div class="splash-bg">
+      <div class="pending-hero"><svg class="i"><use href="#ic-loader"/></svg></div>
+      <div class="app-title" style="font-size:22px">Pending Approval</div>
+      <div class="app-sub" style="margin-bottom:20px">Your registration has been submitted</div>
+      <div class="login-card" style="text-align:center">
+        <div style="font-size:12px;color:rgba(255,255,255,.6);line-height:1.7;margin-bottom:16px">
+          An administrator needs to review and approve your account before you can log in. This usually takes 1&ndash;2 working days.
+        </div>
+        <div style="background:rgba(255,255,255,.06);border-radius:12px;padding:12px;margin-bottom:16px;text-align:left">
+          <div style="font-size:10px;color:var(--gold2);letter-spacing:.05em;margin-bottom:4px">SUBMITTED AS</div>
+          <div style="font-size:13px;color:#fff;font-weight:600" id="pendName">&mdash;</div>
+          <div style="font-size:11px;color:rgba(255,255,255,.45);margin-top:2px" id="pendMeta">&mdash;</div>
+        </div>
+        <div id="pendNoteBox" style="display:none;background:rgba(227,51,51,.1);border:1px solid rgba(227,51,51,.35);border-radius:12px;padding:12px;margin-bottom:16px;text-align:left">
+          <div style="font-size:10px;color:#f87171;letter-spacing:.05em;margin-bottom:4px">NOTE FROM ADMIN</div>
+          <div style="font-size:12px;color:#fff;line-height:1.5" id="pendNoteText">&mdash;</div>
+        </div>
+        <button class="btn-outline" style="color:#fff;border-color:rgba(255,255,255,.25)" onclick="checkApprovalStatus()"><span class="btn-ico"><svg class="i"><use href="#ic-refresh"/></svg></span>Check Status</button>
+        <button class="link-btn" style="margin-top:6px" onclick="clearSignupAndRestart()">Start over with different details</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+var API_BASE_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  ? 'http://localhost:8000'
+  : 'https://lgu-smartattendance-production.up.railway.app';
+
+var LS_FACULTY = 'sa_faculty';
+var LS_STATUS  = 'sa_status';
+var LS_SESSION = 'sa_session';
+
+function getFaculty(){
+  try{return JSON.parse(localStorage.getItem(LS_FACULTY)||'null');}catch(e){return null;}
+}
+function setFaculty(obj){localStorage.setItem(LS_FACULTY, JSON.stringify(obj));}
+function getStatus(){return localStorage.getItem(LS_STATUS)||'';}
+function setStatus(s){localStorage.setItem(LS_STATUS, s);}
+
+function goScreen(id){
+  document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('active');});
+  document.getElementById(id).classList.add('active');
+}
+
+function apiRequest(path, method, body){
+  return fetch(API_BASE_URL + path, {
+    method: method || 'GET',
+    headers: {'Content-Type':'application/json'},
+    body: body ? JSON.stringify(body) : undefined
+  }).then(function(res){
+    return res.json().catch(function(){return {};}).then(function(data){
+      if(!res.ok){ var err=new Error(data.detail||'Request failed'); err.data=data; err.status=res.status; throw err; }
+      return data;
+    });
+  });
+}
+
+function showToast(msg){
+  var t=document.getElementById('toast');
+  if(!t)return;
+  t.textContent=msg;
+  t.style.opacity='1';t.style.transform='translateX(-50%) translateY(0)';
+  clearTimeout(showToast._tid);
+  showToast._tid=setTimeout(function(){
+    t.style.opacity='0';t.style.transform='translateX(-50%) translateY(16px)';
+  },2400);
+}
+
+function assertFaceImagesNonEmpty(images, context){
+  console.log('[face_images] '+context+': '+((images && images.length) || 0)+' image(s)');
+  if(!images || !images.length){
+    var msg='No usable face images to submit for '+context+' — please try again.';
+    showToast(msg);
+    throw new Error(msg);
+  }
+}
+
+function faceAlertHTML(type,msg){
+  var icon=type==='error'?'ic-alert':'ic-alert';
+  return '<span class="face-alert '+type+'"><svg class="i"><use href="#'+icon+'"/></svg>'+msg+'</span>';
+}
+
+// ---- Camera ----
+var bioStream=null;
+var bioAnimId=null;
+var faceInt=null;
+
+function stopBioCamera(){
+  if(bioStream){bioStream.getTracks().forEach(function(t){t.stop();});bioStream=null;}
+  if(bioAnimId){cancelAnimationFrame(bioAnimId);bioAnimId=null;}
+  if(faceInt){clearInterval(faceInt);faceInt=null;}
+  var v=document.getElementById('enVideo');
+  if(v){v.srcObject=null;v.style.display='none';}
+}
+
+// ---- Sharpness / Frame grab ----
+function frameSharpness(video){
+  var w=48,h=36;
+  var tmp=document.createElement('canvas');
+  tmp.width=w;tmp.height=h;
+  var ctx=tmp.getContext('2d');
+  try{ctx.drawImage(video,0,0,w,h);}catch(e){return 0;}
+  var data;
+  try{data=ctx.getImageData(0,0,w,h).data;}catch(e){return 0;}
+  var gray=new Float32Array(w*h);
+  for(var i=0,p=0;i<gray.length;i++,p+=4){
+    gray[i]=0.299*data[p]+0.587*data[p+1]+0.114*data[p+2];
+  }
+  var sum=0,count=0;
+  for(var y=0;y<h-1;y++){
+    for(var x=0;x<w-1;x++){
+      var idx=y*w+x;
+      var dx=gray[idx]-gray[idx+1];
+      var dy=gray[idx]-gray[idx+w];
+      sum+=dx*dx+dy*dy;
+      count++;
+    }
+  }
+  return count?sum/count:0;
+}
+
+function grabFrame(video,maxW){
+  maxW=maxW||480;
+  var vw=video.videoWidth||640,vh=video.videoHeight||480;
+  var scale=Math.min(1,maxW/vw);
+  var w=Math.round(vw*scale),h=Math.round(vh*scale);
+  var canvas=document.createElement('canvas');
+  canvas.width=w;canvas.height=h;
+  var ctx=canvas.getContext('2d');
+  ctx.drawImage(video,0,0,w,h);
+  return canvas.toDataURL('image/jpeg',0.85);
+}
+
+// ---- FaceMesh ----
+var faceMeshInstance=null;
+var currentYaw=null;
+var currentRoll=0;
+var currentPitchRatio=0.45;
+var currentFaceSpan=0;
+var currentFaceCX=0.5;
+var currentFaceCY=0.5;
+var faceMeshDetected=false;
+var faceMeshLastSeen=0;
+var faceMeshEverRan=false;
+
+function onFaceMeshResults(results){
+  faceMeshEverRan=true;
+  var lm = (results.multiFaceLandmarks && results.multiFaceLandmarks.length>0) ? results.multiFaceLandmarks[0] : null;
+  if(!lm){ faceMeshDetected=false; return; }
+  var nose=lm[1], lEye=lm[33], rEye=lm[263], lSide=lm[234], rSide=lm[454], chin=lm[152], brow=lm[10];
+  if(!nose||!lEye||!rEye||!lSide||!rSide){ faceMeshDetected=false; return; }
+  var dL=Math.hypot(nose.x-lSide.x, nose.y-lSide.y);
+  var dR=Math.hypot(nose.x-rSide.x, nose.y-rSide.y);
+  var raw=(dL+dR)>0.0001 ? (dR-dL)/(dR+dL) : 0;
+  currentYaw = (currentYaw===null) ? raw : (currentYaw*0.6 + raw*0.4);
+  currentRoll = Math.atan2(rEye.y-lEye.y, rEye.x-lEye.x);
+  currentFaceSpan = Math.hypot(rSide.x-lSide.x, rSide.y-lSide.y);
+  currentFaceCX = nose.x;
+  currentFaceCY = nose.y;
+  if(chin&&brow){
+    var eyeMidY=(lEye.y+rEye.y)/2, vSpan=chin.y-eyeMidY;
+    if(Math.abs(vSpan)>0.0001) currentPitchRatio=(nose.y-eyeMidY)/vSpan;
+  }
+  faceMeshDetected=true;
+  faceMeshLastSeen=Date.now();
+}
+
+function setOvalState(oval,state){
+  if(!oval)return;
+  var mask='0 0 0 2000px rgba(0,0,0,.72)';
+  if(state==='locked'){
+    oval.style.borderColor='rgba(13,210,120,.98)';
+    oval.style.boxShadow=mask+', 0 0 0 4px rgba(13,210,120,.30), 0 0 26px rgba(13,210,120,.45)';
+  } else if(state==='near'){
+    oval.style.borderColor='rgba(245,158,11,.95)';
+    oval.style.boxShadow=mask+', 0 0 0 3px rgba(245,158,11,.22)';
+  } else if(state==='bad'){
+    oval.style.borderColor='rgba(239,68,68,.9)';
+    oval.style.boxShadow=mask+', 0 0 0 3px rgba(239,68,68,.20)';
+  } else {
+    oval.style.borderColor='rgba(255,255,255,.55)';
+    oval.style.boxShadow=mask;
+  }
+}
+
+function getFaceMesh(){
+  if(!faceMeshInstance && typeof FaceMesh !== 'undefined'){
+    faceMeshInstance = new FaceMesh({
+      locateFile: function(file){
+        return "https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/"+file;
+      }
+    });
+    faceMeshInstance.setOptions({
+      maxNumFaces: 1,
+      refineLandmarks: false,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5
+    });
+    faceMeshInstance.onResults(onFaceMeshResults);
+  }
+  return faceMeshInstance;
+}
+
+// ---- pickEnrollFrames (timed fallback) ----
+function pickEnrollFrames(frames,totalMs){
+  if(!frames.length)return[];
+  var third=totalMs/3;
+  var buckets=[[],[],[]];
+  frames.forEach(function(f){
+    var idx=Math.min(2,Math.floor(f.t/third));
+    buckets[idx].push(f);
+  });
+  var out=[];
+  var missingBuckets=0;
+  buckets.forEach(function(bucket){
+    if(!bucket.length){missingBuckets++;return;}
+    var best=bucket.reduce(function(a,b){return b.sharp>a.sharp?b:a;});
+    out.push(best.dataUrl);
+  });
+  if(!out.length&&frames.length)out=frames.map(function(f){return f.dataUrl;});
+  out.missingBuckets=missingBuckets;
+  return out;
+}
+
+function pickCandidateFrames(frames){
+  if(!frames.length)return[];
+  var sorted=frames.slice().sort(function(a,b){return b.sharp-a.sharp;});
+  var best=sorted.slice(0,5);
+  return best.map(function(f){return f.dataUrl;});
+}
+
+// ============================================================
+// startFaceCapture — unified capture loop
+// ============================================================
+function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,ring,pct,mode){
+  var CIRC=125.6;
+  var isEnroll=(mode==='enroll'||mode==='reenroll');
+  var totalMs=5000;
+  var sampleMs=isEnroll?220:200;
+  var phasePrefix=mode==='exit'?'x':(mode==='enroll'?'e':(mode==='reenroll'?'re':''));
+  var elapsed=0;
+  var scanDone=false;
+  var frames=[];
+
+  var attFaceMs=0;
+  var attNoFaceMs=0;
+  var attLostFace=false;
+  var ATT_NOFACE_TIMEOUT_MS=12000;
+
+  currentYaw = null;
+  currentRoll = 0;
+  currentPitchRatio = 0.45;
+  currentFaceSpan = 0;
+  faceMeshDetected = false;
+  faceMeshEverRan = false;
+  faceMeshLastSeen = 0;
+
+  var YAW_NEAR   = 0.055;
+  var YAW_FULL   = 0.10;
+  var YAW_CENTER = 0.05;
+
+  var ENROLL_STEPS=[
+    {key:'center', label:'Look straight at the camera', pill:'Centre'},
+    {key:'turnA',  label:'Slowly turn your head to one side', pill:'Turn 1'},
+    {key:'turnB',  label:'Now slowly turn the other way', pill:'Turn 2'}
+  ];
+
+  var STEP_TIMEOUT_MS=30000;
+  var HOLD_SAMPLES=2;
+  var LOST_FACE_MS=1200;
+  var FALLBACK_AFTER_MS=6000;
+  var SETTLE_MS=4000;
+
+  var stepIndex=0;
+  var stepElapsed=0;
+  var holdCount=0;
+  var holdFrames=[];
+  var capturedAngles={};
+  var capturedOrder=[];
+  var turnSign=0;
+  var stepMilestones={};
+  var coachText='';
+  var coachState='idle';
+  var meshFallback=false;
+  var meshBusy=false;
+
+  var lastLivenessPixels=null;
+  var livenessCanvas=null;
+  var totalLivenessDiff=0;
+  var livenessDiffCount=0;
+
+  if(canvas){var c=canvas.getContext('2d');c.clearRect(0,0,canvas.width,canvas.height);}
+
+  oval.className='detecting';
+  rec.style.display='flex';rec.style.opacity='1';
+  if(progress&&progress.style)progress.style.display='block';
+
+  var PILL_COUNT=4;
+
+  function setPills(n){
+    for(var i=0;i<PILL_COUNT;i++){
+      var p=document.getElementById(phasePrefix+'ph'+i);
+      if(!p)continue;
+      if(i<n){p.classList.remove('active');p.classList.add('done');}
+      else if(i===n){p.classList.remove('done');p.classList.add('active');}
+      else{p.classList.remove('active','done');}
+    }
+  }
+
+  function setPhase(n){
+    var msgs;
+    if(isEnroll){
+      msgs=[
+        ['Get ready — hold your device steady','Starting capture…'],
+        ['Look straight at the camera','Align your face in the oval'],
+        ['Slowly turn your head to one side','Keep turning'],
+        ['Now slowly turn the other way','Keep turning']
+      ];
+    } else {
+      msgs=[
+        ['Align your face in the oval','Starting capture…'],
+        ['Turn your head slightly or blink','Checking liveness…'],
+        ['Hold still — capturing frames','Recording…'],
+        ['Almost done…','Finalising']
+      ];
+    }
+    if(msgs[n]){
+      label.textContent=msgs[n][0];
+      val.textContent=msgs[n][1];
+    }
+    setPills(n);
+  }
+
+  function bankHoldFrame(){
+    holdFrames.push({dataUrl:grabFrame(video),sharp:frameSharpness(video)});
+    if(holdFrames.length>HOLD_SAMPLES+1)holdFrames.shift();
+    holdCount++;
+  }
+
+  function commitMilestone(key){
+    var best=null;
+    for(var i=0;i<holdFrames.length;i++){
+      if(!best||holdFrames[i].sharp>best.sharp)best=holdFrames[i];
+    }
+    if(!best)return false;
+    capturedAngles[key]=best.dataUrl;
+    capturedOrder.push(key);
+    return true;
+  }
+
+  function commitStep(singleKey){
+    if(singleKey) commitMilestone(singleKey);
+    if(typeof showToast==='function')showToast(ENROLL_STEPS[stepIndex].pill+' captured');
+    stepIndex++;
+    stepElapsed=0;
+    holdCount=0;
+    holdFrames=[];
+    stepMilestones={};
+    coachState='idle';
+  }
+
+  function updateEnrollPhase(){
+    if(stepIndex>=ENROLL_STEPS.length){
+      setPills(PILL_COUNT);
+      setOvalState(oval,'locked');
+      label.textContent='All angles captured';
+      val.textContent='Finalising…';
+      return;
+    }
+    setPills(stepIndex+1);
+    setOvalState(oval,coachState);
+    label.textContent=ENROLL_STEPS[stepIndex].label;
+    val.textContent=coachText||'Getting ready…';
+  }
+
+  function failStep(reason){
+    scanDone=true;
+    if(faceInt){clearInterval(faceInt);faceInt=null;}
+    oval.className='error';
+    label.innerHTML='<svg class="i"><use href="#ic-alert"/></svg> Scan Incomplete';
+    val.textContent=reason;
+    if(progress&&progress.style)progress.style.display='none';
+    if(btn){btn.disabled=false;btn.innerHTML='<svg class="i"><use href="#ic-camera"/></svg> Retry';btn.style.display='flex';}
+    if(mode==='enroll'){if(typeof stopBioCamera==='function')stopBioCamera();}
+  }
+
+  setPhase(0);
+
+  function finish(){
+    scanDone=true;
+    clearInterval(faceInt);faceInt=null;
+    var livenessScore = livenessDiffCount > 0 ? (totalLivenessDiff / livenessDiffCount) : 0;
+    oval.className='verified';setOvalState(oval,'locked');
+    beam.style.display='none';
+    rec.style.opacity='0';
+    if(progress&&progress.style)progress.style.display='none';
+    [0,1,2,3].forEach(function(i){
+      var p=document.getElementById(phasePrefix+'ph'+i);
+      if(p){p.classList.remove('active');p.classList.add('done');}
+    });
+
+    var images;
+    if(isEnroll){
+      images=capturedOrder.map(function(k){return capturedAngles[k];}).filter(Boolean);
+      if(images.length<3){
+        oval.className='error';setOvalState(oval,'bad');
+        label.innerHTML='<svg class="i"><use href="#ic-alert"/></svg> Scan Incomplete';
+        val.textContent='Only '+images.length+' angle(s) captured. Please retry in good light and follow each prompt.';
+        if(progress&&progress.style)progress.style.display='none';
+        if(btn){btn.disabled=false;btn.innerHTML='<svg class="i"><use href="#ic-camera"/></svg> Retry';btn.style.display='flex';}
+        if(mode==='enroll'){if(typeof stopBioCamera==='function')stopBioCamera();}
+        return;
+      }
+      images.missingBuckets=0;
+    } else {
+      images=pickCandidateFrames(frames);
+    }
+
+    if(!images.length){
+      oval.className='error';setOvalState(oval,'bad');
+      label.innerHTML='<svg class="i"><use href="#ic-alert"/></svg> Face Capture Failed';
+      val.textContent='No frames were captured — check camera permissions and try again.';
+      if(progress&&progress.style)progress.style.display='none';
+      if(btn){btn.disabled=false;btn.innerHTML='<svg class="i"><use href="#ic-camera"/></svg> Retry';btn.style.display='flex';}
+      if(mode==='enroll'){if(typeof stopBioCamera==='function')stopBioCamera();}
+      return;
+    }
+
+    if(isEnroll) {
+      label.innerHTML='<svg class="i"><use href="#ic-check"/></svg> Face Captured';
+      val.textContent='All '+images.length+' angles captured successfully.';
+    } else {
+      label.innerHTML='<svg class="i"><use href="#ic-check"/></svg> Frames Captured';
+      val.textContent=images.length+' frame'+(images.length===1?'':'s')+' ready to submit';
+    }
+
+    if(mode==='enroll'){
+      stopBioCamera();
+      if(typeof onEnrollScanComplete==='function')onEnrollScanComplete(images);
+    }
+  }
+
+  faceInt=setInterval(function(){
+    if(scanDone)return;
+    if(!video||video.readyState<2)return;
+
+    if (!isEnroll) {
+      var fmAtt=getFaceMesh();
+      if(fmAtt && !meshBusy){
+        meshBusy=true;
+        try{
+          var sr=fmAtt.send({image:video});
+          if(sr && typeof sr.then==='function'){
+            sr.then(function(){meshBusy=false;},function(){meshBusy=false;});
+          } else { meshBusy=false; }
+        }catch(e){ meshBusy=false; }
+      }
+
+      var MESH_GRACE_MS=2000;
+      if(!meshFallback && attNoFaceMs>=MESH_GRACE_MS){
+        meshFallback=true;
+      }
+
+      var faceOk = meshFallback || faceMeshDetected;
+
+      if(faceOk){
+        attFaceMs+=sampleMs;
+        elapsed+=sampleMs;
+        if(meshFallback && !faceMeshDetected){
+          var cLeft=Math.max(0,Math.ceil((totalMs-elapsed)/1000));
+          oval.className='near';
+          label.textContent='Hold still';
+          val.textContent='Capturing in '+cLeft+'s — keep your face in the oval';
+        } else {
+          oval.className='locked';
+          label.textContent='Face detected';
+          val.textContent='Hold still — scanning';
+        }
+        if(attLostFace){ attLostFace=false; attNoFaceMs=0; }
+      } else {
+        oval.className='near';
+        attLostFace=true;
+        label.textContent='Detecting face…';
+        val.textContent='Center your face in the oval';
+        attNoFaceMs+=sampleMs;
+        return;
+      }
+
+      var p=Math.min(elapsed/totalMs,1);
+      var p100=Math.round(p*100);
+      bar.style.width=p100+'%';
+      ring.style.strokeDashoffset=(CIRC*(1-p)).toFixed(2);
+      pct.textContent=p100+'%';
+
+      if(p100>=3&&p100<36)setPhase(1);
+      else if(p100>=36&&p100<69)setPhase(2);
+      else if(p100>=69&&p100<100)setPhase(3);
+    } else {
+      elapsed+=sampleMs;
+      stepElapsed+=sampleMs;
+
+      var ep=Math.min(stepIndex/ENROLL_STEPS.length,1);
+      var ep100=Math.round(ep*100);
+      bar.style.width=ep100+'%';
+      ring.style.strokeDashoffset=(CIRC*(1-ep)).toFixed(2);
+      pct.textContent=ep100+'%';
+
+      var fm=getFaceMesh();
+      if(fm && !meshBusy){
+        meshBusy=true;
+        try{
+          var sendResult=fm.send({image:video});
+          if(sendResult && typeof sendResult.then==='function'){
+            sendResult.then(function(){meshBusy=false;},function(e){meshBusy=false;});
+          } else {
+            meshBusy=false;
+          }
+        }catch(e){
+          meshBusy=false;
+        }
+      }
+
+      if(!meshFallback && !faceMeshEverRan && elapsed>=FALLBACK_AFTER_MS){
+        meshFallback=true;
+        label.textContent='Turn your head slowly';
+        val.textContent='Center, then left, then right';
+      }
+
+      if(meshFallback){
+        if(elapsed>=FALLBACK_AFTER_MS+9000){
+          var picked=pickEnrollFrames(frames.filter(function(f){return f.t>=FALLBACK_AFTER_MS;}),9000);
+          if(picked.length){
+            capturedOrder=[];
+            capturedAngles={};
+            picked.forEach(function(d,i){
+              var k=['center','turnA_full','turnB_full'][i]||('frame'+i);
+              capturedAngles[k]=d;capturedOrder.push(k);
+            });
+            stepIndex=ENROLL_STEPS.length;
+            finish();
+            return;
+          }
+          failStep('Could not capture usable frames — check lighting and camera permissions, then retry.');
+          return;
+        }
+      } else if(stepIndex<ENROLL_STEPS.length){
+        var step=ENROLL_STEPS[stepIndex];
+        var tracking=faceMeshDetected && (Date.now()-faceMeshLastSeen)<=LOST_FACE_MS && currentYaw!==null;
+        var yaw=currentYaw||0;
+        var mag=Math.abs(yaw);
+
+        var framing=null;
+        if(!tracking){
+          framing='Center your face in the oval';
+        } else if(currentFaceSpan<0.09){
+          framing='Move a little closer';
+        } else if(currentFaceSpan>0.55){
+          framing='Move back slightly';
+        } else if(Math.abs(currentRoll)>0.65){
+          framing='Straighten your head';
+        }
+
+        if(framing){
+          holdCount=0; holdFrames=[];
+          coachText=framing;
+          coachState='bad';
+        } else if(step.key==='center'){
+          if(mag<=YAW_CENTER){
+            coachText='Hold still…'; coachState='locked';
+            bankHoldFrame();
+            if(holdCount>=HOLD_SAMPLES) commitStep('center');
+          } else {
+            holdCount=0; holdFrames=[];
+            coachText = mag>0.20 ? 'Face the camera directly' : 'Almost — square up to the camera';
+            coachState='near';
+          }
+        } else {
+          var wrongWay = (turnSign!==0 && step.key==='turnB' && Math.sign(yaw)===turnSign);
+          if(wrongWay && mag>YAW_NEAR){
+            holdCount=0; holdFrames=[];
+            coachText='Other way — turn back through centre';
+            coachState='near';
+          } else if(mag>=YAW_FULL){
+            coachText='Hold it…'; coachState='locked';
+            bankHoldFrame();
+            if(holdCount>=HOLD_SAMPLES){
+              if(!stepMilestones.near) commitMilestone(step.key+'_near');
+              commitMilestone(step.key+'_full');
+              if(turnSign===0) turnSign=Math.sign(yaw);
+              commitStep(null);
+            }
+          } else if(mag>=YAW_NEAR){
+            coachState='locked';
+            if(!stepMilestones.near){
+              coachText='Good — keep turning';
+              bankHoldFrame();
+              if(holdCount>=HOLD_SAMPLES){
+                commitMilestone(step.key+'_near');
+                stepMilestones.near=true;
+                holdCount=0; holdFrames=[];
+              }
+            } else if(stepElapsed>=SETTLE_MS){
+              coachText='Hold it…';
+              bankHoldFrame();
+              if(holdCount>=HOLD_SAMPLES){
+                if(turnSign===0) turnSign=Math.sign(yaw);
+                commitStep(null);
+              }
+            } else {
+              coachText='A little further…';
+            }
+          } else {
+            holdCount=0; holdFrames=[];
+            coachText = stepMilestones.near ? 'Keep turning that way' : 'Turn your head slowly to one side';
+            coachState='near';
+          }
+        }
+
+        if(stepIndex<ENROLL_STEPS.length && stepElapsed>=STEP_TIMEOUT_MS){
+          if(capturedOrder.length>=2){
+            stepIndex=ENROLL_STEPS.length;
+            updateEnrollPhase();
+            finish();
+            return;
+          }
+          failStep('Couldn\'t capture that angle. Move into brighter light, keep your whole face in the oval, and retry.');
+          return;
+        }
+      }
+
+      updateEnrollPhase();
+
+      if(stepIndex>=ENROLL_STEPS.length && !scanDone){
+        finish();
+        return;
+      }
+    }
+
+    try {
+      if(!livenessCanvas){
+        livenessCanvas = document.createElement('canvas');
+        livenessCanvas.width = 32;
+        livenessCanvas.height = 32;
+      }
+      var lCanvas = livenessCanvas;
+      var lCtx = lCanvas.getContext('2d');
+      lCtx.drawImage(video, 0, 0, 32, 32);
+      var imgData = lCtx.getImageData(0, 0, 32, 32).data;
+      if (lastLivenessPixels) {
+        var diff = 0;
+        for (var i = 0; i < imgData.length; i += 4) {
+          diff += Math.abs(imgData[i] - lastLivenessPixels[i]) +
+                  Math.abs(imgData[i+1] - lastLivenessPixels[i+1]) +
+                  Math.abs(imgData[i+2] - lastLivenessPixels[i+2]);
+        }
+        var avgDiff = diff / (32 * 32 * 3);
+        totalLivenessDiff += avgDiff;
+        livenessDiffCount++;
+      }
+      lastLivenessPixels = imgData;
+    } catch(e) {}
+
+    if(!isEnroll || meshFallback){
+      frames.push({dataUrl:grabFrame(video),t:elapsed,sharp:frameSharpness(video)});
+      if(frames.length>120)frames.shift();
+    }
+
+    if(!isEnroll && elapsed>=totalMs && !scanDone){
+      finish();
+    }
+  },sampleMs);
+}
+
+// ============================================================
+// SIGNUP FLOW
+// ============================================================
+var signupDraft = null;
+var enrollFaceImages = null;
+
+function signupGoFace(){
+  var name=document.getElementById('suName').value.trim();
+  var teacherId=document.getElementById('suTeacherId').value.trim();
+  var email=document.getElementById('suEmail').value.trim();
+  var dept=document.getElementById('suDept').value;
+  var pin=document.getElementById('suPin').value.trim();
+  var err=document.getElementById('suErr');
+
+  if(!name||!teacherId||!email||!dept||!pin){
+    err.textContent='Please fill in every field.';err.style.display='block';return;
+  }
+  if(!/^\d{4}$/.test(pin)){
+    err.textContent='PIN must be exactly 4 digits.';err.style.display='block';return;
+  }
+  if(!/^\S+@\S+\.\S+$/.test(email)){
+    err.textContent='Please enter a valid email address.';err.style.display='block';return;
+  }
+  err.style.display='none';
+  signupDraft={name:name,teacherId:teacherId,email:email,department:dept,pin:pin};
+  goScreen('scr-enroll');
+}
+
+function runEnrollFace(){
+  var btn=document.getElementById('enBtn');
+  btn.disabled=true;btn.innerHTML='<span class="btn-ico"><svg class="i"><use href="#ic-loader"/></svg></span>Starting camera&hellip;';
+  var errBox=document.getElementById('enSubmitErr');
+  if(errBox)errBox.style.display='none';
+  var val=document.getElementById('enVal'),bar=document.getElementById('enBar');
+  var bioIdle=document.getElementById('enIdle'),bioVideo=document.getElementById('enVideo');
+  var bioCanvas=document.getElementById('enCanvas'),bioOval=document.getElementById('enOval');
+  var bioBeam=document.getElementById('enBeam'),bioRec=document.getElementById('enRec');
+  var bioLabel=document.getElementById('enLabel'),bioRing=document.getElementById('enRing');
+  var bioPct=document.getElementById('enPct');
+  [0,1,2,3].forEach(function(i){var p=document.getElementById('eph'+i);if(p){p.classList.remove('active','done');}});
+
+  navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:640},height:{ideal:480}},audio:false}).then(function(stream){
+    bioStream=stream;
+    bioIdle.style.display='none';
+    bioVideo.style.display='block';
+    bioVideo.srcObject=stream;
+    bioVideo.play();
+    bioOval.style.display='block';
+    bioBeam.style.display='block';
+    bioRec.style.display='flex';
+    val.textContent='Get ready — hold your device steady';
+    btn.style.display='none';
+    document.getElementById('eph0').classList.add('active');
+
+    setTimeout(function(){
+      startFaceCapture(bioVideo,bioCanvas,bioOval,bioBeam,bioRec,bioLabel,val,bar,btn,
+        bioRing.parentElement,bioRing,bioPct,'enroll');
+    },500);
+
+  }).catch(function(){
+    val.innerHTML=faceAlertHTML('error','Camera access denied — enable it in device settings');
+    btn.disabled=false;btn.innerHTML='<svg class="i"><use href="#ic-camera"/></svg> Retry';btn.style.display='flex';
+  });
+}
+
+function onEnrollScanComplete(faceImages){
+  enrollFaceImages=(faceImages && faceImages.length) ? faceImages : null;
+  if(!enrollFaceImages){
+    showToast('Could not capture a clear face scan — please try again.');
+    return;
+  }
+  document.getElementById('enSubmitBtn').style.display='flex';
+  showToast('Face captured — review and submit.');
+}
+
+function submitSignup(){
+  if(!signupDraft){showToast('Please fill the signup form first.');goScreen('scr-signup');return;}
+  try{
+    assertFaceImagesNonEmpty(enrollFaceImages,'enroll');
+  }catch(e){return;}
+
+  var btn=document.getElementById('enSubmitBtn');
+  btn.disabled=true;btn.innerHTML='<span class="btn-ico"><svg class="i"><use href="#ic-loader"/></svg></span>Submitting&hellip;';
+  var errBox=document.getElementById('enSubmitErr');
+  if(errBox)errBox.style.display='none';
+
+  var payload={
+    name:signupDraft.name,
+    email:signupDraft.email,
+    department:signupDraft.department,
+    teacher_id:signupDraft.teacherId,
+    face_images: enrollFaceImages,
+    pin: signupDraft.pin
+  };
+
+  apiRequest('/api/faculty/enroll','POST',payload).then(function(resp){
+    finishSignup(resp && (resp.id || resp.faculty_id));
+  }).catch(function(e){
+    showToast((e && e.message) || 'Enrollment failed — could not reach the server.');
+    var errBox=document.getElementById('enSubmitErr');
+    if(errBox){
+      errBox.textContent=(e && e.message) || 'Enrollment failed — could not reach the server. Please try again.';
+      errBox.style.display='block';
+    }
+    btn.disabled=false;btn.innerHTML='<span class="btn-ico"><svg class="i"><use href="#ic-check"/></svg></span>Submit for Approval';
+  });
+}
+
+function finishSignup(facultyId){
+  var fac={
+    name:signupDraft.name,
+    email:signupDraft.email,
+    department:signupDraft.department,
+    teacherId:signupDraft.teacherId,
+    facultyId:facultyId||null
+  };
+  setFaculty(fac);
+  setStatus('pending');
+  stopBioCamera();
+  document.getElementById('pendName').textContent=fac.name;
+  document.getElementById('pendMeta').textContent=fac.teacherId+' · '+fac.department;
+  renderPendNote(null,false);
+  goScreen('scr-pending');
+}
+
+function renderPendNote(note, isRejected){
+  var box=document.getElementById('pendNoteBox');
+  var txt=document.getElementById('pendNoteText');
+  if(!box||!txt)return;
+  if(note && note.trim()){
+    txt.textContent=note;
+    box.style.display='block';
+  } else {
+    box.style.display='none';
+  }
+}
+
+function checkApprovalStatus(){
+  var fac=getFaculty();
+  if(!fac||!fac.teacherId){showToast('No account found on this device.');return;}
+  var pin=window.prompt('Enter your PIN to check your approval status:');
+  if(!pin)return;
+
+  showToast('Checking with admin dashboard…');
+  apiRequest('/api/auth/login','POST',{teacher_id:fac.teacherId,pin:pin}).then(function(resp){
+    var status=resp&&resp.status;
+    var note=resp&&resp.faculty&&resp.faculty.review_note;
+    if(status==='approved'){
+      setStatus('approved');
+      showToast("You're approved! Redirecting to login…");
+      setTimeout(function(){window.location.href='index.html';},900);
+    } else if(status==='pending'){
+      fac.reviewNote=note||null;
+      setFaculty(fac);
+      renderPendNote(note,false);
+      showToast('Still pending admin approval.');
+    } else if(status==='rejected'){
+      setStatus('rejected');
+      fac.reviewNote=note||null;
+      setFaculty(fac);
+      renderPendNote(note,true);
+      showToast(note ? 'Your enrollment was rejected — see the note below.' : 'Your enrollment request was rejected by the admin.');
+    } else if(status==='deactivated'){
+      showToast('This account has been deactivated by the admin.');
+    } else {
+      showToast('Incorrect PIN — please try again.');
+    }
+  }).catch(function(e){
+    showToast((e&&e.message)||'Could not reach the server.');
+  });
+}
+
+function clearSignupAndRestart(){
+  localStorage.removeItem(LS_FACULTY);
+  localStorage.removeItem(LS_STATUS);
+  localStorage.removeItem(LS_SESSION);
+  document.getElementById('suName').value='';
+  document.getElementById('suTeacherId').value='';
+  document.getElementById('suEmail').value='';
+  document.getElementById('suDept').value='';
+  document.getElementById('suPin').value='';
+  goScreen('scr-signup');
+}
+
+// ============================================================
+// INIT
+// ============================================================
+document.addEventListener('DOMContentLoaded', function(){
+  var LOGO_SRC='data:image/png;base64,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';
+  document.querySelectorAll('.app-logo-img').forEach(function(img){ img.src=LOGO_SRC; });
+
+  // Clock
+  function tick(){
+    var d=new Date();
+    var h=d.getHours(),m=d.getMinutes();
+    document.getElementById('statusClock').textContent=
+      (h>12?h-12:(h||12))+':'+(m<10?'0':'')+m;
+  }
+  tick();setInterval(tick,15000);
+
+  // Route
+  var fac=getFaculty();
+  var status=getStatus();
+  if(fac && status==='approved'){
+    window.location.href='index.html';
+    return;
+  }
+  if(fac && (status==='pending' || status==='rejected')){
+    document.getElementById('pendName').textContent=fac.name||'—';
+    document.getElementById('pendMeta').textContent=(fac.teacherId||'—')+' · '+(fac.department||'—');
+    renderPendNote(fac.reviewNote||null, status==='rejected');
+    goScreen('scr-pending');
+  }
+
+  // Hide splash
+  setTimeout(function(){
+    var s=document.getElementById('introSplash');
+    if(s)s.classList.add('hide');
+    setTimeout(function(){if(s)s.style.display='none';},600);
+  },400);
+});
+</script>
+</body>
+</html>
