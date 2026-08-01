@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends, HTTPException, Header, WebSocket, WebSocketDisconnect, Request
+from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_
@@ -546,6 +547,56 @@ def re_enroll_face(payload: schemas.ReEnrollFaceRequest, db: Session = Depends(g
     db.refresh(faculty)
 
     return schemas.ReEnrollFaceResponse(status="resubmitted" if was_rejected else "ok", faculty=faculty)
+
+
+class ResetPinVerifyRequest(BaseModel):
+    teacher_id: str
+    face_images: List[str]
+
+class ResetPinVerifyResponse(BaseModel):
+    verified: bool
+    reason: Optional[str] = None
+
+@app.post("/api/auth/reset-pin-verify")
+def reset_pin_verify(payload: ResetPinVerifyRequest, db: Session = Depends(get_db)):
+    faculty = db.query(models.Faculty).filter(models.Faculty.teacher_id == payload.teacher_id).first()
+    if not faculty:
+        return {"verified": False, "reason": "not_found"}
+    if faculty.approval_status != "approved":
+        return {"verified": False, "reason": "not_approved"}
+    if not faculty.face_embeddings:
+        return {"verified": False, "reason": "no_enrolled_face"}
+
+    result = verify_face_from_frames(payload.face_images, faculty.face_embeddings)
+    if result["verified"] == "pass":
+        return {"verified": True, "reason": None}
+    return {"verified": False, "reason": result.get("reason") or "face_mismatch"}
+
+
+class ResetPinRequest(BaseModel):
+    teacher_id: str
+    face_images: List[str]
+    new_pin: str
+
+@app.post("/api/auth/reset-pin")
+def reset_pin(payload: ResetPinRequest, db: Session = Depends(get_db)):
+    faculty = db.query(models.Faculty).filter(models.Faculty.teacher_id == payload.teacher_id).first()
+    if not faculty:
+        raise HTTPException(status_code=404, detail="Teacher ID not found")
+    if faculty.approval_status != "approved":
+        raise HTTPException(status_code=403, detail="Account not approved")
+    if not faculty.face_embeddings:
+        raise HTTPException(status_code=400, detail="No enrolled face data")
+    if not payload.new_pin or len(payload.new_pin) != 4 or not payload.new_pin.isdigit():
+        raise HTTPException(status_code=400, detail="PIN must be exactly 4 digits")
+
+    result = verify_face_from_frames(payload.face_images, faculty.face_embeddings)
+    if result["verified"] != "pass":
+        raise HTTPException(status_code=403, detail="Face verification failed")
+
+    faculty.pin_hash = hash_pin(payload.new_pin)
+    db.commit()
+    return {"status": "ok"}
 
 
 MAX_PHOTO_BASE64_CHARS = 500_000  # ~375KB binary — plenty for a resized profile pic, keeps DB rows small
