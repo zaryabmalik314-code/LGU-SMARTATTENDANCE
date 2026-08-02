@@ -8,6 +8,11 @@ class GPSReading(BaseModel):
     latitude: float
     longitude: float
     accuracy: float  # meters
+    altitude: Optional[float] = None
+    altitude_accuracy: Optional[float] = None
+    speed: Optional[float] = None
+    heading: Optional[float] = None
+    is_mock: Optional[bool] = None
 
 
 class CheckInRequest(BaseModel):

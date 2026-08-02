@@ -2236,7 +2236,11 @@ function startExitGeoWatch(){
     exitGeoReadings.push({
       latitude:pos.coords.latitude,
       longitude:pos.coords.longitude,
-      accuracy:pos.coords.accuracy
+      accuracy:pos.coords.accuracy,
+      altitude:pos.coords.altitude,
+      altitude_accuracy:pos.coords.altitudeAccuracy,
+      speed:pos.coords.speed,
+      heading:pos.coords.heading
     });
     var zInfo=nearestZoneLabel(pos.coords.latitude,pos.coords.longitude);
     var dist=zInfo.dist;
@@ -3114,7 +3118,11 @@ function startGeoWatch(){
     geoReadings.push({
       latitude:pos.coords.latitude,
       longitude:pos.coords.longitude,
-      accuracy:pos.coords.accuracy
+      accuracy:pos.coords.accuracy,
+      altitude:pos.coords.altitude,
+      altitude_accuracy:pos.coords.altitudeAccuracy,
+      speed:pos.coords.speed,
+      heading:pos.coords.heading
     });
     var zInfo=nearestZoneLabel(pos.coords.latitude,pos.coords.longitude);
     var dist=zInfo.dist;

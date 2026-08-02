@@ -1336,6 +1336,11 @@ def check_in(payload: schemas.CheckInRequest, db: Session = Depends(get_db)):
     if not faculty.is_active:
         raise HTTPException(status_code=403, detail="This faculty account has been deactivated. Contact the admin.")
 
+    now_utc = datetime.utcnow()
+    if faculty.face_locked_until and faculty.face_locked_until > now_utc:
+        remaining = int((faculty.face_locked_until - now_utc).total_seconds() / 60) + 1
+        raise HTTPException(status_code=403, detail=f"Account temporarily locked — too many failed face scans. Try again in {remaining} min.")
+
     # 1. Pick best GPS reading from the batch sent by frontend
     if not payload.gps_readings:
         raise HTTPException(status_code=400, detail="At least one GPS reading is required")
@@ -1353,8 +1358,15 @@ def check_in(payload: schemas.CheckInRequest, db: Session = Depends(get_db)):
         status = "rejected_location"
     elif face_result["verified"] != "pass":
         status = "rejected_face"
+        faculty.face_fail_count = (faculty.face_fail_count or 0) + 1
+        if faculty.face_fail_count >= 5:
+            faculty.face_locked_until = now_utc + timedelta(minutes=30)
+            faculty.face_fail_count = 0
     else:
         status = "present"
+        if faculty.face_fail_count and faculty.face_fail_count > 0:
+            faculty.face_fail_count = 0
+            faculty.face_locked_until = None
 
     # 5. Flag (don't block) if travel since last known location was implausibly fast
     now = resolve_record_timestamp(payload.captured_at)
@@ -1523,6 +1535,11 @@ def check_out(payload: schemas.CheckOutRequest, db: Session = Depends(get_db)):
     if not faculty.is_active:
         raise HTTPException(status_code=403, detail="This faculty account has been deactivated. Contact the admin.")
 
+    now_utc = datetime.utcnow()
+    if faculty.face_locked_until and faculty.face_locked_until > now_utc:
+        remaining = int((faculty.face_locked_until - now_utc).total_seconds() / 60) + 1
+        raise HTTPException(status_code=403, detail=f"Account temporarily locked — too many failed face scans. Try again in {remaining} min.")
+
     if not payload.gps_readings:
         raise HTTPException(status_code=400, detail="At least one GPS reading is required")
     best_reading = pick_best_reading(payload.gps_readings)
@@ -1534,8 +1551,15 @@ def check_out(payload: schemas.CheckOutRequest, db: Session = Depends(get_db)):
         status = "rejected_location"
     elif face_result["verified"] != "pass":
         status = "rejected_face"
+        faculty.face_fail_count = (faculty.face_fail_count or 0) + 1
+        if faculty.face_fail_count >= 5:
+            faculty.face_locked_until = now_utc + timedelta(minutes=30)
+            faculty.face_fail_count = 0
     else:
         status = "present"
+        if faculty.face_fail_count and faculty.face_fail_count > 0:
+            faculty.face_fail_count = 0
+            faculty.face_locked_until = None
 
     now = resolve_record_timestamp(payload.captured_at)
     movement_check = check_movement_against_last_record(

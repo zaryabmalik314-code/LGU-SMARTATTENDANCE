@@ -182,13 +182,16 @@ GPS_SPOOF_JITTER_FLOOR = 0.0000008  # ~0.09m — real GPS always drifts more tha
 
 def check_gps_spoofing(readings: List["GPSReading"]) -> dict:
     """
-    Analyzes multi-reading GPS consistency.
+    Analyzes multi-reading GPS consistency + metadata signals.
     Real GPS drifts 1-15m between samples even standing still.
-    Mock location apps produce frozen or near-frozen coordinates.
+    Mock location apps produce frozen coordinates and missing sensor data.
     Returns {"spoofed": bool, "reason": str|None}.
     """
     if len(readings) < GPS_SPOOF_MIN_READINGS:
         return {"spoofed": False, "reason": None}
+
+    if any(getattr(r, "is_mock", None) is True for r in readings):
+        return {"spoofed": True, "reason": "mock_provider_flag"}
 
     lats = [r.latitude for r in readings]
     lngs = [r.longitude for r in readings]
@@ -205,5 +208,10 @@ def check_gps_spoofing(readings: List["GPSReading"]) -> dict:
     unique_accs = len(set(round(a, 1) for a in accs))
     if unique_accs == 1 and lat_std < GPS_SPOOF_JITTER_FLOOR * 10 and lng_std < GPS_SPOOF_JITTER_FLOOR * 10:
         return {"spoofed": True, "reason": "gps_accuracy_frozen"}
+
+    all_alt_null = all(getattr(r, "altitude", None) is None for r in readings)
+    all_spd_null = all(getattr(r, "speed", None) is None for r in readings)
+    if all_alt_null and all_spd_null and unique_accs == 1:
+        return {"spoofed": True, "reason": "gps_metadata_absent"}
 
     return {"spoofed": False, "reason": None}

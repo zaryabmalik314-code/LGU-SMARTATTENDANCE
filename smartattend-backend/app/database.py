@@ -89,6 +89,16 @@ def run_simple_migrations():
                 conn.commit()
                 print("[migration] Added missing column: faculty.last_device_ip")
 
+            if "face_fail_count" not in existing_columns:
+                conn.execute(text("ALTER TABLE faculty ADD COLUMN face_fail_count INTEGER NOT NULL DEFAULT 0"))
+                conn.commit()
+                print("[migration] Added missing column: faculty.face_fail_count")
+
+            if "face_locked_until" not in existing_columns:
+                conn.execute(text("ALTER TABLE faculty ADD COLUMN face_locked_until TIMESTAMP"))
+                conn.commit()
+                print("[migration] Added missing column: faculty.face_locked_until")
+
         if "attendance_records" in table_names:
             existing_columns = {col["name"] for col in inspector.get_columns("attendance_records")}
             if "flagged_suspicious" not in existing_columns:

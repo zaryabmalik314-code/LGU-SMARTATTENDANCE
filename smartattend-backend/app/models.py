@@ -26,6 +26,8 @@ class Faculty(Base):
     is_active = Column(Boolean, default=True, nullable=False)  # False once admin has deactivated/offboarded this faculty
     last_device_ip = Column(String, nullable=True)  # set once a device switch is approved; enforcement (blocking login from a new IP) is a separate follow-up, not wired in yet
     profile_photo = Column(Text, nullable=True)  # base64-encoded image (data URL), synced across devices
+    face_fail_count = Column(Integer, default=0, nullable=False)
+    face_locked_until = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     attendance_records = relationship("AttendanceRecord", back_populates="faculty")
