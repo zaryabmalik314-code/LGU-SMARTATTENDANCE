@@ -624,6 +624,57 @@ def upload_photo(payload: schemas.UploadPhotoRequest, db: Session = Depends(get_
     return schemas.UploadPhotoResponse(status="ok", faculty=faculty)
 
 
+@app.post("/api/setup/initial-config")
+def initial_config(db: Session = Depends(get_db)):
+    """One-time setup endpoint — creates semester + verifies time window.
+    REMOVE AFTER USE."""
+    result = {}
+
+    active_sem = db.query(models.Semester).filter(models.Semester.is_active == True).first()
+    if not active_sem:
+        db.query(models.Semester).update({models.Semester.is_active: False})
+        sem = models.Semester(
+            label="Spring 2026",
+            start_date="2026-02-01",
+            end_date="2026-08-15",
+            is_active=True,
+            is_closed=False,
+        )
+        db.add(sem)
+        db.commit()
+        db.refresh(sem)
+        result["semester"] = {"id": sem.id, "label": sem.label, "status": "created_and_activated"}
+    else:
+        result["semester"] = {"id": active_sem.id, "label": active_sem.label, "status": "already_active"}
+
+    active_tw = db.query(models.TimeWindow).filter(models.TimeWindow.is_active == True).first()
+    if active_tw:
+        if active_tw.start_time != "08:00" or active_tw.end_time != "14:00":
+            active_tw.start_time = "08:00"
+            active_tw.end_time = "14:00"
+            overrides = json.dumps({"saturday": {"off": True}, "sunday": {"off": True}})
+            active_tw.overrides = overrides
+            db.commit()
+            result["time_window"] = {"id": active_tw.id, "name": active_tw.name, "status": "updated_to_8am_2pm"}
+        else:
+            result["time_window"] = {"id": active_tw.id, "name": active_tw.name, "status": "already_correct"}
+    else:
+        tw = models.TimeWindow(
+            name="Maths Dept Schedule",
+            start_time="08:00",
+            end_time="14:00",
+            grace_minutes=10,
+            overrides=json.dumps({"saturday": {"off": True}, "sunday": {"off": True}}),
+            is_active=True,
+        )
+        db.add(tw)
+        db.commit()
+        db.refresh(tw)
+        result["time_window"] = {"id": tw.id, "name": tw.name, "status": "created_and_activated"}
+
+    return result
+
+
 @app.post("/api/admin/bootstrap", response_model=schemas.AdminLoginResponse)
 def bootstrap_admin(payload: schemas.AdminBootstrapRequest, db: Session = Depends(get_db)):
     """
