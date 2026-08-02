@@ -1,0 +1,25 @@
+{
+  "name": "Smart Attendance — LGU Faculty",
+  "short_name": "SmartAttend",
+  "description": "Faculty attendance portal for Lahore Garrison University. Biometric check-in with GPS verification.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0a1628",
+  "theme_color": "#0f2860",
+  "icons": [
+    {
+      "src": "icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
