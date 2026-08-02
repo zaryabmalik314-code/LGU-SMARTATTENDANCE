@@ -174,3 +174,36 @@ def check_impossible_movement(
         }
 
     return {"flagged": False, "reason": None, "speed_kmh": speed_kmh}
+
+
+GPS_SPOOF_MIN_READINGS = 3
+GPS_SPOOF_JITTER_FLOOR = 0.0000008  # ~0.09m — real GPS always drifts more than this
+
+
+def check_gps_spoofing(readings: List["GPSReading"]) -> dict:
+    """
+    Analyzes multi-reading GPS consistency.
+    Real GPS drifts 1-15m between samples even standing still.
+    Mock location apps produce frozen or near-frozen coordinates.
+    Returns {"spoofed": bool, "reason": str|None}.
+    """
+    if len(readings) < GPS_SPOOF_MIN_READINGS:
+        return {"spoofed": False, "reason": None}
+
+    lats = [r.latitude for r in readings]
+    lngs = [r.longitude for r in readings]
+    accs = [r.accuracy for r in readings]
+
+    lat_mean = sum(lats) / len(lats)
+    lng_mean = sum(lngs) / len(lngs)
+    lat_std = math.sqrt(sum((x - lat_mean) ** 2 for x in lats) / len(lats))
+    lng_std = math.sqrt(sum((x - lng_mean) ** 2 for x in lngs) / len(lngs))
+
+    if lat_std < GPS_SPOOF_JITTER_FLOOR and lng_std < GPS_SPOOF_JITTER_FLOOR:
+        return {"spoofed": True, "reason": "gps_coordinates_frozen"}
+
+    unique_accs = len(set(round(a, 1) for a in accs))
+    if unique_accs == 1 and lat_std < GPS_SPOOF_JITTER_FLOOR * 10 and lng_std < GPS_SPOOF_JITTER_FLOOR * 10:
+        return {"spoofed": True, "reason": "gps_accuracy_frozen"}
+
+    return {"spoofed": False, "reason": None}

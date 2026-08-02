@@ -11,7 +11,7 @@ import secrets
 
 from . import models, schemas
 from .database import engine, get_db, run_simple_migrations, SessionLocal
-from .geofence import pick_best_reading, check_location, check_impossible_movement
+from .geofence import pick_best_reading, check_location, check_impossible_movement, check_gps_spoofing
 from .face_verify import verify_face_from_frames, enroll_from_frames, embeddings_to_str
 from .auth import hash_pin, verify_pin, hash_password, verify_password
 from .ws_manager import manager
@@ -1348,7 +1348,8 @@ def check_in(payload: schemas.CheckInRequest, db: Session = Depends(get_db)):
     face_result = verify_face_from_frames(payload.face_images, faculty.face_embeddings)
 
     # 4. Decide final status
-    if not location_check["allowed"]:
+    spoof_check = check_gps_spoofing(payload.gps_readings)
+    if spoof_check["spoofed"] or not location_check["allowed"]:
         status = "rejected_location"
     elif face_result["verified"] != "pass":
         status = "rejected_face"
@@ -1528,12 +1529,13 @@ def check_out(payload: schemas.CheckOutRequest, db: Session = Depends(get_db)):
     location_check = check_location(best_reading)
     face_result = verify_face_from_frames(payload.face_images, faculty.face_embeddings)
 
-    if not location_check["allowed"]:
+    spoof_check = check_gps_spoofing(payload.gps_readings)
+    if spoof_check["spoofed"] or not location_check["allowed"]:
         status = "rejected_location"
     elif face_result["verified"] != "pass":
         status = "rejected_face"
     else:
-        status = "present"  # "present" here just means "exit successfully logged"
+        status = "present"
 
     now = resolve_record_timestamp(payload.captured_at)
     movement_check = check_movement_against_last_record(
