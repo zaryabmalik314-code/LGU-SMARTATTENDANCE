@@ -710,11 +710,11 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
 
             <!-- Controls area -->
             <div class="scan-controls">
-              <div id="bioPhases" class="scan-phases">
-                <div id="ph0" class="bphase"><svg class="i"><use href="#ic-camera"/></svg> Camera</div>
-                <div id="ph1" class="bphase"><svg class="i"><use href="#ic-camera"/></svg> Recording</div>
-                <div id="ph2" class="bphase"><svg class="i"><use href="#ic-user"/></svg> Filtering</div>
-                <div id="ph3" class="bphase"><svg class="i"><use href="#ic-check-circle"/></svg> Submitting</div>
+              <div id="bioPhases" class="scan-phases" style="display:none">
+                <div id="ph0" class="bphase"></div>
+                <div id="ph1" class="bphase"></div>
+                <div id="ph2" class="bphase"></div>
+                <div id="ph3" class="bphase"></div>
               </div>
               <div class="face-val" id="faceVal" style="margin-bottom:14px">Ready to scan</div>
               <div style="height:5px;background:var(--g100);border-radius:4px;margin-bottom:20px;overflow:hidden">
@@ -834,7 +834,7 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
             <div class="sem-lbl">Casual Leaves</div>
           </div>
         </div>
-        <!-- Earned Leave -->
+        <!-- Total Days -->
         <div class="sem-card earned">
           <div class="sem-visual">
             <div class="sem-ring-wrap">
@@ -843,11 +843,11 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
                 <circle class="ring-fill" id="earnRing" cx="22" cy="22" r="18" stroke-dasharray="113" stroke-dashoffset="113"/>
               </svg>
             </div>
-            <div class="sem-ico"><svg class="i"><use href="#ic-award"/></svg></div>
+            <div class="sem-ico"><svg class="i"><use href="#ic-calendar"/></svg></div>
           </div>
           <div class="sem-text">
             <div class="sem-n" id="earnedDays">72</div>
-            <div class="sem-of">of 100 days</div>
+            <div class="sem-of">of 365 days</div>
             <div class="sem-lbl">Days Attended</div>
           </div>
         </div>
@@ -892,25 +892,14 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
         </div>
       </div>
 
-      <!-- Earned Leave info -->
-      <div class="earn-info">
-        <div class="earn-ico"><svg class="i"><use href="#ic-file"/></svg></div>
-        <div class="earn-txt">
-          <strong>Earned Leave Eligibility</strong>
-          Complete 100 working days this semester to qualify for 15 earned leaves next semester. You need <span id="earnRemain" style="font-weight:700">28 more days</span>.
-        </div>
-      </div>
-
       <!-- Leave breakdown -->
       <div class="card" style="padding:16px">
         <div class="card-title" style="margin-bottom:12px"><svg class="i"><use href="#ic-list"/></svg> Casual Leave Summary</div>
-        <div class="log-item"><span class="log-key">&#8226; Entitlement this semester</span><span class="log-val">20 days</span></div>
-        <div class="log-item"><span class="log-key">&#8226; Leaves availed</span><span class="log-val" id="casualTakenLbl">3 days</span></div>
-        <div class="log-item"><span class="log-key">&#8226; Balance remaining</span><span class="log-val pill pill-green" id="casualRemainLbl" style="font-size:12px">17 days</span></div>
-        <div class="log-item" style="margin-top:6px;padding-top:12px;border-top:1px solid var(--g100)"><span class="log-key">&#8226; Earned leave (next semester)</span><span class="log-val">15 days</span></div>
-        <div class="log-item"><span class="log-key">&#8226; Min. days required for eligibility</span><span class="log-val">100 days</span></div>
-        <div class="log-item"><span class="log-key">&#8226; Days attended so far</span><span class="log-val" id="attendanceSoFar">72 days</span></div>
-        <div class="log-item"><span class="log-key">&#8226; Total working days (semester)</span><span class="log-val">100 days</span></div>
+        <div class="log-item"><span class="log-key">Entitlement</span><span class="log-val">20 days</span></div>
+        <div class="log-item"><span class="log-key">Leaves availed</span><span class="log-val" id="casualTakenLbl">3 days</span></div>
+        <div class="log-item"><span class="log-key">Balance remaining</span><span class="log-val pill pill-green" id="casualRemainLbl" style="font-size:12px">17 days</span></div>
+        <div class="log-item" style="margin-top:6px;padding-top:12px;border-top:1px solid var(--g100)"><span class="log-key">Days attended</span><span class="log-val" id="attendanceSoFar">72 days</span></div>
+        <div class="log-item"><span class="log-key">Total days</span><span class="log-val">365 days</span></div>
       </div>
 
       <!-- Late margin breakdown -->
@@ -920,9 +909,6 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
         <div class="log-item"><span class="log-key">Margin consumed</span><span class="log-val" id="lateMinsUsed">143 min</span></div>
         <div class="log-item"><span class="log-key">Margin remaining</span><span class="log-val pill" id="lateRemainPill" style="font-size:12px">337 min</span></div>
         <div class="log-item"><span class="log-key">Balance in hours</span><span class="log-val" id="lateHrsLeft">5 hrs 37 min</span></div>
-        <div style="background:var(--abg);border-radius:var(--r8);padding:10px 12px;margin-top:10px;font-size:11px;color:var(--amber);line-height:1.6">
-          <svg class="i"><use href="#ic-alert"/></svg>&nbsp; Upon exhaustion of the 8-hour late margin, each additional late minute will be treated as a half-day casual leave deduction.
-        </div>
       </div>
 
       <!-- Request Leave Form -->
@@ -3138,9 +3124,9 @@ function startGeoWatch(){
       geoSettled=true;
       stopGeoWatch();
       if(inside){
-        setGeoChip('ready','On campus · '+dist+'m from '+zInfo.label+' — ready to check in');
+        setGeoChip('ready','On campus · '+dist+'m from '+zInfo.label);
         var btn=document.getElementById('scanFaceBtn');
-        if(btn && !attendanceMarked)btn.disabled=false;
+        if(btn && !attendanceMarked){btn.disabled=false;openScanFace();runFace();}
       } else {
         setGeoChip('denied','Outside allowed zone · '+dist+'m from '+zInfo.label);
       }
@@ -3210,8 +3196,7 @@ function resetFaceScannerUI(){
   document.getElementById('faceVal').textContent='Ready to scan';
   document.getElementById('bioIdle').style.display='flex';
   document.getElementById('bioVideo').style.display='none';
-  document.getElementById('bioOval').style.display='none';
-  document.getElementById('bioOval').className='';
+  document.getElementById('bioOval').className='scan-frame';
   document.getElementById('bioBeam').style.display='none';
   document.getElementById('bioRec').style.opacity='0';
   document.getElementById('bioProgress').style.display='none';
@@ -3630,7 +3615,7 @@ function renderHistoryRows(rows){
   var html='';
   dayKeys.forEach(function(key){
     var g=groups[key];
-    var items=g.items.slice().sort(function(a,b){return a.d-b.d;}); // chronological within the day
+    var items=g.items.slice().sort(function(a,b){return b.d-a.d;}); // newest first within the day
 
     // Pair sequential check-in/check-out entries into sessions
     var sessions=[],open=null;
@@ -3696,7 +3681,7 @@ function renderHistoryRows(rows){
 // endpoint exists yet for leave balances. Flagged in the chat response.
 // NOTE: leave balance / off-days / late-margin figures below are cached/fallback data —
 // wired to real API endpoint with syncLeaveBalance()
-var SEM_DATA={leaveUsed:3,leaveTotal:20,earnedDays:72,earnedTotal:100,lateMins:143,lateTotal:480};
+var SEM_DATA={leaveUsed:3,leaveTotal:20,earnedDays:72,earnedTotal:365,lateMins:143,lateTotal:480};
 
 function animateSemRings(){
   var CIRC=113;
@@ -3717,7 +3702,6 @@ function animateSemRings(){
   var mr=document.getElementById('marginRemaining');if(mr)mr.innerHTML=remain+' <span>min left</span>';
   var mlu=document.getElementById('marginLegendUsed');if(mlu)mlu.textContent=SEM_DATA.lateMins+' min used';
   var mh=document.getElementById('marginHours');if(mh)mh.textContent=Math.floor(remain/60)+' hrs '+(remain%60)+' min';
-  var er=document.getElementById('earnRemain');if(er)er.textContent=(SEM_DATA.earnedTotal-SEM_DATA.earnedDays)+' more days';
   var ctl=document.getElementById('casualTakenLbl');if(ctl)ctl.textContent=SEM_DATA.leaveUsed+' days';
   var crl=document.getElementById('casualRemainLbl');if(crl)crl.textContent=(SEM_DATA.leaveTotal-SEM_DATA.leaveUsed)+' days';
   var asf=document.getElementById('attendanceSoFar');if(asf)asf.textContent=SEM_DATA.earnedDays+' days';
