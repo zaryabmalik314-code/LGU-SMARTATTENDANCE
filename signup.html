@@ -523,7 +523,7 @@ function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,
   var STEP_TIMEOUT_MS=30000;
   var HOLD_SAMPLES=2;
   var LOST_FACE_MS=1200;
-  var FALLBACK_AFTER_MS=6000;
+  var FALLBACK_AFTER_MS=4000;
   var SETTLE_MS=4000;
 
   var stepIndex=0;
@@ -775,8 +775,9 @@ function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,
         }
       }
 
-      if(!meshFallback && !faceMeshEverRan && elapsed>=FALLBACK_AFTER_MS){
+      if(!meshFallback && elapsed>=FALLBACK_AFTER_MS && capturedOrder.length===0){
         meshFallback=true;
+        console.warn('[enroll] No angles captured after '+FALLBACK_AFTER_MS+'ms — falling back to timed capture');
         label.textContent='Turn your head slowly';
         val.textContent='Center, then left, then right';
       }
