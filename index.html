@@ -2423,6 +2423,28 @@ var LS_PHOTO     = 'sa_profile_photo'; // cached copy of the synced profile phot
 // POST /api/faculty/upload-photo (requires the teacher's PIN).
 // LS_PHOTO is just a local display cache; source of truth is the backend.
 
+function getDeviceFingerprint(){
+  var raw=[
+    navigator.userAgent||'',
+    screen.width+'x'+screen.height,
+    screen.colorDepth||'',
+    Intl.DateTimeFormat().resolvedOptions().timeZone||'',
+    navigator.language||'',
+    navigator.hardwareConcurrency||'',
+    navigator.platform||''
+  ].join('|');
+  var h=0;
+  for(var i=0;i<raw.length;i++){h=((h<<5)-h)+raw.charCodeAt(i);h|=0;}
+  try{
+    var c=document.createElement('canvas');c.width=200;c.height=50;
+    var ctx=c.getContext('2d');
+    ctx.textBaseline='top';ctx.font='14px Arial';ctx.fillText('fp:'+navigator.userAgent.slice(0,40),2,2);
+    var d=c.toDataURL();
+    for(var j=0;j<d.length;j++){h=((h<<5)-h)+d.charCodeAt(j);h|=0;}
+  }catch(e){}
+  return 'fp_'+(h>>>0).toString(36);
+}
+
 function getFaculty(){
   try{return JSON.parse(localStorage.getItem(LS_FACULTY)||'null');}catch(e){return null;}
 }
@@ -2828,7 +2850,7 @@ function doLogin(){
   err.style.display='none';
   if(btn){btn.disabled=true;btn.innerHTML='<span class="btn-ico"><svg class="i"><use href="#ic-loader"/></svg></span>Logging in&hellip;';}
 
-  apiRequest('/api/auth/login','POST',{teacher_id:teacherId,pin:pin}).then(function(resp){
+  apiRequest('/api/auth/login','POST',{teacher_id:teacherId,pin:pin,device_fingerprint:getDeviceFingerprint()}).then(function(resp){
     var status=resp&&resp.status;
     if(status==='approved'){
       if(resp.faculty){
@@ -2869,6 +2891,8 @@ function doLogin(){
       document.getElementById('liTeacherId').value='';
       document.getElementById('liPin').value='';
       window.location.href='signup.html';
+    } else if(status==='device_switch_pending'){
+      err.textContent='New device detected. A switch request has been sent to the admin. Please wait for approval before logging in from this device.';err.style.display='block';
     } else if(status==='deactivated'){
       err.textContent='This account has been deactivated by the admin. Please contact the administration.';err.style.display='block';
     } else {

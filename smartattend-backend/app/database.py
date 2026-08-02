@@ -89,6 +89,11 @@ def run_simple_migrations():
                 conn.commit()
                 print("[migration] Added missing column: faculty.last_device_ip")
 
+            if "last_device_fingerprint" not in existing_columns:
+                conn.execute(text("ALTER TABLE faculty ADD COLUMN last_device_fingerprint TEXT"))
+                conn.commit()
+                print("[migration] Added missing column: faculty.last_device_fingerprint")
+
             if "face_fail_count" not in existing_columns:
                 conn.execute(text("ALTER TABLE faculty ADD COLUMN face_fail_count INTEGER NOT NULL DEFAULT 0"))
                 conn.commit()
@@ -141,6 +146,13 @@ def run_simple_migrations():
         # enforced in application code, not as a DB unique index, so that
         # closing one semester and activating another can happen atomically
         # in a single transaction without a temporary constraint violation.
+
+        if "device_switch_requests" in table_names:
+            existing_columns = {col["name"] for col in inspector.get_columns("device_switch_requests")}
+            if "new_fingerprint" not in existing_columns:
+                conn.execute(text("ALTER TABLE device_switch_requests ADD COLUMN new_fingerprint TEXT"))
+                conn.commit()
+                print("[migration] Added missing column: device_switch_requests.new_fingerprint")
 
         if "leave_requests" in table_names:
             existing_columns = {col["name"] for col in inspector.get_columns("leave_requests")}

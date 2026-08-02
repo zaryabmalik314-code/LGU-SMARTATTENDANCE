@@ -476,25 +476,22 @@ def login(payload: schemas.LoginRequest, request: Request, db: Session = Depends
     if not faculty.is_active:
         return schemas.LoginResponse(status="deactivated", faculty=faculty)
 
-    # Device-switch enforcement: capture the real client IP (Railway sits
-    # behind a proxy so X-Forwarded-For is the real source address).
-    # On first login (no last_device_ip set), just record the IP and let
-    # them through — no request needed for the very first device.
     forwarded_for = request.headers.get("x-forwarded-for")
     client_ip = forwarded_for.split(",")[0].strip() if forwarded_for else (
         request.client.host if request.client else None
     )
+    fp = payload.device_fingerprint
 
-    if False and client_ip and faculty.last_device_ip and client_ip != faculty.last_device_ip:
-        # Different device — check if there's already a pending request for
-        # this exact new IP so we don't flood the admin with duplicates.
+    if fp and faculty.last_device_fingerprint and fp != faculty.last_device_fingerprint:
         existing = db.query(models.DeviceSwitchRequest).filter(
             models.DeviceSwitchRequest.faculty_id == faculty.id,
-            models.DeviceSwitchRequest.new_ip == client_ip,
+            models.DeviceSwitchRequest.new_fingerprint == fp,
             models.DeviceSwitchRequest.status == "pending",
         ).first()
         if not existing:
-            db.add(models.DeviceSwitchRequest(faculty_id=faculty.id, new_ip=client_ip))
+            db.add(models.DeviceSwitchRequest(
+                faculty_id=faculty.id, new_ip=client_ip, new_fingerprint=fp
+            ))
             db.commit()
             manager.broadcast_threadsafe({
                 "event": "device_switch_request",
@@ -502,12 +499,11 @@ def login(payload: schemas.LoginRequest, request: Request, db: Session = Depends
             })
         return schemas.LoginResponse(status="device_switch_pending", faculty=faculty)
 
-    # First login ever — record this IP so future logins from a different
-    # device will be caught. Also update if they were just approved via a
-    # device switch request (last_device_ip gets updated on approval).
+    if fp and not faculty.last_device_fingerprint:
+        faculty.last_device_fingerprint = fp
     if client_ip and not faculty.last_device_ip:
         faculty.last_device_ip = client_ip
-        db.commit()
+    db.commit()
 
     return schemas.LoginResponse(status="approved", faculty=faculty)
 
@@ -955,7 +951,10 @@ def admin_decide_device_switch(
     req.status = payload.status
     req.reviewed_at = datetime.utcnow()
     if payload.status == "approved" and req.faculty:
-        req.faculty.last_device_ip = req.new_ip
+        if req.new_ip:
+            req.faculty.last_device_ip = req.new_ip
+        if req.new_fingerprint:
+            req.faculty.last_device_fingerprint = req.new_fingerprint
     db.commit()
     db.refresh(req)
 
@@ -963,6 +962,21 @@ def admin_decide_device_switch(
     item.faculty_name = req.faculty.name if req.faculty else None
     item.department = req.faculty.department if req.faculty else None
     return item
+
+
+@app.post("/api/admin/reset-device/{faculty_id}")
+def admin_reset_device(
+    faculty_id: int,
+    db: Session = Depends(get_db),
+    admin: models.Admin = Depends(get_current_admin),
+):
+    faculty = db.query(models.Faculty).filter(models.Faculty.id == faculty_id).first()
+    if not faculty:
+        raise HTTPException(status_code=404, detail="Faculty not found")
+    faculty.last_device_fingerprint = None
+    faculty.last_device_ip = None
+    db.commit()
+    return {"status": "ok", "message": f"Device binding cleared for {faculty.name}"}
 
 
 ADJUSTABLE_BALANCE_FIELDS = {

@@ -106,10 +106,11 @@ class UploadPhotoResponse(BaseModel):
 class LoginRequest(BaseModel):
     teacher_id: str
     pin: str
+    device_fingerprint: Optional[str] = None
 
 
 class LoginResponse(BaseModel):
-    status: str  # "approved" | "pending" | "rejected" | "deactivated" | "invalid_credentials"
+    status: str  # "approved" | "pending" | "rejected" | "deactivated" | "device_switch_pending" | "invalid_credentials"
     faculty: Optional[FacultyOut] = None
 
 
@@ -355,7 +356,8 @@ class HODLoginResponse(BaseModel):
 class DeviceSwitchRequestOut(BaseModel):
     id: int
     faculty_id: int
-    new_ip: str
+    new_ip: Optional[str] = None
+    new_fingerprint: Optional[str] = None
     status: str
     created_at: datetime
     reviewed_at: Optional[datetime] = None

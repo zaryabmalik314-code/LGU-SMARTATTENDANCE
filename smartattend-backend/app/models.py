@@ -24,7 +24,8 @@ class Faculty(Base):
     approval_status = Column(String, default="pending", nullable=False)  # "pending" | "approved" | "rejected"
     review_note = Column(Text, nullable=True)  # admin's feedback when rejecting/flagging an enrollment — shown to the faculty on their pending/rejected screen
     is_active = Column(Boolean, default=True, nullable=False)  # False once admin has deactivated/offboarded this faculty
-    last_device_ip = Column(String, nullable=True)  # set once a device switch is approved; enforcement (blocking login from a new IP) is a separate follow-up, not wired in yet
+    last_device_ip = Column(String, nullable=True)
+    last_device_fingerprint = Column(String, nullable=True)
     profile_photo = Column(Text, nullable=True)  # base64-encoded image (data URL), synced across devices
     face_fail_count = Column(Integer, default=0, nullable=False)
     face_locked_until = Column(DateTime, nullable=True)
@@ -189,15 +190,16 @@ class HODSession(Base):
 
 class DeviceSwitchRequest(Base):
     """
-    Created automatically when a faculty member's login IP doesn't match
-    their last recorded device IP — enforces one active device per
-    account. Sits pending until an admin approves or rejects it.
+    Created automatically when a faculty member logs in from an
+    unrecognised device (fingerprint mismatch). Sits pending until
+    an admin approves or rejects it.
     """
     __tablename__ = "device_switch_requests"
 
     id = Column(Integer, primary_key=True, index=True)
     faculty_id = Column(Integer, ForeignKey("faculty.id"), nullable=False, index=True)
-    new_ip = Column(String, nullable=False)
+    new_ip = Column(String, nullable=True)
+    new_fingerprint = Column(String, nullable=True)
     status = Column(String, default="pending", nullable=False)  # "pending" | "approved" | "rejected"
     created_at = Column(DateTime, default=datetime.utcnow)
     reviewed_at = Column(DateTime, nullable=True)

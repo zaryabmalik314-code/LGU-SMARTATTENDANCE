@@ -1552,6 +1552,13 @@ async function openFacultyDetail(id) {
         <button class="btn-ghost-sm" onclick="exportFacultyAttendance('${id}', 'csv')">Export CSV</button>
       </div>
     </div>
+    <div class="detail-section">
+      <div class="detail-section-title">Device Binding</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;align-items:center">
+        <button class="btn-ghost" style="color:var(--red-500);border-color:var(--red-500)" onclick="resetDevice('${id}',this)">Reset Device</button>
+        <span style="font-size:12px;opacity:.6">Clears fingerprint so the faculty can log in from any device again.</span>
+      </div>
+    </div>
   `;
 
   loadLeaveBalance(id);
@@ -2245,15 +2252,16 @@ async function loadDeviceSwitches() {
       <div class="table-wrap">
         <table>
           <thead><tr>
-            <th>Faculty</th><th>Department</th><th>New Device IP</th><th>Requested</th><th>Status</th><th>Actions</th>
+            <th>Faculty</th><th>Department</th><th>Device Fingerprint</th><th>Requested</th><th>Status</th><th>Actions</th>
           </tr></thead>
           <tbody>
             ${list.map(r => {
               const statusColor = r.status === 'approved' ? 'var(--green-500)' : r.status === 'rejected' ? 'var(--red-500)' : 'var(--amber-500)';
+              const fpLabel = r.new_fingerprint || r.new_ip || '—';
               return `<tr>
                 <td>${r.faculty_name || r.faculty_id}</td>
                 <td>${r.department || '—'}</td>
-                <td style="font-family:monospace;font-size:13px">${r.new_ip || '—'}</td>
+                <td style="font-family:monospace;font-size:13px" title="${fpLabel}">${fpLabel}</td>
                 <td>${r.created_at ? r.created_at.split('T')[0] : '—'}</td>
                 <td><span style="color:${statusColor};font-weight:600;text-transform:capitalize">${r.status}</span></td>
                 <td style="white-space:nowrap">
@@ -2286,6 +2294,18 @@ async function decideDevice(id, status, btnEl) {
     showToast('Failed: ' + err.message, true);
     row.querySelectorAll('button').forEach(b => b.disabled = false);
   }
+}
+
+async function resetDevice(facultyId, btnEl) {
+  if (!confirm('Clear device binding for this faculty? They will be bound to whatever device they next log in from.')) return;
+  btnEl.disabled = true;
+  try {
+    await api(`/api/admin/reset-device/${facultyId}`, { method: 'POST' });
+    showToast('Device binding cleared');
+  } catch (err) {
+    showToast('Failed: ' + err.message, true);
+  }
+  btnEl.disabled = false;
 }
 
 /* =========================================================================
