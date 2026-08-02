@@ -24,11 +24,16 @@ from io import BytesIO
 from typing import List, Optional
 
 import numpy as np
+import cv2
 from PIL import Image
 
 FACE_MATCH_THRESHOLD = 0.62  # cosine similarity on L2-normalized ArcFace embeddings
 MIN_DETECTION_CONFIDENCE = 0.4
 MIN_FACE_SIZE_PX = 80  # reject tiny/far-away faces
+
+LIVENESS_MIN_FRAMES = 3
+LIVENESS_SIMILARITY_CEIL = 0.98
+LIVENESS_TEXTURE_FLOOR = 12.0
 
 _face_app = None
 
@@ -113,7 +118,7 @@ def _make_thumbnail(img_bgr: np.ndarray, bbox, size: int = 150) -> str:
     return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
 
 
-def get_best_face_embedding(image_b64_list: List[str]) -> dict:
+def get_best_face_embedding(image_b64_list: List[str], *, collect_all: bool = False) -> dict:
     """
     Given several candidate frames (base64), runs detection on each,
     scores every detected face, and returns the embedding from the single
@@ -127,6 +132,8 @@ def get_best_face_embedding(image_b64_list: List[str]) -> dict:
     best_face = None
     best_img = None
     best_score = -1.0
+    all_embeddings = []
+    all_face_crops = []
 
     MAX_FRAMES = 10
     frames_to_process = image_b64_list[:MAX_FRAMES]
@@ -146,22 +153,85 @@ def get_best_face_embedding(image_b64_list: List[str]) -> dict:
         candidate = faces[0]
         score = _face_quality_score(candidate)
 
+        if collect_all and score > 0 and hasattr(candidate, 'normed_embedding'):
+            all_embeddings.append(candidate.normed_embedding.copy())
+            bx1, by1, bx2, by2 = [int(v) for v in candidate.bbox]
+            bx1, by1 = max(0, bx1), max(0, by1)
+            bx2, by2 = min(img.shape[1], bx2), min(img.shape[0], by2)
+            all_face_crops.append(img[by1:by2, bx1:bx2])
+
         if score > best_score:
             best_score = score
             best_face = candidate
             best_img = img
-            if best_score > 0.85:
+            if best_score > 0.85 and not collect_all:
                 break
 
     if best_face is None or best_score < 0:
-        return {"embedding": None, "quality": 0.0, "reason": "no_usable_face_detected", "thumbnail": None}
+        result = {"embedding": None, "quality": 0.0, "reason": "no_usable_face_detected", "thumbnail": None}
+        if collect_all:
+            result["all_embeddings"] = all_embeddings
+            result["all_face_crops"] = all_face_crops
+        return result
 
     if float(getattr(best_face, "det_score", 0.0)) < MIN_DETECTION_CONFIDENCE:
-        return {"embedding": None, "quality": best_score, "reason": "low_detection_confidence", "thumbnail": None}
+        result = {"embedding": None, "quality": best_score, "reason": "low_detection_confidence", "thumbnail": None}
+        if collect_all:
+            result["all_embeddings"] = all_embeddings
+            result["all_face_crops"] = all_face_crops
+        return result
 
     embedding = best_face.normed_embedding  # InsightFace already L2-normalizes this
     thumbnail = _make_thumbnail(best_img, best_face.bbox)
-    return {"embedding": embedding.tolist(), "quality": best_score, "reason": None, "thumbnail": thumbnail}
+    result = {"embedding": embedding.tolist(), "quality": best_score, "reason": None, "thumbnail": thumbnail}
+    if collect_all:
+        result["all_embeddings"] = all_embeddings
+        result["all_face_crops"] = all_face_crops
+    return result
+
+
+def _check_liveness(all_embeddings: List[np.ndarray], all_face_crops: List[np.ndarray]) -> dict:
+    """
+    Two-signal liveness gate:
+    1. Embedding variance — real faces produce slightly different embeddings
+       across frames due to micro-movement; a held-up photo yields near-
+       identical embeddings (avg pairwise cosine sim > 0.98).
+    2. Texture frequency — Laplacian variance on face crops; printed photos
+       and matte screens score much lower than real skin.
+    """
+    result = {"alive": True, "reason": None, "scores": {}}
+
+    if len(all_embeddings) >= LIVENESS_MIN_FRAMES:
+        sims = []
+        for i in range(len(all_embeddings)):
+            for j in range(i + 1, len(all_embeddings)):
+                dot = float(np.dot(all_embeddings[i], all_embeddings[j]))
+                norm = float(np.linalg.norm(all_embeddings[i]) * np.linalg.norm(all_embeddings[j]))
+                sims.append(dot / norm if norm > 0 else 0.0)
+        avg_sim = float(np.mean(sims))
+        result["scores"]["frame_similarity"] = round(avg_sim, 4)
+        if avg_sim > LIVENESS_SIMILARITY_CEIL:
+            result["alive"] = False
+            result["reason"] = "liveness_failed"
+            return result
+
+    if all_face_crops:
+        textures = []
+        for crop in all_face_crops:
+            if crop.size == 0:
+                continue
+            gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+            lap_var = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+            textures.append(lap_var)
+        if textures:
+            median_texture = float(np.median(textures))
+            result["scores"]["texture"] = round(median_texture, 2)
+            if median_texture < LIVENESS_TEXTURE_FLOOR:
+                result["alive"] = False
+                result["reason"] = "liveness_failed"
+                return result
+
+    return result
 
 
 def embeddings_to_str(embeddings: List[List[float]]) -> str:
@@ -202,9 +272,21 @@ def verify_face_from_frames(candidate_frames_b64: List[str], enrolled_embeddings
     stored angle-bucket embeddings for that faculty member, taking the max
     similarity (robust to whichever angle matches best today).
     """
-    extraction = get_best_face_embedding(candidate_frames_b64)
+    extraction = get_best_face_embedding(candidate_frames_b64, collect_all=True)
     if extraction["embedding"] is None:
         return {"score": 0.0, "verified": "fail", "reason": extraction["reason"]}
+
+    liveness = _check_liveness(
+        extraction.get("all_embeddings", []),
+        extraction.get("all_face_crops", []),
+    )
+    if not liveness["alive"]:
+        return {
+            "score": 0.0,
+            "verified": "fail",
+            "reason": liveness["reason"],
+            "liveness_scores": liveness["scores"],
+        }
 
     live = np.array(extraction["embedding"])
     enrolled_list = str_to_embeddings(enrolled_embeddings_str)
