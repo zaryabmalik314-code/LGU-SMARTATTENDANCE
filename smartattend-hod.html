@@ -205,6 +205,7 @@ tbody tr:hover td{background:rgba(22,31,54,.4)}
 .pill{display:inline-flex;align-items:center;gap:5px;padding:4px 12px;border-radius:20px;font-size:11.5px;font-weight:600;text-transform:capitalize}
 .pill-present{background:var(--green-bg);color:var(--green)}
 .pill-absent{background:var(--red-bg);color:var(--red)}
+.pill-waiting{background:rgba(148,163,184,.12);color:var(--text-3)}
 .pill-pending{background:var(--amber-bg);color:var(--amber)}
 .pill-approved{background:var(--green-bg);color:var(--green)}
 .pill-rejected{background:var(--red-bg);color:var(--red)}
@@ -487,6 +488,7 @@ const BASE_URL = (window.location.hostname === 'localhost' || window.location.ho
 let authToken = localStorage.getItem('hod_token') || null;
 let hodInfo = JSON.parse(localStorage.getItem('hod_info') || 'null');
 let facultyCache = [];
+var todayTimeWindow = null;
 
 /* =========================================================================
    API HELPER
@@ -615,7 +617,7 @@ function enterApp() {
   document.getElementById('app-view').style.display = 'block';
   document.getElementById('hod-dept-label').textContent = hodInfo?.department || '—';
   document.getElementById('dept-desc').textContent = "Today’s present/absent status for " + (hodInfo?.department || 'your department');
-  loadFaculty();
+  api('/api/time-windows/today').then(function(tw){ todayTimeWindow = tw; }).catch(function(){}).finally(function(){ loadFaculty(); });
   loadLeaveRequests();
   connectWebSocket();
 }
@@ -654,14 +656,30 @@ async function loadFaculty() {
 
 function isPresentToday(f) { return f.checked_in_today === true; }
 
+function isBeforeWindow() {
+  if (!todayTimeWindow || !todayTimeWindow.check_in_start) return false;
+  var now = new Date();
+  var parts = todayTimeWindow.check_in_start.split(':');
+  var windowStart = new Date(now);
+  windowStart.setHours(parseInt(parts[0],10), parseInt(parts[1]||0,10), 0, 0);
+  return now < windowStart;
+}
+
+function facultyStatus(f) {
+  if (isPresentToday(f)) return 'present';
+  if (isBeforeWindow()) return 'waiting';
+  return 'absent';
+}
+
 function renderFacultyTable() {
   var tbody = document.getElementById('faculty-tbody');
   var active = facultyCache.filter(function(f){ return f.is_active !== false && f.approval_status === 'approved'; });
   document.getElementById('stat-total').textContent = active.length;
   var present = 0, absent = 0;
-  active.forEach(function(f){ if (isPresentToday(f)) present++; else absent++; });
+  var beforeWindow = isBeforeWindow();
+  active.forEach(function(f){ if (isPresentToday(f)) present++; else if (!beforeWindow) absent++; });
   document.getElementById('stat-present').textContent = present;
-  document.getElementById('stat-absent').textContent = absent;
+  document.getElementById('stat-absent').textContent = beforeWindow ? '—' : absent;
 
   var q = (document.getElementById('att-search')?.value || '').trim().toLowerCase();
   if (q) {
@@ -674,15 +692,16 @@ function renderFacultyTable() {
     tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state"><div class="empty-title">' + (q ? 'No matches' : 'No approved faculty yet') + '</div><div class="empty-sub">' + (q ? 'Try a different name or teacher ID.' : 'Faculty in your department will show up here once approved.') + '</div></div></td></tr>';
     return;
   }
+  var statusLabels = {present:'Present', absent:'Absent', waiting:'Not Started'};
   tbody.innerHTML = active.map(function(f) {
-    var p = isPresentToday(f);
+    var st = facultyStatus(f);
     var safeName = (f.name||'').replace(/'/g,"\\'");
     return '<tr>' +
       '<td><span class="avatar">' + initials(f.name) + '</span></td>' +
       '<td><span class="faculty-link" onclick="openPersonalAnalytics(' + f.id + ',\'' + safeName + '\')">' + (f.name || '—') + '</span></td>' +
       '<td style="font-family:var(--font-mono);color:var(--text-2)">' + (f.teacher_id || '—') + '</td>' +
       '<td style="color:var(--text-3)">' + (f.email || '—') + '</td>' +
-      '<td><span class="pill pill-' + (p ? 'present' : 'absent') + '"><span class="pill-dot"></span>' + (p ? 'Present' : 'Absent') + '</span></td>' +
+      '<td><span class="pill pill-' + st + '"><span class="pill-dot"></span>' + statusLabels[st] + '</span></td>' +
       '</tr>';
   }).join('');
 }
