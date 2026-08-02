@@ -132,50 +132,57 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#1a1a2e;color:var(--g
 .pill-red{background:var(--rbg);color:var(--red)}.pill-red::before{background:var(--red)}
 .pill-navy{background:#e8f0fc;color:#1a3a8a}.pill-navy::before{background:#1e3a8a}
 
-/* FACE - PREMIUM BIOMETRIC SCANNER */
-.face-area{display:flex;flex-direction:column;align-items:center;padding:0}
-.face-val{font-size:12px;color:var(--g500);text-align:center;min-height:16px}
-.face-result{background:var(--gbg);border-radius:var(--r8);padding:12px;display:none;margin-top:10px}
-.match-row{display:flex;align-items:center;gap:10px}
-.match-avatar{width:36px;height:36px;border-radius:50%;background:var(--gold);font-size:12px;font-weight:700;color:var(--navy);display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.match-name{font-size:13px;font-weight:600;color:var(--navy)}
-.match-dept{font-size:11px;color:var(--g500)}
-.conf-badge{font-size:10px;background:#fff;border:1px solid var(--green);color:var(--green);padding:2px 8px;border-radius:var(--rpill);margin-top:4px;display:inline-block}
-#bioScanner{width:100%;background:#050a14;border-radius:14px;position:relative;overflow:hidden;height:300px;margin-bottom:12px;display:flex;align-items:center;justify-content:center}
-#bioVideo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);display:none;z-index:1;clip-path:ellipse(80px 102px at 50% 50%)}
-#bioCanvas{position:absolute;inset:0;width:100%;height:100%;transform:scaleX(-1);z-index:4;pointer-events:none}
-#bioMask{position:absolute;inset:0;z-index:3;pointer-events:none}
-#bioOval{position:absolute;z-index:5;width:160px;height:205px;border-radius:50%;border:2.5px solid rgba(255,255,255,.3);transition:border-color .5s,box-shadow .5s;pointer-events:none}
-#bioOval.detecting{border-color:rgba(0,180,255,.9);box-shadow:0 0 0 3px rgba(0,180,255,.15),0 0 24px rgba(0,180,255,.3)}
-#bioOval.verified{border-color:rgba(13,210,120,.95);box-shadow:0 0 0 4px rgba(13,210,120,.18),0 0 28px rgba(13,210,120,.4)}
-#bioOval.locked{border-color:rgba(13,210,120,.95);box-shadow:0 0 0 3px rgba(13,210,120,.18),0 0 26px rgba(13,210,120,.35)}
-#bioOval.bad{border-color:rgba(240,170,60,.9);box-shadow:0 0 0 3px rgba(240,170,60,.15),0 0 22px rgba(240,170,60,.28)}
-#bioBeam{position:absolute;z-index:6;width:140px;height:2px;background:linear-gradient(90deg,transparent,rgba(0,180,255,.0),rgba(0,180,255,.9),rgba(0,180,255,.9),rgba(0,180,255,.0),transparent);border-radius:2px;display:none;animation:bioScanDown 1.4s ease-in-out infinite;pointer-events:none;box-shadow:0 0 8px rgba(0,180,255,.5)}
-@keyframes bioScanDown{0%{top:10%;opacity:0}10%{opacity:1}90%{opacity:1}100%{top:88%;opacity:0}}
+/* FACE - MODERN BIOMETRIC SCANNER */
+.face-val{font-size:13px;color:var(--g500);text-align:center;min-height:18px}
+.face-result{background:var(--gbg);border-radius:var(--r14);padding:14px;display:none;margin-top:12px}
+.match-row{display:flex;align-items:center;gap:12px}
+.match-avatar{width:44px;height:44px;border-radius:50%;background:var(--gold);font-size:13px;font-weight:700;color:var(--navy);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.match-name{font-size:14px;font-weight:600;color:var(--navy)}
+.match-dept{font-size:12px;color:var(--g500)}
+.conf-badge{font-size:11px;background:#fff;border:1px solid var(--green);color:var(--green);padding:3px 10px;border-radius:var(--rpill);margin-top:4px;display:inline-block}
+.scan-viewport{width:100%;background:#050a14;position:relative;overflow:hidden;height:380px;display:flex;align-items:center;justify-content:center}
+.scan-viewport video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);display:none;z-index:1}
+.scan-viewport canvas{position:absolute;inset:0;width:100%;height:100%;transform:scaleX(-1);z-index:4;pointer-events:none}
+.scan-frame{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:200px;height:260px;z-index:5;pointer-events:none}
+.scan-frame::before{content:'';position:absolute;inset:-1px;border-radius:28px;border:2px solid rgba(255,255,255,.08)}
+.scan-corner{position:absolute;width:32px;height:32px;z-index:7}
+.scan-corner::before,.scan-corner::after{content:'';position:absolute;background:rgba(255,255,255,.6);border-radius:2px;transition:background .5s,box-shadow .5s}
+.scan-corner::before{width:32px;height:3px}
+.scan-corner::after{width:3px;height:32px}
+.scan-corner.tl{top:0;left:0}.scan-corner.tl::before{top:0;left:0;border-radius:2px 2px 0 0}.scan-corner.tl::after{top:0;left:0}
+.scan-corner.tr{top:0;right:0}.scan-corner.tr::before{top:0;right:0}.scan-corner.tr::after{top:0;right:0}
+.scan-corner.bl{bottom:0;left:0}.scan-corner.bl::before{bottom:0;left:0}.scan-corner.bl::after{bottom:0;left:0}
+.scan-corner.br{bottom:0;right:0}.scan-corner.br::before{bottom:0;right:0}.scan-corner.br::after{bottom:0;right:0}
+.scan-frame.detecting .scan-corner::before,.scan-frame.detecting .scan-corner::after{background:rgba(0,180,255,.95);box-shadow:0 0 12px rgba(0,180,255,.6)}
+.scan-frame.verified .scan-corner::before,.scan-frame.verified .scan-corner::after{background:rgba(74,222,128,.95);box-shadow:0 0 12px rgba(74,222,128,.6)}
+.scan-frame.bad .scan-corner::before,.scan-frame.bad .scan-corner::after{background:rgba(251,191,36,.95);box-shadow:0 0 12px rgba(251,191,36,.6)}
+@keyframes cornerPulse{0%,100%{opacity:1}50%{opacity:.5}}
+.scan-frame.detecting .scan-corner::before,.scan-frame.detecting .scan-corner::after{animation:cornerPulse 1.8s ease-in-out infinite}
+.scan-beam{position:absolute;z-index:6;left:50%;transform:translateX(-50%);width:180px;height:2px;background:linear-gradient(90deg,transparent 0%,rgba(0,180,255,.8) 30%,rgba(0,180,255,1) 50%,rgba(0,180,255,.8) 70%,transparent 100%);border-radius:2px;display:none;animation:beamSweep 2s ease-in-out infinite;pointer-events:none;box-shadow:0 0 16px rgba(0,180,255,.4),0 0 40px rgba(0,180,255,.15)}
+@keyframes beamSweep{0%{top:15%;opacity:0}8%{opacity:1}92%{opacity:1}100%{top:85%;opacity:0}}
 @keyframes fpDetecting{0%,100%{opacity:1}50%{opacity:.4}}
 .fp-detecting{animation:fpDetecting 1.5s ease-in-out infinite}
-#bioRec{position:absolute;top:14px;right:38px;display:flex;align-items:center;gap:4px;z-index:8;opacity:0;transition:opacity .4s}
-#bioRec .rdot{width:6px;height:6px;border-radius:50%;background:#e33;animation:livePulse 1s infinite}
-#bioRec span{font-size:9px;font-weight:700;color:rgba(255,255,255,.82);letter-spacing:.09em}
-#bioLabel{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);z-index:8;background:rgba(0,0,0,.58);padding:4px 16px;border-radius:20px;white-space:nowrap;backdrop-filter:blur(4px);transition:all .3s}
-#bioLabel span{font-size:10px;font-weight:600;color:rgba(255,255,255,.82);letter-spacing:.04em}
-#bioProgress{position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:8;display:none}
-#bioPct{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:11px;font-weight:700;color:rgba(0,200,255,.95);font-variant-numeric:tabular-nums}
-.bio-corner{position:absolute;width:18px;height:18px;z-index:7}
-.bio-corner.tl{top:10px;left:10px;border-top:2px solid rgba(255,255,255,.5);border-left:2px solid rgba(255,255,255,.5);border-radius:3px 0 0 0}
-.bio-corner.tr{top:10px;right:10px;border-top:2px solid rgba(255,255,255,.5);border-right:2px solid rgba(255,255,255,.5);border-radius:0 3px 0 0}
-.bio-corner.bl{bottom:10px;left:10px;border-bottom:2px solid rgba(255,255,255,.5);border-left:2px solid rgba(255,255,255,.5);border-radius:0 0 0 3px}
-.bio-corner.br{bottom:10px;right:10px;border-bottom:2px solid rgba(255,255,255,.5);border-right:2px solid rgba(255,255,255,.5);border-radius:0 0 3px 0}
-#bioIdle{position:absolute;z-index:2;display:flex;flex-direction:column;align-items:center;gap:8px}
-#bioIdle .fi{font-size:64px;opacity:.2}
-#bioIdle .ft{font-size:11px;color:rgba(255,255,255,.28);letter-spacing:.05em}
-#bioPhases{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-bottom:8px;min-height:28px}
-.bphase{display:flex;align-items:center;gap:4px;font-size:10px;font-weight:500;padding:4px 9px;border-radius:var(--rpill);background:var(--g50);color:var(--g500);border:1px solid var(--g100);transition:all .4s}
+.scan-rec{position:absolute;top:16px;left:16px;display:none;align-items:center;gap:6px;z-index:8;background:rgba(0,0,0,.5);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.1);border-radius:20px;padding:5px 12px}
+.scan-rec .rdot{width:7px;height:7px;border-radius:50%;background:#ef4444;animation:livePulse 1s infinite;flex-shrink:0}
+.scan-rec span{font-size:10px;font-weight:700;color:rgba(255,255,255,.85);letter-spacing:.08em}
+.scan-label{position:absolute;bottom:16px;left:0;right:0;text-align:center;z-index:8}
+.scan-label span{display:inline-block;background:rgba(0,0,0,.5);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.08);padding:6px 18px;border-radius:20px;font-size:11px;font-weight:600;color:rgba(255,255,255,.85);letter-spacing:.03em}
+.scan-progress{position:absolute;top:16px;right:16px;z-index:8;display:none;align-items:center;gap:7px;background:rgba(0,0,0,.5);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.1);border-radius:20px;padding:6px 14px}
+.scan-pct{font-size:12px;font-weight:700;color:#fff;font-variant-numeric:tabular-nums}
+.scan-idle{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px}
+.scan-idle-icon{width:120px;height:155px;border-radius:30px;border:2px dashed rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center}
+.scan-idle-text{font-size:12px;color:rgba(255,255,255,.3);letter-spacing:.04em}
+.scan-controls{padding:18px 20px 20px}
+.scan-phases{display:flex;gap:6px;margin-bottom:14px;flex-wrap:nowrap;overflow-x:auto}
+.bphase{display:flex;align-items:center;gap:4px;font-size:11px;font-weight:500;padding:5px 12px;border-radius:var(--rpill);background:var(--g50);color:var(--g500);border:1px solid var(--g100);transition:all .4s;white-space:nowrap}
 .bphase.active{background:#e8f4ff;color:#1260b3;border-color:#a8d0f5}
 .bphase.done{background:var(--gbg);color:var(--green);border-color:#a8e6cc}
 .bphase .tick{display:none}.bphase.done .tick{display:inline}
-.face-verified-badge{display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,var(--navy),#1e4fc2);color:#fff;font-size:10px;font-weight:600;padding:5px 12px;border-radius:var(--rpill);letter-spacing:.04em;box-shadow:0 2px 8px rgba(11,31,75,.25)}
+.face-verified-badge{display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,var(--navy),#1e4fc2);color:#fff;font-size:11px;font-weight:600;padding:6px 14px;border-radius:var(--rpill);letter-spacing:.04em;box-shadow:0 2px 8px rgba(11,31,75,.25)}
 @keyframes scanDown{0%{top:18%}100%{top:78%}}
+/* compat aliases for old IDs */
+#bioScanner{width:100%;position:relative;overflow:hidden}
+#bioMask{display:none}
 
 /* CONFIRM */
 .confirm-hero{background:var(--navy);border-radius:var(--r14);padding:26px 20px;text-align:center;margin-bottom:14px}
@@ -538,48 +545,46 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
       <!-- Step 2: Face scan -->
       <div id="fpStep2" style="display:none;padding:0 20px 20px">
         <div style="background:#fff;border-radius:16px;border:1px solid var(--g100);overflow:hidden;box-shadow:0 2px 12px rgba(11,31,75,.07)">
-          <!-- Camera viewport — dark, matching the exit-scan design -->
-          <div style="position:relative;background:#060e1e;height:280px;overflow:hidden">
+          <!-- Camera viewport -->
+          <div class="scan-viewport" style="height:380px;background:#050a14">
             <!-- Idle state -->
-            <div id="fpIdle" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:2">
-              <div style="width:110px;height:140px;border-radius:55px;border:2px dashed rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center">
-                <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <circle cx="24" cy="18" r="9" stroke="rgba(255,255,255,.3)" stroke-width="2"/>
-                  <path d="M8 40c0-8.837 7.163-16 16-16s16 7.163 16 16" stroke="rgba(255,255,255,.3)" stroke-width="2" stroke-linecap="round"/>
-                </svg>
+            <div id="fpIdle" class="scan-idle">
+              <div class="scan-idle-icon">
+                <svg width="56" height="56" viewBox="0 0 56 56" fill="none"><circle cx="28" cy="20" r="11" stroke="rgba(255,255,255,.25)" stroke-width="2"/><path d="M8 48c0-11.046 8.954-20 20-20s20 8.954 20 20" stroke="rgba(255,255,255,.25)" stroke-width="2" stroke-linecap="round"/></svg>
               </div>
-              <div style="font-size:11px;color:rgba(255,255,255,.35);letter-spacing:.04em">Tap start to begin face scan</div>
+              <div class="scan-idle-text">Tap start to verify your identity</div>
+            </div>
+            <!-- Scan frame with corner brackets -->
+            <div class="scan-frame" id="fpOval">
+              <div class="scan-corner tl"></div>
+              <div class="scan-corner tr"></div>
+              <div class="scan-corner bl"></div>
+              <div class="scan-corner br"></div>
             </div>
             <!-- Video -->
-            <video id="fpVideo" autoplay playsinline muted style="display:none;position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);z-index:1"></video>
-            <!-- Canvas -->
-            <canvas id="fpCanvas" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;transform:scaleX(-1);z-index:4;display:none"></canvas>
-            <!-- Face oval with vignette -->
-            <div id="fpOval" style="display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-52%);width:130px;height:168px;border-radius:50%;border:3px solid rgba(255,255,255,.55);box-shadow:0 0 0 2000px rgba(0,0,0,.72);z-index:3;pointer-events:none;transition:border-color .4s,box-shadow .4s"></div>
+            <video id="fpVideo" autoplay playsinline muted></video>
+            <canvas id="fpCanvas" style="display:none"></canvas>
             <!-- Scan beam -->
-            <div id="fpBeam" style="display:none;position:absolute;left:50%;transform:translateX(-50%);width:130px;height:2px;background:linear-gradient(90deg,transparent,rgba(0,180,255,.95),transparent);border-radius:2px;animation:bioScanDown 1.5s ease-in-out infinite;pointer-events:none;z-index:5;box-shadow:0 0 10px rgba(0,180,255,.4)"></div>
+            <div id="fpBeam" class="scan-beam"></div>
             <!-- REC badge -->
-            <div id="fpRec" style="display:none;position:absolute;top:12px;left:14px;z-index:8;align-items:center;gap:5px;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(6px);border-radius:20px;padding:4px 10px">
-              <span style="width:6px;height:6px;border-radius:50%;background:#ef4444;animation:livePulse 1s infinite;display:inline-block"></span>
-              <span style="font-size:9px;font-weight:700;color:rgba(255,255,255,.8);letter-spacing:.08em">VERIFYING</span>
-            </div>
-            <!-- Progress ring overlay -->
-            <div id="fpProgress" style="display:none;position:absolute;top:10px;right:14px;z-index:8;align-items:center;gap:6px;background:rgba(0,0,0,.5);backdrop-filter:blur(6px);border-radius:20px;padding:5px 11px">
-              <svg width="22" height="22" viewBox="0 0 36 36" style="transform:rotate(-90deg)">
+            <div id="fpRec" class="scan-rec"><span class="rdot"></span><span>VERIFYING</span></div>
+            <!-- Progress ring -->
+            <div id="fpProgress" class="scan-progress">
+              <svg width="24" height="24" viewBox="0 0 36 36" style="transform:rotate(-90deg)">
                 <circle cx="18" cy="18" r="16" fill="none" stroke="rgba(255,255,255,.15)" stroke-width="3"/>
                 <circle id="fpRing" cx="18" cy="18" r="16" fill="none" stroke="#60a5fa" stroke-width="3" stroke-dasharray="100.5" stroke-dashoffset="100.5" stroke-linecap="round" style="transition:stroke-dashoffset .4s"/>
               </svg>
-              <span id="fpPct" style="font-size:11px;font-weight:700;color:#fff">0%</span>
+              <span id="fpPct" class="scan-pct">0%</span>
             </div>
           </div>
           <!-- Controls area -->
-          <div style="padding:14px 16px">
-            <div id="fpLabel" style="font-size:12px;font-weight:600;color:var(--navy);margin-bottom:6px">Ready to scan</div>
-            <div style="height:3px;background:var(--g100);border-radius:3px;margin-bottom:6px;overflow:hidden">
-              <div id="fpBar" style="height:100%;width:0%;background:linear-gradient(90deg,#3b82f6,#06b6d4);border-radius:3px;transition:width .4s"></div>
+          <div class="scan-controls">
+            <div id="fpLabel" style="font-size:13px;font-weight:600;color:var(--navy);margin-bottom:8px">Ready to scan</div>
+            <div style="height:4px;background:var(--g100);border-radius:4px;margin-bottom:8px;overflow:hidden">
+              <div id="fpBar" style="height:100%;width:0%;background:linear-gradient(90deg,#3b82f6,#06b6d4);border-radius:4px;transition:width .4s"></div>
             </div>
-            <div id="fpVal" style="font-size:11px;color:var(--g500);margin-bottom:14px;min-height:15px">Look at the camera and hold steady</div>
-            <button class="btn-primary" id="fpScanBtn" onclick="forgotPinRunScan()" style="border-radius:12px;background:linear-gradient(135deg,var(--navy),#1e40af)">
+            <div id="fpVal" class="face-val" style="margin-bottom:16px">Look at the camera and hold steady</div>
+            <button class="btn-primary" id="fpScanBtn" onclick="forgotPinRunScan()" style="border-radius:14px;padding:16px;font-size:15px;background:linear-gradient(135deg,var(--navy),#1e40af)">
               <span class="btn-ico"><svg class="i"><use href="#ic-camera"/></svg></span> Start Face Scan
             </button>
           </div>
@@ -648,91 +653,85 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
         </div>
       </div>
 
-      <div style="padding:16px 16px 0">
-      <div class="card" style="text-align:center;border:1px solid var(--g100);margin-top:-14px;position:relative;z-index:2;box-shadow:0 4px 20px rgba(11,31,75,.08)">
+      <div style="padding:18px 18px 0">
+      <div class="card" style="text-align:center;border:1px solid var(--g100);margin-top:-16px;position:relative;z-index:2;box-shadow:0 4px 24px rgba(11,31,75,.1);border-radius:20px;padding:28px 22px 24px">
 
         <!-- Idle check-in state -->
         <div id="checkinIdle">
-          <div style="margin-bottom:14px">
-            <div style="width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,rgba(201,168,76,.12),rgba(201,168,76,.06));border:1.5px solid rgba(201,168,76,.25);display:flex;align-items:center;justify-content:center;margin:0 auto 10px;color:var(--gold);font-size:24px"><svg class="i"><use href="#ic-camera"/></svg></div>
-            <div style="font-size:14px;font-weight:700;color:var(--navy);margin-bottom:3px">Mark Attendance</div>
-            <div style="font-size:11px;color:var(--g500);line-height:1.5;max-width:260px;margin:0 auto">Scan your face to check in. GPS is verified automatically in the background.</div>
+          <div style="margin-bottom:20px">
+            <div style="width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,rgba(201,168,76,.12),rgba(201,168,76,.06));border:2px solid rgba(201,168,76,.2);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;color:var(--gold);font-size:30px"><svg class="i"><use href="#ic-camera"/></svg></div>
+            <div style="font-size:18px;font-weight:700;color:var(--navy);margin-bottom:6px">Mark Attendance</div>
+            <div style="font-size:13px;color:var(--g500);line-height:1.6;max-width:280px;margin:0 auto">Scan your face to check in. GPS is verified automatically in the background.</div>
           </div>
-          <button class="scan-cta" id="scanFaceBtn" disabled onclick="openScanFace()" style="border-radius:14px;padding:14px 24px;font-size:14px"><span class="btn-ico"><svg class="i"><use href="#ic-camera"/></svg></span>Scan Face to Check In</button>
+          <button class="scan-cta" id="scanFaceBtn" disabled onclick="openScanFace()" style="border-radius:16px;padding:16px 28px;font-size:15px;font-weight:600"><span class="btn-ico"><svg class="i"><use href="#ic-camera"/></svg></span>Scan Face to Check In</button>
         </div>
 
         <!-- Face scan card (hidden until location verified + tapped) -->
         <div id="checkinFaceCard" style="display:none">
-          <div style="background:#fff;border-radius:16px;border:1px solid #e8e6e2;overflow:hidden;margin-bottom:12px;box-shadow:0 2px 12px rgba(11,31,75,.07)">
+          <div style="background:#fff;border-radius:20px;border:1px solid #e8e6e2;overflow:hidden;margin-bottom:14px;box-shadow:0 4px 24px rgba(11,31,75,.1)">
             <!-- Camera viewport -->
-            <div id="bioScanner" style="position:relative;background:#060e1e;height:270px;overflow:hidden">
+            <div id="bioScanner" class="scan-viewport" style="height:380px;background:#050a14">
               <!-- Idle state -->
-              <div id="bioIdle" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:2">
-                <div style="width:110px;height:140px;border-radius:55px;border:2px dashed rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;position:relative">
-                  <svg width="48" height="48" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="18" r="9" stroke="rgba(255,255,255,.3)" stroke-width="2"/><path d="M8 40c0-8.837 7.163-16 16-16s16 7.163 16 16" stroke="rgba(255,255,255,.3)" stroke-width="2" stroke-linecap="round"/></svg>
+              <div id="bioIdle" class="scan-idle">
+                <div class="scan-idle-icon">
+                  <svg width="56" height="56" viewBox="0 0 56 56" fill="none"><circle cx="28" cy="20" r="11" stroke="rgba(255,255,255,.25)" stroke-width="2"/><path d="M8 48c0-11.046 8.954-20 20-20s20 8.954 20 20" stroke="rgba(255,255,255,.25)" stroke-width="2" stroke-linecap="round"/></svg>
                 </div>
-                <div style="font-size:11px;color:rgba(255,255,255,.35);letter-spacing:.04em">Position face in frame to check in</div>
+                <div class="scan-idle-text">Position your face in the frame</div>
+              </div>
+              <!-- Scan frame with corner brackets -->
+              <div class="scan-frame" id="bioOval">
+                <div class="scan-corner tl"></div>
+                <div class="scan-corner tr"></div>
+                <div class="scan-corner bl"></div>
+                <div class="scan-corner br"></div>
               </div>
               <!-- Video -->
-              <video id="bioVideo" autoplay playsinline muted style="display:none;position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);z-index:1"></video>
-              <!-- Canvas -->
-              <canvas id="bioCanvas" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;transform:scaleX(-1);z-index:4"></canvas>
-              <!-- Vignette mask -->
-              <svg id="bioMask" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;z-index:3;pointer-events:none;display:none">
-                <defs><mask id="bioVignetteMask"><rect width="100" height="100" fill="white"/><ellipse cx="50" cy="48" rx="18" ry="26" fill="black"/></mask></defs>
-                <rect width="100" height="100" fill="rgba(0,0,0,.72)" mask="url(#bioVignetteMask)"/>
-              </svg>
-              <!-- Face oval -->
-              <div id="bioOval" style="display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-52%);width:130px;height:168px;border-radius:50%;border:3px solid rgba(255,255,255,.55);box-shadow:0 0 0 2000px rgba(0,0,0,.72);z-index:3;pointer-events:none;transition:border-color .4s,box-shadow .4s"></div>
+              <video id="bioVideo" autoplay playsinline muted></video>
+              <canvas id="bioCanvas"></canvas>
+              <svg id="bioMask" style="display:none"></svg>
               <!-- Scan beam -->
-              <div id="bioBeam" style="display:none;position:absolute;left:50%;transform:translateX(-50%);width:130px;height:2px;background:linear-gradient(90deg,transparent,rgba(0,180,255,.95),transparent);border-radius:2px;animation:bioScanDown 1.5s ease-in-out infinite;pointer-events:none;z-index:5;box-shadow:0 0 10px rgba(0,180,255,.4)"></div>
+              <div id="bioBeam" class="scan-beam"></div>
               <!-- REC badge -->
-              <div id="bioRec" style="display:none;position:absolute;top:12px;left:14px;z-index:8;align-items:center;gap:5px;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(6px);border-radius:20px;padding:4px 10px">
-                <span class="rdot" style="width:6px;height:6px;border-radius:50%;background:#ef4444;animation:livePulse 1s infinite;display:inline-block"></span>
-                <span style="font-size:9px;font-weight:700;color:rgba(255,255,255,.8);letter-spacing:.08em">SCANNING</span>
-              </div>
-              <!-- Progress ring overlay -->
-              <div id="bioProgress" style="display:none;position:absolute;top:10px;right:14px;z-index:8;align-items:center;gap:6px;background:rgba(0,0,0,.5);backdrop-filter:blur(6px);border-radius:20px;padding:5px 11px">
-                <svg width="22" height="22" viewBox="0 0 36 36" style="transform:rotate(-90deg)">
+              <div id="bioRec" class="scan-rec"><span class="rdot"></span><span>VERIFYING</span></div>
+              <!-- Progress ring -->
+              <div id="bioProgress" class="scan-progress">
+                <svg width="24" height="24" viewBox="0 0 36 36" style="transform:rotate(-90deg)">
                   <circle cx="18" cy="18" r="16" fill="none" stroke="rgba(255,255,255,.15)" stroke-width="3"/>
                   <circle id="bioRing" cx="18" cy="18" r="16" fill="none" stroke="#60a5fa" stroke-width="3" stroke-dasharray="100.5" stroke-dashoffset="100.5" stroke-linecap="round" style="transition:stroke-dashoffset .4s"/>
                 </svg>
-                <span id="bioPct" style="font-size:11px;font-weight:700;color:#fff">0%</span>
+                <span id="bioPct" class="scan-pct">0%</span>
               </div>
               <!-- Label -->
-              <div id="bioLabel" style="display:none;position:absolute;bottom:14px;left:0;right:0;text-align:center;z-index:8"><span id="bioLabelTxt" style="display:inline-block;background:rgba(0,0,0,.5);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.1);border-radius:20px;padding:5px 14px;font-size:10px;font-weight:600;color:rgba(255,255,255,.8);letter-spacing:.03em">Tap Start to begin</span></div>
+              <div id="bioLabel" class="scan-label"><span id="bioLabelTxt">Tap Start to begin</span></div>
             </div>
 
             <!-- Controls area -->
-            <div style="padding:14px 16px">
-              <!-- Phase pills -->
-              <div id="bioPhases" style="display:flex;gap:5px;margin-bottom:12px;flex-wrap:nowrap;overflow-x:auto">
+            <div class="scan-controls">
+              <div id="bioPhases" class="scan-phases">
                 <div id="ph0" class="bphase"><svg class="i"><use href="#ic-camera"/></svg> Camera</div>
                 <div id="ph1" class="bphase"><svg class="i"><use href="#ic-camera"/></svg> Recording</div>
                 <div id="ph2" class="bphase"><svg class="i"><use href="#ic-user"/></svg> Filtering</div>
                 <div id="ph3" class="bphase"><svg class="i"><use href="#ic-check-circle"/></svg> Submitting</div>
               </div>
-              <!-- Label & bar -->
-              <div class="face-val" id="faceVal" style="font-size:11px;color:var(--g500);margin-bottom:8px">Ready to scan</div>
-              <div style="height:3px;background:var(--g100);border-radius:3px;margin-bottom:14px;overflow:hidden">
-                <div id="faceBar" style="height:100%;width:0%;background:linear-gradient(90deg,#3b82f6,#06b6d4);border-radius:3px;transition:width .4s"></div>
+              <div class="face-val" id="faceVal" style="margin-bottom:10px">Ready to scan</div>
+              <div style="height:4px;background:var(--g100);border-radius:4px;margin-bottom:16px;overflow:hidden">
+                <div id="faceBar" style="height:100%;width:0%;background:linear-gradient(90deg,#3b82f6,#06b6d4);border-radius:4px;transition:width .4s"></div>
               </div>
-              <!-- Face result -->
-              <div class="face-result" id="faceResult" style="display:none;margin-bottom:14px">
-                <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-                  <div class="match-avatar" id="faceResultAvatar" style="width:40px;height:40px;border-radius:50%;background:var(--gold);font-size:13px;font-weight:700;color:var(--navy);display:flex;align-items:center;justify-content:center">--</div>
+              <div class="face-result" id="faceResult" style="margin-bottom:16px">
+                <div class="match-row" style="margin-bottom:10px">
+                  <div class="match-avatar" id="faceResultAvatar">--</div>
                   <div style="flex:1;min-width:0">
-                    <div class="match-name" id="faceResultName" style="font-size:13px;font-weight:600;color:var(--navy)">&mdash;</div>
-                    <div class="match-dept" id="faceResultDept" style="font-size:11px;color:var(--g500)">&mdash;</div>
-                    <div class="conf-badge" id="faceConfBadge" style="font-size:10px;color:var(--g500);margin-top:2px"><svg class="i"><use href="#ic-loader"/></svg> Verifying with server&hellip;</div>
+                    <div class="match-name" id="faceResultName">&mdash;</div>
+                    <div class="match-dept" id="faceResultDept">&mdash;</div>
+                    <div class="conf-badge" id="faceConfBadge"><svg class="i"><use href="#ic-loader"/></svg> Verifying with server&hellip;</div>
                   </div>
                 </div>
-                <div><span class="face-verified-badge" id="faceVerifiedBadge" style="display:inline-flex;align-items:center;gap:5px;background:linear-gradient(135deg,#6b7280,#4b5563);color:#fff;border-radius:20px;padding:5px 12px;font-size:10px;font-weight:600"><svg class="i"><use href="#ic-loader"/></svg> Awaiting server verification&hellip;</span></div>
+                <div><span class="face-verified-badge" id="faceVerifiedBadge"><svg class="i"><use href="#ic-loader"/></svg> Awaiting server verification&hellip;</span></div>
               </div>
-              <button class="btn-primary" id="faceBtn" onclick="runFace()" style="border-radius:12px;background:linear-gradient(135deg,var(--navy),#1e40af)"><span class="btn-ico"><svg class="i"><use href="#ic-camera"/></svg></span>Start Face Scan</button>
+              <button class="btn-primary" id="faceBtn" onclick="runFace()" style="border-radius:14px;padding:16px;font-size:15px;background:linear-gradient(135deg,var(--navy),#1e40af)"><span class="btn-ico"><svg class="i"><use href="#ic-camera"/></svg></span>Start Face Scan</button>
             </div>
           </div>
-          <button class="btn-outline" onclick="closeScanFace()" style="border-radius:12px;border-color:var(--g100);color:var(--g700)"><svg class="i"><use href="#ic-chevron-left"/></svg> Cancel</button>
+          <button class="btn-outline" onclick="closeScanFace()" style="border-radius:14px;padding:14px"><svg class="i"><use href="#ic-chevron-left"/></svg> Cancel</button>
         </div>
       </div>
       </div>
@@ -1035,63 +1034,59 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
 
         <!-- STEP 1: FACE -->
         <div id="xstep1" style="display:none">
-          <div style="background:#fff;border-radius:16px;border:1px solid #e8e6e2;overflow:hidden;margin-bottom:12px;box-shadow:0 2px 12px rgba(11,31,75,.07)">
+          <div style="background:#fff;border-radius:20px;border:1px solid #e8e6e2;overflow:hidden;margin-bottom:14px;box-shadow:0 4px 24px rgba(11,31,75,.1)">
             <!-- Camera viewport -->
-            <div style="position:relative;background:#060e1e;height:270px;overflow:hidden">
+            <div class="scan-viewport" style="height:380px;background:#050a14">
               <!-- Idle state -->
-              <div id="xBioIdle" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:2">
-                <div style="width:110px;height:140px;border-radius:55px;border:2px dashed rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;position:relative">
-                  <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <circle cx="24" cy="18" r="9" stroke="rgba(255,255,255,.3)" stroke-width="2"/>
-                    <path d="M8 40c0-8.837 7.163-16 16-16s16 7.163 16 16" stroke="rgba(255,255,255,.3)" stroke-width="2" stroke-linecap="round"/>
-                  </svg>
+              <div id="xBioIdle" class="scan-idle">
+                <div class="scan-idle-icon">
+                  <svg width="56" height="56" viewBox="0 0 56 56" fill="none"><circle cx="28" cy="20" r="11" stroke="rgba(255,255,255,.25)" stroke-width="2"/><path d="M8 48c0-11.046 8.954-20 20-20s20 8.954 20 20" stroke="rgba(255,255,255,.25)" stroke-width="2" stroke-linecap="round"/></svg>
                 </div>
-                <div style="font-size:11px;color:rgba(255,255,255,.35);letter-spacing:.04em">Position face in frame to scan</div>
+                <div class="scan-idle-text">Position your face in the frame</div>
+              </div>
+              <!-- Scan frame with corner brackets -->
+              <div class="scan-frame" id="xBioOval">
+                <div class="scan-corner tl"></div>
+                <div class="scan-corner tr"></div>
+                <div class="scan-corner bl"></div>
+                <div class="scan-corner br"></div>
               </div>
               <!-- Video -->
-              <video id="xBioVideo" autoplay playsinline muted style="display:none;position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);z-index:1"></video>
-              <!-- Canvas -->
-              <canvas id="xBioCanvas" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;transform:scaleX(-1);z-index:4"></canvas>
-              <!-- Face oval -->
-              <div id="xBioOval" style="display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-52%);width:130px;height:168px;border-radius:50%;border:3px solid rgba(255,255,255,.55);box-shadow:0 0 0 2000px rgba(0,0,0,.72);z-index:3;pointer-events:none;transition:border-color .4s,box-shadow .4s"></div>
+              <video id="xBioVideo" autoplay playsinline muted></video>
+              <canvas id="xBioCanvas"></canvas>
               <!-- Scan beam -->
-              <div id="xBioBeam" style="display:none;position:absolute;left:50%;transform:translateX(-50%);width:130px;height:2px;background:linear-gradient(90deg,transparent,rgba(0,180,255,.95),transparent);border-radius:2px;animation:bioScanDown 1.5s ease-in-out infinite;pointer-events:none;z-index:5;box-shadow:0 0 10px rgba(0,180,255,.4)"></div>
+              <div id="xBioBeam" class="scan-beam"></div>
               <!-- REC badge -->
-              <div id="xBioRec" style="display:none;position:absolute;top:12px;left:14px;z-index:8;align-items:center;gap:5px;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(6px);border-radius:20px;padding:4px 10px">
-                <span style="width:6px;height:6px;border-radius:50%;background:#ef4444;animation:livePulse 1s infinite;display:inline-block"></span>
-                <span style="font-size:9px;font-weight:700;color:rgba(255,255,255,.8);letter-spacing:.08em">SCANNING</span>
-              </div>
-              <!-- Progress ring overlay -->
-              <div id="xBioProgress" style="display:none;position:absolute;top:10px;right:14px;z-index:8;align-items:center;gap:6px;background:rgba(0,0,0,.5);backdrop-filter:blur(6px);border-radius:20px;padding:5px 11px">
-                <svg width="22" height="22" viewBox="0 0 36 36" style="transform:rotate(-90deg)">
+              <div id="xBioRec" class="scan-rec"><span class="rdot"></span><span>VERIFYING</span></div>
+              <!-- Progress ring -->
+              <div id="xBioProgress" class="scan-progress">
+                <svg width="24" height="24" viewBox="0 0 36 36" style="transform:rotate(-90deg)">
                   <circle cx="18" cy="18" r="16" fill="none" stroke="rgba(255,255,255,.15)" stroke-width="3"/>
                   <circle id="xBioRing" cx="18" cy="18" r="16" fill="none" stroke="#60a5fa" stroke-width="3" stroke-dasharray="100.5" stroke-dashoffset="100.5" stroke-linecap="round" style="transition:stroke-dashoffset .4s"/>
                 </svg>
-                <span id="xBioPct" style="font-size:11px;font-weight:700;color:#fff">0%</span>
+                <span id="xBioPct" class="scan-pct">0%</span>
               </div>
             </div>
 
             <!-- Controls area -->
-            <div style="padding:14px 16px">
-              <!-- Phase pills -->
-              <div style="display:flex;gap:5px;margin-bottom:12px;flex-wrap:nowrap;overflow-x:auto">
+            <div class="scan-controls">
+              <div class="scan-phases">
                 <div id="xph0" class="bphase"><svg class="i"><use href="#ic-camera"/></svg> Camera</div>
                 <div id="xph1" class="bphase"><svg class="i"><use href="#ic-camera"/></svg> Recording</div>
                 <div id="xph2" class="bphase"><svg class="i"><use href="#ic-user"/></svg> Processing</div>
                 <div id="xph3" class="bphase"><svg class="i"><use href="#ic-check-circle"/></svg> Done</div>
               </div>
-              <!-- Label & bar -->
-              <div id="xBioLabelTxt" style="font-size:11px;color:var(--g500);margin-bottom:8px">Ready — tap start to begin exit scan</div>
-              <div style="height:3px;background:var(--g100);border-radius:3px;margin-bottom:14px;overflow:hidden">
-                <div id="xFaceBar" style="height:100%;width:0%;background:linear-gradient(90deg,#3b82f6,#06b6d4);border-radius:3px;transition:width .4s"></div>
+              <div id="xBioLabelTxt" class="face-val" style="margin-bottom:10px">Ready — tap start to begin exit scan</div>
+              <div style="height:4px;background:var(--g100);border-radius:4px;margin-bottom:16px;overflow:hidden">
+                <div id="xFaceBar" style="height:100%;width:0%;background:linear-gradient(90deg,#3b82f6,#06b6d4);border-radius:4px;transition:width .4s"></div>
               </div>
-              <div id="xFaceVal" style="font-size:11px;color:var(--g500);margin-bottom:12px;min-height:15px">Position face in frame</div>
-              <button class="btn-primary" id="xFaceBtn" onclick="runExitFace()" style="border-radius:12px;background:linear-gradient(135deg,var(--navy),#1e40af)">
+              <div id="xFaceVal" class="face-val" style="margin-bottom:14px">Position face in frame</div>
+              <button class="btn-primary" id="xFaceBtn" onclick="runExitFace()" style="border-radius:14px;padding:16px;font-size:15px;background:linear-gradient(135deg,var(--navy),#1e40af)">
                 <span><svg class="i"><use href="#ic-camera"/></svg></span> Start Exit Face Scan
               </button>
             </div>
           </div>
-          <button class="btn-outline" onclick="exitBackToGate()" style="border-radius:12px;border-color:var(--g100);color:var(--g700)"><svg class="i"><use href="#ic-chevron-left"/></svg> Cancel</button>
+          <button class="btn-outline" onclick="exitBackToGate()" style="border-radius:14px;padding:14px"><svg class="i"><use href="#ic-chevron-left"/></svg> Cancel</button>
         </div>
 
         <!-- STEP 2: CONFIRM -->
@@ -1393,7 +1388,7 @@ function stopBioCamera(){
 //     clip, blur-filtered client-side so we're not sending obviously
 //     unusable frames — the backend picks the best one itself.
 // The oval / progress ring / phase pills are kept as decorative
-// guidance (no live "is a face in the oval" check is possible
+// guidance (no live "is a face in the frame" check is possible
 // without a local detector), and there's no local liveness/blink
 // check any more — that responsibility also moves server-side.
 // ============================================================
@@ -1512,20 +1507,11 @@ function onFaceMeshResults(results){
 // is accepted and frames are being banked.
 function setOvalState(oval,state){
   if(!oval)return;
-  var mask='0 0 0 2000px rgba(0,0,0,.72)';
-  if(state==='locked'){
-    oval.style.borderColor='rgba(13,210,120,.98)';
-    oval.style.boxShadow=mask+', 0 0 0 4px rgba(13,210,120,.30), 0 0 26px rgba(13,210,120,.45)';
-  } else if(state==='near'){
-    oval.style.borderColor='rgba(245,158,11,.95)';
-    oval.style.boxShadow=mask+', 0 0 0 3px rgba(245,158,11,.22)';
-  } else if(state==='bad'){
-    oval.style.borderColor='rgba(239,68,68,.9)';
-    oval.style.boxShadow=mask+', 0 0 0 3px rgba(239,68,68,.20)';
-  } else {
-    oval.style.borderColor='rgba(255,255,255,.55)';
-    oval.style.boxShadow=mask;
-  }
+  var base='scan-frame';
+  if(state==='locked') oval.className=base+' verified';
+  else if(state==='near') oval.className=base+' detecting';
+  else if(state==='bad') oval.className=base+' bad';
+  else oval.className=base;
 }
 
 function getFaceMesh(){
@@ -1647,7 +1633,7 @@ function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,
   // no live landmarks — but keep it wiped so nothing stale shows).
   if(canvas){var c=canvas.getContext('2d');c.clearRect(0,0,canvas.width,canvas.height);}
 
-  oval.className='detecting';
+  oval.className='scan-frame detecting';
   rec.style.display='flex';rec.style.opacity='1';
   if(progress&&progress.style)progress.style.display='block';
 
@@ -1668,13 +1654,13 @@ function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,
     if(isEnroll){
       msgs=[
         ['Get ready — hold your device steady','Starting capture…'],
-        ['Look straight at the camera','Align your face in the oval'],
+        ['Look straight at the camera','Align your face in the frame'],
         ['Slowly turn your head to one side','Keep turning'],
         ['Now slowly turn the other way','Keep turning']
       ];
     } else {
       msgs=[
-        ['Align your face in the oval','Starting capture…'],
+        ['Align your face in the frame','Starting capture…'],
         ['Turn your head slightly or blink','Checking liveness…'],
         ['Hold still — capturing frames','Recording…'],
         ['Almost done…','Finalising']
@@ -1743,7 +1729,7 @@ function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,
   function failStep(reason){
     scanDone=true;
     if(faceInt){clearInterval(faceInt);faceInt=null;}
-    oval.className='error';
+    oval.className='scan-frame bad';
     label.innerHTML='<svg class="i"><use href="#ic-alert"/></svg> Scan Incomplete';
     val.textContent=reason;
     if(progress&&progress.style)progress.style.display='none';
@@ -1763,7 +1749,7 @@ function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,
     var livenessScore = livenessDiffCount > 0 ? (totalLivenessDiff / livenessDiffCount) : 0;
     console.log('[Liveness] Score (informational only):', livenessScore);
 
-    oval.className='verified';setOvalState(oval,'locked');
+    oval.className='scan-frame verified';setOvalState(oval,'locked');
     beam.style.display='none';
     rec.style.opacity='0';
     if(progress&&progress.style)progress.style.display='none';
@@ -1785,7 +1771,7 @@ function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,
       // trust, so it is better to retry than to enrol weak vectors.
       if(images.length<3){
         console.error('[face capture] Enrollment ended with only '+images.length+' angle(s): '+capturedOrder.join(', '));
-        oval.className='error';setOvalState(oval,'bad');
+        oval.className='scan-frame bad';setOvalState(oval,'bad');
         label.innerHTML='<svg class="i"><use href="#ic-alert"/></svg> Scan Incomplete';
         val.textContent='Only '+images.length+' angle(s) captured. Please retry in good light and follow each prompt.';
         if(progress&&progress.style)progress.style.display='none';
@@ -1811,7 +1797,7 @@ function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,
     // here, tell the user, and don't call any onXScanComplete callback.
     if(!images.length){
       console.error('[face capture] 0 frames captured for mode='+mode+' — aborting before any submission.');
-      oval.className='error';setOvalState(oval,'bad');
+      oval.className='scan-frame bad';setOvalState(oval,'bad');
       label.innerHTML='<svg class="i"><use href="#ic-alert"/></svg> Face Capture Failed';
       val.textContent='No frames were captured — check camera permissions and try again.';
       if(progress&&progress.style)progress.style.display='none';
@@ -1890,28 +1876,28 @@ function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,
         label.classList.remove('fp-detecting');
         if(meshFallback && !faceMeshDetected){
           var cLeft=Math.max(0,Math.ceil((totalMs-elapsed)/1000));
-          oval.className='near';
+          oval.className='scan-frame detecting';
           label.textContent='Hold still';
-          val.textContent='Capturing in '+cLeft+'s — keep your face in the oval';
+          val.textContent='Capturing in '+cLeft+'s — keep your face in the frame';
         } else {
-          oval.className='locked';
+          oval.className='scan-frame verified';
           label.textContent='Face detected';
           val.textContent='Hold still — scanning';
         }
         if(attLostFace){ attLostFace=false; attNoFaceMs=0; }
       } else {
-        oval.className='near';
+        oval.className='scan-frame detecting';
         attLostFace=true;
         label.textContent='Detecting face…';
         label.classList.add('fp-detecting');
-        val.textContent='Center your face in the oval';
+        val.textContent='Center your face in the frame';
         attNoFaceMs+=sampleMs;
         // No auto-cancel: guided mode always kicks in after MESH_GRACE_MS
         if(attNoFaceMs>=ATT_NOFACE_TIMEOUT_MS && false && !scanDone){
           scanDone=true;
           clearInterval(faceInt);
           faceInt=null;
-          oval.className='bad';
+          oval.className='scan-frame bad';
           rec.style.display='none';
           if(progress&&progress.style)progress.style.display='none';
           val.innerHTML=faceAlertHTML('error','No face detected — nothing was submitted.');
@@ -2012,7 +1998,7 @@ function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,
         // enrollment feeling hard, more than the pose itself.
         var framing=null;
         if(!tracking){
-          framing='Center your face in the oval';
+          framing='Center your face in the frame';
         } else if(currentFaceSpan<0.09){
           framing='Move a little closer';
         } else if(currentFaceSpan>0.55){
@@ -2091,7 +2077,7 @@ function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,
             finish();
             return;
           }
-          failStep('Couldn\'t capture that angle. Move into brighter light, keep your whole face in the oval, and retry.');
+          failStep('Couldn\'t capture that angle. Move into brighter light, keep your whole face in the frame, and retry.');
           return;
         }
       }
@@ -2317,7 +2303,7 @@ function runExitFace(){
     bioOval.style.display='block';
     bioBeam.style.display='block';
     bioRec.style.display='flex';
-    val.textContent='Align your face in the oval';
+    val.textContent='Align your face in the frame';
     btn.style.display='none';
     document.getElementById('xph0').classList.add('active');
 
@@ -2702,7 +2688,7 @@ function resetReenrollUI(){
   if(idle)idle.style.display='flex';
   if(video){video.style.display='none';video.srcObject=null;}
   var oval=document.getElementById('reOval');
-  if(oval){oval.style.display='none';oval.className='';}
+  if(oval){oval.style.display='none';oval.className='scan-frame';}
   var beam=document.getElementById('reBeam');
   if(beam)beam.style.display='none';
   var rec=document.getElementById('reRec');
@@ -3257,7 +3243,7 @@ function runFace(){
     bioBeam.style.display='block';
     bioRec.style.opacity='1';
     bioProgress.style.display='block';
-    val.textContent='Align your face in the oval';
+    val.textContent='Align your face in the frame';
     btn.style.display='none';
     document.getElementById('ph0').classList.add('active');
 

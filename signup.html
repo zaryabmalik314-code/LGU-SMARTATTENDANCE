@@ -79,6 +79,12 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#1a1a2e;color:var(--g
 .bphase .tick{display:none}.bphase.done .tick{display:inline}
 @keyframes livePulse{0%,100%{opacity:1}50%{opacity:.25}}
 @keyframes bioScanDown{0%{top:10%;opacity:0}10%{opacity:1}90%{opacity:1}100%{top:88%;opacity:0}}
+@keyframes beamSweep{0%{top:15%;opacity:0}8%{opacity:1}92%{opacity:1}100%{top:85%;opacity:0}}
+@keyframes cornerPulse{0%,100%{opacity:1}50%{opacity:.5}}
+.scan-frame{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:200px;height:260px;z-index:5;pointer-events:none}
+.scan-frame.detecting div div{background:rgba(0,180,255,.95)!important;box-shadow:0 0 12px rgba(0,180,255,.6);animation:cornerPulse 1.8s ease-in-out infinite}
+.scan-frame.verified div div{background:rgba(74,222,128,.95)!important;box-shadow:0 0 12px rgba(74,222,128,.6)}
+.scan-frame.bad div div{background:rgba(251,191,36,.95)!important;box-shadow:0 0 12px rgba(251,191,36,.6)}
 .pending-hero{width:84px;height:84px;border-radius:26px;background:rgba(201,168,76,.15);border:1.5px solid rgba(201,168,76,.3);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:38px}
 .field-group{margin-bottom:14px}
 .field-label{font-size:11px;color:var(--gold2);letter-spacing:.04em;font-weight:600;margin-bottom:6px;display:block}
@@ -116,6 +122,7 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
   <symbol id="ic-chevron-left" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></symbol>
   <symbol id="ic-wifi" viewBox="0 0 24 24"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></symbol>
   <symbol id="ic-battery" viewBox="0 0 24 24"><rect x="1" y="7" width="18" height="10" rx="2"/><line x1="23" y1="11" x2="23" y2="13"/></symbol>
+  <symbol id="ic-check-circle" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></symbol>
 </svg>
 
 <div id="introSplash">
@@ -193,39 +200,57 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
     <div class="scroll">
       <div class="card">
         <div class="card-title"><span class="ico"><svg class="i"><use href="#ic-camera"/></svg></span>Enroll Your Face</div>
-        <div class="card-sub">This creates your biometric profile for attendance check-ins. Just look at the camera, then tilt your head slightly to one side and the other &mdash; no need to turn far. The oval turns green while it&rsquo;s capturing.</div>
-        <div class="face-area">
-          <div id="enrollScanner" style="width:100%;background:#050a14;border-radius:14px;position:relative;overflow:hidden;height:300px;margin-bottom:12px;display:flex;align-items:center;justify-content:center">
-            <video id="enVideo" autoplay playsinline muted style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);display:none;z-index:1;clip-path:ellipse(80px 102px at 50% 50%)"></video>
-            <canvas id="enCanvas" style="position:absolute;inset:0;width:100%;height:100%;transform:scaleX(-1);z-index:4;pointer-events:none"></canvas>
-            <svg id="enMask" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none" style="position:absolute;inset:0;z-index:3;pointer-events:none">
-              <defs><mask id="enVignetteMask"><rect width="100" height="100" fill="white"/><ellipse cx="50" cy="50" rx="22.5" ry="34.5" fill="black"/></mask></defs>
-              <rect width="100" height="100" fill="rgba(0,0,0,.72)" mask="url(#enVignetteMask)"/>
-            </svg>
-            <div id="enOval" style="position:absolute;z-index:5;width:160px;height:205px;border-radius:50%;border:2.5px solid rgba(255,255,255,.3);transition:border-color .5s,box-shadow .5s;pointer-events:none"></div>
-            <div id="enBeam" style="position:absolute;z-index:6;width:140px;height:2px;background:linear-gradient(90deg,transparent,rgba(0,180,255,0),rgba(0,180,255,.9),rgba(0,180,255,.9),rgba(0,180,255,0),transparent);border-radius:2px;display:none;animation:bioScanDown 1.4s ease-in-out infinite;pointer-events:none"></div>
-            <div id="enProgress" style="position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:8;display:none">
-              <svg width="48" height="48" viewBox="0 0 48 48" style="transform:rotate(-90deg)">
-                <circle cx="24" cy="24" r="20" fill="none" stroke="rgba(255,255,255,.1)" stroke-width="3"/>
-                <circle id="enRing" cx="24" cy="24" r="20" fill="none" stroke="rgba(0,190,255,.85)" stroke-width="3" stroke-linecap="round" stroke-dasharray="125.6" stroke-dashoffset="125.6" style="transition:stroke-dashoffset .12s linear"/>
-              </svg>
-              <div id="enPct" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:11px;font-weight:700;color:rgba(0,200,255,.95)">0%</div>
+        <div class="card-sub">This creates your biometric profile for attendance check-ins. Just look at the camera, then tilt your head slightly to one side and the other &mdash; no need to turn far. The frame turns green while it&rsquo;s capturing.</div>
+        <div style="background:#fff;border-radius:20px;border:1px solid #e8e6e2;overflow:hidden;box-shadow:0 4px 24px rgba(11,31,75,.1)">
+          <div id="enrollScanner" style="width:100%;background:#050a14;position:relative;overflow:hidden;height:380px;display:flex;align-items:center;justify-content:center">
+            <!-- Idle state -->
+            <div id="enIdle" style="position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px">
+              <div style="width:120px;height:155px;border-radius:30px;border:2px dashed rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center">
+                <svg width="56" height="56" viewBox="0 0 56 56" fill="none"><circle cx="28" cy="20" r="11" stroke="rgba(255,255,255,.25)" stroke-width="2"/><path d="M8 48c0-11.046 8.954-20 20-20s20 8.954 20 20" stroke="rgba(255,255,255,.25)" stroke-width="2" stroke-linecap="round"/></svg>
+              </div>
+              <div style="font-size:12px;color:rgba(255,255,255,.3);letter-spacing:.04em">Position your face in the frame</div>
             </div>
-            <div id="enRec" style="position:absolute;top:14px;right:38px;display:flex;align-items:center;gap:4px;z-index:8;opacity:0;transition:opacity .4s"><div style="width:6px;height:6px;border-radius:50%;background:#e33;animation:livePulse 1s infinite"></div><span style="font-size:9px;font-weight:700;color:rgba(255,255,255,.82);letter-spacing:.09em">SCAN</span></div>
-            <div id="enLabel" style="position:absolute;bottom:12px;left:50%;transform:translateX(-50%);z-index:8;background:rgba(0,0,0,.58);padding:4px 16px;border-radius:20px;white-space:nowrap;backdrop-filter:blur(4px)"><span id="enLabelTxt" style="font-size:10px;font-weight:600;color:rgba(255,255,255,.82);letter-spacing:.04em">Tap Start to begin</span></div>
-            <div id="enIdle" style="position:absolute;z-index:2;display:flex;flex-direction:column;align-items:center;gap:8px"><div style="font-size:64px;opacity:.2"><svg class="i"><use href="#ic-user"/></svg></div><div style="font-size:11px;color:rgba(255,255,255,.28);letter-spacing:.05em">CAMERA READY</div></div>
+            <!-- Scan frame with corner brackets -->
+            <div id="enOval" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:200px;height:260px;z-index:5;pointer-events:none">
+              <div style="position:absolute;inset:-1px;border-radius:28px;border:2px solid rgba(255,255,255,.08)"></div>
+              <div style="position:absolute;width:32px;height:32px;top:0;left:0"><div style="position:absolute;width:32px;height:3px;top:0;left:0;background:rgba(255,255,255,.6);border-radius:2px"></div><div style="position:absolute;width:3px;height:32px;top:0;left:0;background:rgba(255,255,255,.6);border-radius:2px"></div></div>
+              <div style="position:absolute;width:32px;height:32px;top:0;right:0"><div style="position:absolute;width:32px;height:3px;top:0;right:0;background:rgba(255,255,255,.6);border-radius:2px"></div><div style="position:absolute;width:3px;height:32px;top:0;right:0;background:rgba(255,255,255,.6);border-radius:2px"></div></div>
+              <div style="position:absolute;width:32px;height:32px;bottom:0;left:0"><div style="position:absolute;width:32px;height:3px;bottom:0;left:0;background:rgba(255,255,255,.6);border-radius:2px"></div><div style="position:absolute;width:3px;height:32px;bottom:0;left:0;background:rgba(255,255,255,.6);border-radius:2px"></div></div>
+              <div style="position:absolute;width:32px;height:32px;bottom:0;right:0"><div style="position:absolute;width:32px;height:3px;bottom:0;right:0;background:rgba(255,255,255,.6);border-radius:2px"></div><div style="position:absolute;width:3px;height:32px;bottom:0;right:0;background:rgba(255,255,255,.6);border-radius:2px"></div></div>
+            </div>
+            <!-- Video -->
+            <video id="enVideo" autoplay playsinline muted style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);display:none;z-index:1"></video>
+            <canvas id="enCanvas" style="position:absolute;inset:0;width:100%;height:100%;transform:scaleX(-1);z-index:4;pointer-events:none"></canvas>
+            <svg id="enMask" style="display:none"></svg>
+            <!-- Scan beam -->
+            <div id="enBeam" style="position:absolute;z-index:6;left:50%;transform:translateX(-50%);width:180px;height:2px;background:linear-gradient(90deg,transparent 0%,rgba(0,180,255,.8) 30%,rgba(0,180,255,1) 50%,rgba(0,180,255,.8) 70%,transparent 100%);border-radius:2px;display:none;animation:beamSweep 2s ease-in-out infinite;pointer-events:none;box-shadow:0 0 16px rgba(0,180,255,.4)"></div>
+            <!-- REC badge -->
+            <div id="enRec" style="display:none;position:absolute;top:16px;left:16px;align-items:center;gap:6px;z-index:8;background:rgba(0,0,0,.5);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.1);border-radius:20px;padding:5px 12px"><div style="width:7px;height:7px;border-radius:50%;background:#ef4444;animation:livePulse 1s infinite;flex-shrink:0"></div><span style="font-size:10px;font-weight:700;color:rgba(255,255,255,.85);letter-spacing:.08em">CAPTURING</span></div>
+            <!-- Progress ring -->
+            <div id="enProgress" style="display:none;position:absolute;top:16px;right:16px;z-index:8;align-items:center;gap:7px;background:rgba(0,0,0,.5);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.1);border-radius:20px;padding:6px 14px">
+              <svg width="24" height="24" viewBox="0 0 36 36" style="transform:rotate(-90deg)">
+                <circle cx="18" cy="18" r="16" fill="none" stroke="rgba(255,255,255,.15)" stroke-width="3"/>
+                <circle id="enRing" cx="18" cy="18" r="16" fill="none" stroke="#60a5fa" stroke-width="3" stroke-dasharray="100.5" stroke-dashoffset="100.5" stroke-linecap="round" style="transition:stroke-dashoffset .4s"/>
+              </svg>
+              <span id="enPct" style="font-size:12px;font-weight:700;color:#fff">0%</span>
+            </div>
+            <!-- Label -->
+            <div id="enLabel" style="position:absolute;bottom:16px;left:0;right:0;text-align:center;z-index:8"><span id="enLabelTxt" style="display:inline-block;background:rgba(0,0,0,.5);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.08);padding:6px 18px;border-radius:20px;font-size:11px;font-weight:600;color:rgba(255,255,255,.85);letter-spacing:.03em">Tap Start to begin</span></div>
           </div>
-          <div id="enPhases" style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-bottom:8px;min-height:28px">
-            <div class="bphase" id="eph0"><span class="tick"><svg class="i"><use href="#ic-check"/></svg> </span>Camera Ready</div>
-            <div class="bphase" id="eph1"><span class="tick"><svg class="i"><use href="#ic-check"/></svg> </span>Centre</div>
-            <div class="bphase" id="eph2"><span class="tick"><svg class="i"><use href="#ic-check"/></svg> </span>Turn 1</div>
-            <div class="bphase" id="eph3"><span class="tick"><svg class="i"><use href="#ic-check"/></svg> </span>Turn 2</div>
+          <!-- Controls area -->
+          <div style="padding:18px 20px 20px">
+            <div id="enPhases" style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:nowrap;overflow-x:auto">
+              <div class="bphase" id="eph0"><svg class="i"><use href="#ic-camera"/></svg> Camera</div>
+              <div class="bphase" id="eph1"><svg class="i"><use href="#ic-user"/></svg> Centre</div>
+              <div class="bphase" id="eph2"><svg class="i"><use href="#ic-camera"/></svg> Turn 1</div>
+              <div class="bphase" id="eph3"><svg class="i"><use href="#ic-check-circle"/></svg> Turn 2</div>
+            </div>
+            <div class="face-val" id="enVal" style="margin-bottom:10px">Ready to scan</div>
+            <div style="height:4px;background:var(--g100);border-radius:4px;margin-bottom:16px;overflow:hidden"><div class="prog-bar green" id="enBar" style="height:100%;border-radius:4px"></div></div>
           </div>
-          <div class="face-val" id="enVal" style="margin-bottom:6px">Ready to scan</div>
-          <div class="prog-wrap" style="width:150px;margin:0 auto 4px"><div class="prog-bar green" id="enBar"></div></div>
         </div>
       </div>
-      <button class="btn-primary" id="enBtn" onclick="runEnrollFace()"><span class="btn-ico"><svg class="i"><use href="#ic-camera"/></svg></span>Start Face Capture</button>
+      <button class="btn-primary" id="enBtn" onclick="runEnrollFace()" style="border-radius:14px;padding:16px;font-size:15px"><span class="btn-ico"><svg class="i"><use href="#ic-camera"/></svg></span>Start Face Capture</button>
       <button class="btn-outline" id="enSubmitBtn" style="display:none" onclick="submitSignup()"><span class="btn-ico"><svg class="i"><use href="#ic-check"/></svg></span>Submit for Approval</button>
       <div id="enSubmitErr" style="display:none;margin-top:10px;padding:10px 12px;border-radius:10px;background:rgba(227,51,51,.1);border:1px solid rgba(227,51,51,.35);color:#e33;font-size:12px;line-height:1.5"></div>
     </div>
@@ -406,20 +431,11 @@ function onFaceMeshResults(results){
 
 function setOvalState(oval,state){
   if(!oval)return;
-  var mask='0 0 0 2000px rgba(0,0,0,.72)';
-  if(state==='locked'){
-    oval.style.borderColor='rgba(13,210,120,.98)';
-    oval.style.boxShadow=mask+', 0 0 0 4px rgba(13,210,120,.30), 0 0 26px rgba(13,210,120,.45)';
-  } else if(state==='near'){
-    oval.style.borderColor='rgba(245,158,11,.95)';
-    oval.style.boxShadow=mask+', 0 0 0 3px rgba(245,158,11,.22)';
-  } else if(state==='bad'){
-    oval.style.borderColor='rgba(239,68,68,.9)';
-    oval.style.boxShadow=mask+', 0 0 0 3px rgba(239,68,68,.20)';
-  } else {
-    oval.style.borderColor='rgba(255,255,255,.55)';
-    oval.style.boxShadow=mask;
-  }
+  var base='scan-frame';
+  if(state==='locked') oval.className=base+' verified';
+  else if(state==='near') oval.className=base+' detecting';
+  else if(state==='bad') oval.className=base+' bad';
+  else oval.className=base;
 }
 
 function getFaceMesh(){
@@ -472,7 +488,7 @@ function pickCandidateFrames(frames){
 // startFaceCapture — unified capture loop
 // ============================================================
 function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,ring,pct,mode){
-  var CIRC=125.6;
+  var CIRC=100.5;
   var isEnroll=(mode==='enroll'||mode==='reenroll');
   var totalMs=5000;
   var sampleMs=isEnroll?220:200;
@@ -530,7 +546,7 @@ function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,
 
   if(canvas){var c=canvas.getContext('2d');c.clearRect(0,0,canvas.width,canvas.height);}
 
-  oval.className='detecting';
+  oval.className='scan-frame detecting';
   rec.style.display='flex';rec.style.opacity='1';
   if(progress&&progress.style)progress.style.display='block';
 
@@ -551,13 +567,13 @@ function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,
     if(isEnroll){
       msgs=[
         ['Get ready — hold your device steady','Starting capture…'],
-        ['Look straight at the camera','Align your face in the oval'],
+        ['Look straight at the camera','Align your face in the frame'],
         ['Slowly turn your head to one side','Keep turning'],
         ['Now slowly turn the other way','Keep turning']
       ];
     } else {
       msgs=[
-        ['Align your face in the oval','Starting capture…'],
+        ['Align your face in the frame','Starting capture…'],
         ['Turn your head slightly or blink','Checking liveness…'],
         ['Hold still — capturing frames','Recording…'],
         ['Almost done…','Finalising']
@@ -615,7 +631,7 @@ function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,
   function failStep(reason){
     scanDone=true;
     if(faceInt){clearInterval(faceInt);faceInt=null;}
-    oval.className='error';
+    oval.className='scan-frame bad';
     label.innerHTML='<svg class="i"><use href="#ic-alert"/></svg> Scan Incomplete';
     val.textContent=reason;
     if(progress&&progress.style)progress.style.display='none';
@@ -629,7 +645,7 @@ function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,
     scanDone=true;
     clearInterval(faceInt);faceInt=null;
     var livenessScore = livenessDiffCount > 0 ? (totalLivenessDiff / livenessDiffCount) : 0;
-    oval.className='verified';setOvalState(oval,'locked');
+    oval.className='scan-frame verified';setOvalState(oval,'locked');
     beam.style.display='none';
     rec.style.opacity='0';
     if(progress&&progress.style)progress.style.display='none';
@@ -642,7 +658,7 @@ function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,
     if(isEnroll){
       images=capturedOrder.map(function(k){return capturedAngles[k];}).filter(Boolean);
       if(images.length<3){
-        oval.className='error';setOvalState(oval,'bad');
+        oval.className='scan-frame bad';setOvalState(oval,'bad');
         label.innerHTML='<svg class="i"><use href="#ic-alert"/></svg> Scan Incomplete';
         val.textContent='Only '+images.length+' angle(s) captured. Please retry in good light and follow each prompt.';
         if(progress&&progress.style)progress.style.display='none';
@@ -656,7 +672,7 @@ function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,
     }
 
     if(!images.length){
-      oval.className='error';setOvalState(oval,'bad');
+      oval.className='scan-frame bad';setOvalState(oval,'bad');
       label.innerHTML='<svg class="i"><use href="#ic-alert"/></svg> Face Capture Failed';
       val.textContent='No frames were captured — check camera permissions and try again.';
       if(progress&&progress.style)progress.style.display='none';
@@ -707,20 +723,20 @@ function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,
         elapsed+=sampleMs;
         if(meshFallback && !faceMeshDetected){
           var cLeft=Math.max(0,Math.ceil((totalMs-elapsed)/1000));
-          oval.className='near';
+          oval.className='scan-frame detecting';
           label.textContent='Hold still';
-          val.textContent='Capturing in '+cLeft+'s — keep your face in the oval';
+          val.textContent='Capturing in '+cLeft+'s — keep your face in the frame';
         } else {
-          oval.className='locked';
+          oval.className='scan-frame verified';
           label.textContent='Face detected';
           val.textContent='Hold still — scanning';
         }
         if(attLostFace){ attLostFace=false; attNoFaceMs=0; }
       } else {
-        oval.className='near';
+        oval.className='scan-frame detecting';
         attLostFace=true;
         label.textContent='Detecting face…';
-        val.textContent='Center your face in the oval';
+        val.textContent='Center your face in the frame';
         attNoFaceMs+=sampleMs;
         return;
       }
@@ -790,7 +806,7 @@ function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,
 
         var framing=null;
         if(!tracking){
-          framing='Center your face in the oval';
+          framing='Center your face in the frame';
         } else if(currentFaceSpan<0.09){
           framing='Move a little closer';
         } else if(currentFaceSpan>0.55){
@@ -862,7 +878,7 @@ function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,
             finish();
             return;
           }
-          failStep('Couldn\'t capture that angle. Move into brighter light, keep your whole face in the oval, and retry.');
+          failStep('Couldn\'t capture that angle. Move into brighter light, keep your whole face in the frame, and retry.');
           return;
         }
       }
@@ -947,7 +963,7 @@ function runEnrollFace(){
   var bioIdle=document.getElementById('enIdle'),bioVideo=document.getElementById('enVideo');
   var bioCanvas=document.getElementById('enCanvas'),bioOval=document.getElementById('enOval');
   var bioBeam=document.getElementById('enBeam'),bioRec=document.getElementById('enRec');
-  var bioLabel=document.getElementById('enLabel'),bioRing=document.getElementById('enRing');
+  var bioLabel=document.getElementById('enLabelTxt'),bioRing=document.getElementById('enRing');
   var bioPct=document.getElementById('enPct');
   [0,1,2,3].forEach(function(i){var p=document.getElementById('eph'+i);if(p){p.classList.remove('active','done');}});
 
@@ -957,7 +973,6 @@ function runEnrollFace(){
     bioVideo.style.display='block';
     bioVideo.srcObject=stream;
     bioVideo.play();
-    bioOval.style.display='block';
     bioBeam.style.display='block';
     bioRec.style.display='flex';
     val.textContent='Get ready — hold your device steady';
