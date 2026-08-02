@@ -657,9 +657,9 @@ async function loadFaculty() {
 function isPresentToday(f) { return f.checked_in_today === true; }
 
 function isBeforeWindow() {
-  if (!todayTimeWindow || !todayTimeWindow.check_in_start) return false;
+  if (!todayTimeWindow || !todayTimeWindow.start_time) return false;
   var now = new Date();
-  var parts = todayTimeWindow.check_in_start.split(':');
+  var parts = todayTimeWindow.start_time.split(':');
   var windowStart = new Date(now);
   windowStart.setHours(parseInt(parts[0],10), parseInt(parts[1]||0,10), 0, 0);
   return now < windowStart;
