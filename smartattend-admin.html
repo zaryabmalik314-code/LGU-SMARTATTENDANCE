@@ -1704,7 +1704,6 @@ function getFilteredAttendanceRows() {
   const statusFilter = document.getElementById('att-status-filter').value;
   const facultyFilter = document.getElementById('att-faculty-filter').value;
   const deptFilter = document.getElementById('att-dept-filter').value;
-  const flaggedOnly = document.getElementById('att-flagged-only').checked;
 
   return attendanceCache.filter(r => {
     const s = r.status || '';
