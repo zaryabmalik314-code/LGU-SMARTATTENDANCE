@@ -417,6 +417,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#1a1a2e;color:var(--g
 .tl-row{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .tl-label{font-size:12.5px;font-weight:600;color:var(--navy)}
 .tl-time{font-size:12.5px;font-weight:700;color:var(--navy);flex-shrink:0}
+.tl-late{font-size:10.5px;font-weight:600;color:#e55;background:rgba(238,85,85,.1);padding:1px 7px;border-radius:8px;margin-left:auto;margin-right:6px;white-space:nowrap}
 .tl-meta{font-size:10.5px;color:var(--g500);margin-top:2px;overflow-wrap:break-word}
 .tl-meta.pending-txt{color:var(--gold3);font-weight:500}
 .empty-state{text-align:center;padding:36px 20px;color:var(--g500)}
@@ -3554,7 +3555,7 @@ function renderHistory(){
   apiRequest('/api/attendance?faculty_id='+encodeURIComponent(fac.facultyId||''),'GET').then(function(resp){
     var rows=(resp && resp.records) || (Array.isArray(resp)?resp:[]);
     historyFilterState.rawRows=rows.map(function(r){
-      return {type:normalizeRecordType(r)==='check_out'?'check-out':'check-in',time:r.timestamp||r.time,status:r.status,dist:r.distance_to_boundary_m!=null?(r.distance_to_boundary_m+'m'):null};
+      return {type:normalizeRecordType(r)==='check_out'?'check-out':'check-in',time:r.timestamp||r.time,status:r.status,dist:r.distance_to_boundary_m!=null?(r.distance_to_boundary_m+'m'):null,late_minutes:r.late_minutes||0};
     });
     applyHistoryFilterAndRender();
   }).catch(function(e){
@@ -3655,9 +3656,11 @@ function renderHistoryRows(rows){
       if(s.inItem){
         var inTime=s.inItem.d.toLocaleTimeString('en-PK',{hour:'2-digit',minute:'2-digit'});
         var inMeta=s.inItem.r.status?s.inItem.r.status:(s.inItem.r.dist?s.inItem.r.dist+' from boundary':'');
+        var lateMins=s.inItem.r.late_minutes||0;
+        var lateTag=lateMins>0?'<span class="tl-late">+'+lateMins+' min late</span>':'';
         itemsHtml+='<div class="tl-item">'+
           '<div class="tl-marker in"><svg class="i"><use href="#ic-calendar"/></svg></div>'+
-          '<div class="tl-body"><div class="tl-row"><span class="tl-label">Check-in</span><span class="tl-time">'+inTime+'</span></div>'+
+          '<div class="tl-body"><div class="tl-row"><span class="tl-label">Check-in</span>'+lateTag+'<span class="tl-time">'+inTime+'</span></div>'+
           (inMeta?'<div class="tl-meta">'+inMeta+'</div>':'')+
           '</div></div>';
       }
