@@ -939,11 +939,15 @@
             <div class="page-desc">Manage university holidays — these dates are excluded from absence counts</div>
           </div>
         </div>
-        <div class="toolbar" style="gap:10px;flex-wrap:wrap">
+        <div class="toolbar" style="gap:10px;flex-wrap:wrap;align-items:center">
+          <label style="font-size:12px;color:var(--slate-400);font-weight:600">From</label>
           <input autocomplete="off" type="date" id="holiday-date" style="padding:7px 12px;border-radius:8px;border:1px solid var(--navy-700);background:var(--navy-900);color:var(--white)">
+          <label style="font-size:12px;color:var(--slate-400);font-weight:600">To</label>
+          <input autocomplete="off" type="date" id="holiday-date-end" style="padding:7px 12px;border-radius:8px;border:1px solid var(--navy-700);background:var(--navy-900);color:var(--white)">
           <input autocomplete="off" type="text" id="holiday-label" placeholder="Holiday name e.g. Eid ul Fitr" style="padding:7px 12px;border-radius:8px;border:1px solid var(--navy-700);background:var(--navy-900);color:var(--white);min-width:220px">
           <button class="btn-ghost" onclick="addHoliday()">+ Add Holiday</button>
         </div>
+        <div style="font-size:11px;color:var(--slate-500);margin-top:4px;padding-left:2px">Leave "To" empty for a single-day holiday, or set both for a range.</div>
         <div id="holidays-container" style="margin-top:18px"><div class="loading-row">Loading…</div></div>
       </section>
 
@@ -2341,13 +2345,29 @@ async function loadHolidays() {
 }
 
 async function addHoliday() {
-  const date = (document.getElementById('holiday-date') || {}).value;
+  const startDate = (document.getElementById('holiday-date') || {}).value;
+  const endDate = (document.getElementById('holiday-date-end') || {}).value;
   const label = (document.getElementById('holiday-label') || {}).value || '';
-  if (!date) { showToast('Pick a date first', true); return; }
+  if (!startDate) { showToast('Pick a start date first', true); return; }
+  if (endDate && endDate < startDate) { showToast('"To" date must be on or after "From" date', true); return; }
+
+  const dates = [];
+  const end = endDate || startDate;
+  let cur = new Date(startDate + 'T00:00:00');
+  const last = new Date(end + 'T00:00:00');
+  while (cur <= last) {
+    dates.push(cur.toISOString().split('T')[0]);
+    cur.setDate(cur.getDate() + 1);
+  }
+  if (dates.length > 60) { showToast('Range too large (max 60 days)', true); return; }
+
   try {
-    await api('/api/holidays', { method: 'POST', body: JSON.stringify({ date, label }) });
-    showToast('Holiday added');
+    for (const d of dates) {
+      await api('/api/holidays', { method: 'POST', body: JSON.stringify({ date: d, label }) });
+    }
+    showToast(dates.length > 1 ? `${dates.length} holidays added` : 'Holiday added');
     document.getElementById('holiday-date').value = '';
+    document.getElementById('holiday-date-end').value = '';
     document.getElementById('holiday-label').value = '';
     loadHolidays();
   } catch (err) {
