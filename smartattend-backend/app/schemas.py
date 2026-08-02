@@ -221,6 +221,12 @@ class LeaveBalanceOut(BaseModel):
         from_attributes = True
 
 
+class AdjustBalanceRequest(BaseModel):
+    faculty_id: int
+    field: str
+    delta: int
+
+
 class SalaryOut(BaseModel):
     id: int
     faculty_id: int

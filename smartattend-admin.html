@@ -2875,6 +2875,36 @@ function reactivateFacultyPrompt(id, name) {
 /* =========================================================================
    FACULTY PERSONAL ANALYTICS (detail panel extension)
    ========================================================================= */
+async function adjustBalance(facultyId, field, delta) {
+  try {
+    await api('/api/admin/adjust-balance', {
+      method: 'POST',
+      body: JSON.stringify({ faculty_id: parseInt(facultyId), field, delta })
+    });
+    showToast(`${field.replace(/_/g,' ')} ${delta>0?'increased':'decreased'}`);
+    openFacultyPersonalAnalytics(facultyId, document.querySelector('#detail-content [data-faculty-name]')?.textContent || '');
+  } catch (err) { showToast('Failed: ' + err.message, true); }
+}
+
+async function recalculateBalance(facultyId) {
+  try {
+    await api(`/api/admin/recalculate-balance?faculty_id=${facultyId}`, { method: 'POST' });
+    showToast('Balance recalculated from attendance records');
+    openFacultyPersonalAnalytics(facultyId, document.querySelector('#detail-content [data-faculty-name]')?.textContent || '');
+  } catch (err) { showToast('Failed: ' + err.message, true); }
+}
+
+function adjBtnHtml(facultyId, field, label, value, color) {
+  return `<div class="stat-box" style="position:relative">
+    <div class="stat-label">${label}</div>
+    <div class="stat-value" style="color:${color}">${value}</div>
+    <div style="position:absolute;bottom:6px;right:6px;display:flex;gap:3px">
+      <button onclick="adjustBalance('${facultyId}','${field}',-1)" style="width:22px;height:22px;border-radius:6px;border:1px solid var(--navy-700);background:var(--navy-800);color:var(--slate-300);font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center">−</button>
+      <button onclick="adjustBalance('${facultyId}','${field}',1)" style="width:22px;height:22px;border-radius:6px;border:1px solid var(--navy-700);background:var(--navy-800);color:var(--slate-300);font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center">+</button>
+    </div>
+  </div>`;
+}
+
 async function openFacultyPersonalAnalytics(facultyId, facultyName) {
   const overlay = document.getElementById('detail-overlay');
   const content = document.getElementById('detail-content');
@@ -2895,18 +2925,33 @@ async function openFacultyPersonalAnalytics(facultyId, facultyName) {
     const late = records.filter(r=>r.late_minutes>0).length;
     const totalLateMin = records.reduce((acc,r)=>acc+(r.late_minutes||0),0);
     const deductionDays = Math.floor(totalLateMin/480);
+    const balLateMins = balance ? balance.late_margin_used : totalLateMin;
+    const balDaysAttended = balance ? balance.working_days_attended : present;
+    const balLeaveUsed = balance ? balance.casual_leave_used : 0;
+    const balLeaveTotal = balance ? balance.casual_leave_total : 20;
+    const balLateTotal = balance ? balance.late_margin_total : 480;
 
     content.innerHTML = `
-      <div style="font-family:var(--font-display);font-size:18px;font-weight:600;margin-bottom:4px">${facultyName}</div>
-      <div style="font-size:12px;color:var(--slate-400);margin-bottom:20px">Personal Attendance Analytics</div>
+      <div style="font-family:var(--font-display);font-size:18px;font-weight:600;margin-bottom:4px" data-faculty-name>${facultyName}</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px">
+        <span style="font-size:12px;color:var(--slate-400)">Personal Attendance Analytics</span>
+        <button onclick="recalculateBalance('${facultyId}')" style="margin-left:auto;font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid var(--navy-700);background:var(--navy-800);color:var(--gold-300);cursor:pointer;font-weight:600">↻ Sync from records</button>
+      </div>
 
+      <div style="font-size:11px;font-weight:600;color:var(--slate-500);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">From Attendance Records</div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px;margin-bottom:20px">
         <div class="stat-box"><div class="stat-label">Check-ins</div><div class="stat-value">${total}</div></div>
-        <div class="stat-box"><div class="stat-label">Present</div><div class="stat-value" style="color:var(--green-500)">${present}</div></div>
+        <div class="stat-box"><div class="stat-label">Present days</div><div class="stat-value" style="color:var(--green-500)">${present}</div></div>
         <div class="stat-box"><div class="stat-label">Late days</div><div class="stat-value" style="color:var(--amber-500)">${late}</div></div>
-        <div class="stat-box"><div class="stat-label">Late minutes</div><div class="stat-value" style="color:var(--amber-500)">${totalLateMin}</div></div>
+        <div class="stat-box"><div class="stat-label">Total late min</div><div class="stat-value" style="color:var(--amber-500)">${totalLateMin}</div></div>
         <div class="stat-box"><div class="stat-label">Deduction days</div><div class="stat-value" style="color:${deductionDays>0?'var(--red-500)':'var(--green-500)'}">${deductionDays}</div></div>
-        ${balance?`<div class="stat-box"><div class="stat-label">Casual leave</div><div class="stat-value">${balance.casual_leave_total-(balance.casual_leave_used||0)} left</div></div>`:''}
+      </div>
+
+      <div style="font-size:11px;font-weight:600;color:var(--slate-500);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Balance (editable)</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px;margin-bottom:20px">
+        ${adjBtnHtml(facultyId, 'casual_leave_used', 'Leave used', balLeaveUsed + ' / ' + balLeaveTotal, 'var(--slate-200)')}
+        ${adjBtnHtml(facultyId, 'working_days_attended', 'Days attended', balDaysAttended, 'var(--green-500)')}
+        ${adjBtnHtml(facultyId, 'late_margin_used_minutes', 'Late min (balance)', balLateMins + ' / ' + balLateTotal, 'var(--amber-500)')}
       </div>
 
       ${deductionDays>0?`<div style="background:var(--red-bg);border:1px solid var(--red-500);border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:var(--red-500)">

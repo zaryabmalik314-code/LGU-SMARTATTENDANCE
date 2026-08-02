@@ -2,7 +2,7 @@ from fastapi import FastAPI, Depends, HTTPException, Header, WebSocket, WebSocke
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import or_
+from sqlalchemy import or_, func
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 import asyncio
@@ -963,6 +963,110 @@ def admin_decide_device_switch(
     item.faculty_name = req.faculty.name if req.faculty else None
     item.department = req.faculty.department if req.faculty else None
     return item
+
+
+ADJUSTABLE_BALANCE_FIELDS = {
+    "casual_leave_used",
+    "casual_leave_total",
+    "late_margin_used_minutes",
+    "late_margin_total_minutes",
+    "working_days_attended",
+    "working_days_total",
+}
+
+
+@app.post("/api/admin/adjust-balance", response_model=schemas.LeaveBalanceOut)
+def admin_adjust_balance(
+    payload: schemas.AdjustBalanceRequest,
+    db: Session = Depends(get_db),
+    admin: models.Admin = Depends(get_current_admin),
+):
+    if payload.field not in ADJUSTABLE_BALANCE_FIELDS:
+        raise HTTPException(status_code=400, detail=f"Invalid field: {payload.field}")
+    faculty = db.query(models.Faculty).filter(models.Faculty.id == payload.faculty_id).first()
+    if not faculty:
+        raise HTTPException(status_code=404, detail="Faculty not found")
+
+    b = get_or_create_leave_balance(db, payload.faculty_id)
+    current = getattr(b, payload.field)
+    new_val = max(0, current + payload.delta)
+    setattr(b, payload.field, new_val)
+    db.commit()
+    db.refresh(b)
+
+    return schemas.LeaveBalanceOut(
+        faculty_id=b.faculty_id,
+        semester_label=b.semester_label,
+        casual_leave_total=b.casual_leave_total,
+        casual_leave_used=b.casual_leave_used,
+        casual_leave_remaining=b.casual_leave_total - b.casual_leave_used,
+        working_days_total=b.working_days_total,
+        working_days_attended=b.working_days_attended,
+        working_days_remaining=max(0, b.working_days_total - b.working_days_attended),
+        late_margin_total=b.late_margin_total_minutes,
+        late_margin_used=b.late_margin_used_minutes,
+        late_margin_remaining=max(0, b.late_margin_total_minutes - b.late_margin_used_minutes),
+    )
+
+
+@app.post("/api/admin/recalculate-balance", response_model=schemas.LeaveBalanceOut)
+def admin_recalculate_balance(
+    faculty_id: int,
+    db: Session = Depends(get_db),
+    admin: models.Admin = Depends(get_current_admin),
+):
+    faculty = db.query(models.Faculty).filter(models.Faculty.id == faculty_id).first()
+    if not faculty:
+        raise HTTPException(status_code=404, detail="Faculty not found")
+
+    b = get_or_create_leave_balance(db, faculty_id)
+
+    check_ins = (
+        db.query(models.AttendanceRecord)
+        .filter(
+            models.AttendanceRecord.faculty_id == faculty_id,
+            models.AttendanceRecord.record_type == "check_in",
+            models.AttendanceRecord.status == "present",
+        )
+        .all()
+    )
+
+    unique_days = set()
+    total_late = 0
+    for r in check_ins:
+        if r.timestamp:
+            unique_days.add(r.timestamp.date())
+        total_late += r.late_minutes or 0
+
+    approved_leaves = (
+        db.query(func.count())
+        .select_from(models.LeaveRequest)
+        .filter(
+            models.LeaveRequest.faculty_id == faculty_id,
+            models.LeaveRequest.status == "approved",
+        )
+        .scalar()
+    )
+
+    b.working_days_attended = len(unique_days)
+    b.late_margin_used_minutes = total_late
+    b.casual_leave_used = approved_leaves or 0
+    db.commit()
+    db.refresh(b)
+
+    return schemas.LeaveBalanceOut(
+        faculty_id=b.faculty_id,
+        semester_label=b.semester_label,
+        casual_leave_total=b.casual_leave_total,
+        casual_leave_used=b.casual_leave_used,
+        casual_leave_remaining=b.casual_leave_total - b.casual_leave_used,
+        working_days_total=b.working_days_total,
+        working_days_attended=b.working_days_attended,
+        working_days_remaining=max(0, b.working_days_total - b.working_days_attended),
+        late_margin_total=b.late_margin_total_minutes,
+        late_margin_used=b.late_margin_used_minutes,
+        late_margin_remaining=max(0, b.late_margin_total_minutes - b.late_margin_used_minutes),
+    )
 
 
 @app.get("/api/holidays", response_model=List[schemas.HolidayOut])
