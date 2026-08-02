@@ -1592,7 +1592,7 @@ function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,
   var STEP_TIMEOUT_MS=30000;   // generous per-step cap so a step can't hang forever
   var HOLD_SAMPLES=2;          // consecutive in-range samples before a capture counts
   var LOST_FACE_MS=1200;       // how long tracking can drop before we prompt a reposition
-  var FALLBACK_AFTER_MS=6000;  // if FaceMesh never loads at all, fall back to timed capture
+  var FALLBACK_AFTER_MS=4000;  // if FaceMesh can't detect a face, fall back to timed capture
   var SETTLE_MS=4000;          // after this long on a turn, a shallow angle is good enough
 
   var stepIndex=0;
@@ -1949,9 +1949,9 @@ function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,
       // If the model never loads (CDN blocked, unsupported browser), don't
       // strand the user on a gate that can never open — drop back to the
       // old timed bucket capture so enrollment is still possible.
-      if(!meshFallback && !faceMeshEverRan && elapsed>=FALLBACK_AFTER_MS){
+      if(!meshFallback && elapsed>=FALLBACK_AFTER_MS && capturedOrder.length===0){
         meshFallback=true;
-        console.warn('[enroll] FaceMesh unavailable — falling back to timed capture');
+        console.warn('[enroll] No angles captured after '+FALLBACK_AFTER_MS+'ms — falling back to timed capture');
         label.textContent='Turn your head slowly';
         val.textContent='Center, then left, then right';
       }
