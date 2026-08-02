@@ -391,7 +391,7 @@ function grabFrame(video,maxW){
   var canvas=document.createElement('canvas');
   canvas.width=w;canvas.height=h;
   var ctx=canvas.getContext('2d');
-  ctx.drawImage(video,0,0,w,h);
+  try{ctx.drawImage(video,0,0,w,h);}catch(e){return '';}
   return canvas.toDataURL('image/jpeg',0.85);
 }
 
@@ -536,7 +536,8 @@ function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,
   var stepMilestones={};
   var coachText='';
   var coachState='idle';
-  var meshFallback=false;
+  var _isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(/Macintosh/.test(navigator.userAgent)&&'ontouchend' in document);
+  var meshFallback=_isIOS;
   var meshBusy=false;
 
   var lastLivenessPixels=null;
@@ -549,6 +550,7 @@ function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,
   oval.className='scan-frame detecting';
   rec.style.display='flex';rec.style.opacity='1';
   if(progress&&progress.style)progress.style.display='block';
+  if(_isIOS && isEnroll){label.textContent='Turn your head slowly';val.textContent='Center, then left, then right';}
 
   var PILL_COUNT=4;
 
@@ -697,7 +699,7 @@ function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,
 
   faceInt=setInterval(function(){
     if(scanDone)return;
-    if(!video||video.readyState<2)return;
+    if(!video||(video.readyState<2&&!(video.videoWidth>0)))return;
 
     if (!isEnroll) {
       var fmAtt=getFaceMesh();
@@ -760,19 +762,23 @@ function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,
       ring.style.strokeDashoffset=(CIRC*(1-ep)).toFixed(2);
       pct.textContent=ep100+'%';
 
-      var fm=getFaceMesh();
-      if(fm && !meshBusy){
-        meshBusy=true;
+      if(!_isIOS){
         try{
-          var sendResult=fm.send({image:video});
-          if(sendResult && typeof sendResult.then==='function'){
-            sendResult.then(function(){meshBusy=false;},function(e){meshBusy=false;});
-          } else {
-            meshBusy=false;
+          var fm=getFaceMesh();
+          if(fm && !meshBusy){
+            meshBusy=true;
+            try{
+              var sendResult=fm.send({image:video});
+              if(sendResult && typeof sendResult.then==='function'){
+                sendResult.then(function(){meshBusy=false;},function(e){meshBusy=false;});
+              } else {
+                meshBusy=false;
+              }
+            }catch(e){
+              meshBusy=false;
+            }
           }
-        }catch(e){
-          meshBusy=false;
-        }
+        }catch(e){}
       }
 
       if(!meshFallback && elapsed>=FALLBACK_AFTER_MS && capturedOrder.length===0){
@@ -783,8 +789,10 @@ function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,
       }
 
       if(meshFallback){
-        if(elapsed>=FALLBACK_AFTER_MS+9000){
-          var picked=pickEnrollFrames(frames.filter(function(f){return f.t>=FALLBACK_AFTER_MS;}),9000);
+        var _fbWait=_isIOS?9000:(FALLBACK_AFTER_MS+9000);
+        var _fbStart=_isIOS?0:FALLBACK_AFTER_MS;
+        if(elapsed>=_fbWait){
+          var picked=pickEnrollFrames(frames.filter(function(f){return f.t>=_fbStart;}),9000);
           if(picked.length){
             capturedOrder=[];
             capturedAngles={};
@@ -973,17 +981,22 @@ function runEnrollFace(){
     bioIdle.style.display='none';
     bioVideo.style.display='block';
     bioVideo.srcObject=stream;
-    bioVideo.play();
     bioBeam.style.display='block';
     bioRec.style.display='flex';
     val.textContent='Get ready — hold your device steady';
     btn.style.display='none';
     document.getElementById('eph0').classList.add('active');
 
-    setTimeout(function(){
+    function _startCapture(){
       startFaceCapture(bioVideo,bioCanvas,bioOval,bioBeam,bioRec,bioLabel,val,bar,btn,
         bioRing.parentElement,bioRing,bioPct,'enroll');
-    },500);
+    }
+    var _started=false;
+    function _onReady(){if(_started)return;_started=true;bioVideo.removeEventListener('loadeddata',_onReady);setTimeout(_startCapture,300);}
+    bioVideo.addEventListener('loadeddata',_onReady);
+    var pp=bioVideo.play();
+    if(pp&&typeof pp.then==='function')pp.catch(function(){});
+    setTimeout(function(){_onReady();},1500);
 
   }).catch(function(){
     val.innerHTML=faceAlertHTML('error','Camera access denied — enable it in device settings');

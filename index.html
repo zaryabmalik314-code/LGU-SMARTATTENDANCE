@@ -1424,7 +1424,7 @@ function grabFrame(video,maxW){
   var canvas=document.createElement('canvas');
   canvas.width=w;canvas.height=h;
   var ctx=canvas.getContext('2d');
-  ctx.drawImage(video,0,0,w,h);
+  try{ctx.drawImage(video,0,0,w,h);}catch(e){return '';}
   return canvas.toDataURL('image/jpeg',0.85);
 }
 
@@ -1608,7 +1608,8 @@ function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,
   var stepMilestones={};       // which milestones of the current turn are already banked
   var coachText='';            // live instruction shown under the oval
   var coachState='idle';       // drives the oval tint: idle / near / locked / bad
-  var meshFallback=false;      // true once we give up on FaceMesh and use timed buckets
+  var _isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(/Macintosh/.test(navigator.userAgent)&&'ontouchend' in document);
+  var meshFallback=_isIOS;     // skip FaceMesh entirely on iOS — use timed buckets
   var meshBusy=false;          // one FaceMesh inference in flight at a time
 
 
@@ -1625,6 +1626,7 @@ function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,
   oval.className='scan-frame detecting';
   rec.style.display='flex';rec.style.opacity='1';
   if(progress&&progress.style)progress.style.display='block';
+  if(_isIOS && isEnroll){label.textContent='Turn your head slowly';val.textContent='Center, then left, then right';}
 
   var PILL_COUNT=4;
 
@@ -1827,7 +1829,7 @@ function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,
 
   faceInt=setInterval(function(){
     if(scanDone)return;
-    if(!video||video.readyState<2)return;
+    if(!video||(video.readyState<2&&!(video.videoWidth>0)))return;
 
     if (!isEnroll) {
       // Run FaceMesh for check-in/check-out too. This used to be
@@ -1930,25 +1932,26 @@ function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,
       // seconds, so firing a fresh send() on every tick regardless of
       // whether the previous one finished lets work pile up until the tab
       // locks. Only ever keep one inference in flight.
-      var fm=getFaceMesh();
-      if(fm && !meshBusy){
-        meshBusy=true;
+      if(!_isIOS){
         try{
-          var sendResult=fm.send({image:video});
-          if(sendResult && typeof sendResult.then==='function'){
-            sendResult.then(function(){meshBusy=false;},function(e){meshBusy=false;console.warn('FaceMesh send failed',e);});
-          } else {
-            meshBusy=false;
+          var fm=getFaceMesh();
+          if(fm && !meshBusy){
+            meshBusy=true;
+            try{
+              var sendResult=fm.send({image:video});
+              if(sendResult && typeof sendResult.then==='function'){
+                sendResult.then(function(){meshBusy=false;},function(e){meshBusy=false;console.warn('FaceMesh send failed',e);});
+              } else {
+                meshBusy=false;
+              }
+            }catch(e){
+              meshBusy=false;
+              console.warn('FaceMesh send failed',e);
+            }
           }
-        }catch(e){
-          meshBusy=false;
-          console.warn('FaceMesh send failed',e);
-        }
+        }catch(e){}
       }
 
-      // If the model never loads (CDN blocked, unsupported browser), don't
-      // strand the user on a gate that can never open — drop back to the
-      // old timed bucket capture so enrollment is still possible.
       if(!meshFallback && elapsed>=FALLBACK_AFTER_MS && capturedOrder.length===0){
         meshFallback=true;
         console.warn('[enroll] No angles captured after '+FALLBACK_AFTER_MS+'ms — falling back to timed capture');
@@ -1957,9 +1960,10 @@ function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,
       }
 
       if(meshFallback){
-        // Timed fallback: 3 buckets across a 9s window, sharpest frame each.
-        if(elapsed>=FALLBACK_AFTER_MS+9000){
-          var picked=pickEnrollFrames(frames.filter(function(f){return f.t>=FALLBACK_AFTER_MS;}),9000);
+        var _fbWait=_isIOS?9000:(FALLBACK_AFTER_MS+9000);
+        var _fbStart=_isIOS?0:FALLBACK_AFTER_MS;
+        if(elapsed>=_fbWait){
+          var picked=pickEnrollFrames(frames.filter(function(f){return f.t>=_fbStart;}),9000);
           if(picked.length){
             capturedOrder=[];
             capturedAngles={};
@@ -2292,7 +2296,6 @@ function runExitFace(){
     bioIdle.style.display='none';
     bioVideo.style.display='block';
     bioVideo.srcObject=stream;
-    bioVideo.play();
     bioOval.style.display='block';
     bioBeam.style.display='block';
     bioRec.style.display='flex';
@@ -2300,10 +2303,11 @@ function runExitFace(){
     btn.style.display='none';
     document.getElementById('xph0').classList.add('active');
 
-    setTimeout(function(){
-      startFaceCapture(bioVideo,bioCanvas,bioOval,bioBeam,bioRec,bioLabel,val,bar,btn,
-        document.getElementById('xBioProgress')||{style:{}},bioRing,bioPct,'exit');
-    },500);
+    function _startExit(){startFaceCapture(bioVideo,bioCanvas,bioOval,bioBeam,bioRec,bioLabel,val,bar,btn,document.getElementById('xBioProgress')||{style:{}},bioRing,bioPct,'exit');}
+    var _xs=false;function _xr(){if(_xs)return;_xs=true;bioVideo.removeEventListener('loadeddata',_xr);setTimeout(_startExit,300);}
+    bioVideo.addEventListener('loadeddata',_xr);
+    var _xp=bioVideo.play();if(_xp&&typeof _xp.then==='function')_xp.catch(function(){});
+    setTimeout(_xr,1500);
 
   }).catch(function(){
     xFaceRan=false;val.innerHTML=faceAlertHTML('error','Camera access denied — enable it in device settings');
@@ -2742,7 +2746,6 @@ function runReenrollFace(){
     bioIdle.style.display='none';
     bioVideo.style.display='block';
     bioVideo.srcObject=stream;
-    bioVideo.play();
     bioOval.style.display='block';
     bioBeam.style.display='block';
     bioRec.style.display='flex';
@@ -2750,10 +2753,11 @@ function runReenrollFace(){
     btn.style.display='none';
     document.getElementById('reph0').classList.add('active');
 
-    setTimeout(function(){
-      startFaceCapture(bioVideo,bioCanvas,bioOval,bioBeam,bioRec,bioLabel,val,bar,btn,
-        bioRing.parentElement,bioRing,bioPct,'reenroll');
-    },500);
+    function _startRe(){startFaceCapture(bioVideo,bioCanvas,bioOval,bioBeam,bioRec,bioLabel,val,bar,btn,bioRing.parentElement,bioRing,bioPct,'reenroll');}
+    var _rs=false;function _rr(){if(_rs)return;_rs=true;bioVideo.removeEventListener('loadeddata',_rr);setTimeout(_startRe,300);}
+    bioVideo.addEventListener('loadeddata',_rr);
+    var _rp=bioVideo.play();if(_rp&&typeof _rp.then==='function')_rp.catch(function(){});
+    setTimeout(_rr,1500);
 
   }).catch(function(){
     reenrollRunning=false;
@@ -2989,7 +2993,6 @@ function forgotPinRunScan(){
     bioIdle.style.display='none';
     bioVideo.style.display='block';
     bioVideo.srcObject=stream;
-    bioVideo.play();
     bioOval.style.display='block';
     bioBeam.style.display='block';
     bioRec.style.display='flex';
@@ -2997,10 +3000,11 @@ function forgotPinRunScan(){
     val.textContent='Hold steady — scanning your face';
     btn.style.display='none';
 
-    setTimeout(function(){
-      startFaceCapture(bioVideo,bioCanvas,bioOval,bioBeam,bioRec,bioLabel,val,bar,btn,
-        bioProgress,bioRing,bioPct,'fp');
-    },500);
+    function _startFp(){startFaceCapture(bioVideo,bioCanvas,bioOval,bioBeam,bioRec,bioLabel,val,bar,btn,bioProgress,bioRing,bioPct,'fp');}
+    var _fs=false;function _fr(){if(_fs)return;_fs=true;bioVideo.removeEventListener('loadeddata',_fr);setTimeout(_startFp,300);}
+    bioVideo.addEventListener('loadeddata',_fr);
+    var _fp=bioVideo.play();if(_fp&&typeof _fp.then==='function')_fp.catch(function(){});
+    setTimeout(_fr,1500);
 
   }).catch(function(){
     val.innerHTML=faceAlertHTML('error','Camera access denied — enable it in device settings');
@@ -3258,7 +3262,6 @@ function runFace(){
     bioIdle.style.display='none';
     bioVideo.style.display='block';
     bioVideo.srcObject=stream;
-    bioVideo.play();
     bioOval.style.display='block';
     bioBeam.style.display='block';
     bioRec.style.opacity='1';
@@ -3267,8 +3270,11 @@ function runFace(){
     btn.style.display='none';
     document.getElementById('ph0').classList.add('active');
 
-    startFaceCapture(bioVideo,bioCanvas,bioOval,bioBeam,bioRec,bioLabel,val,bar,btn,
-      bioProgress,bioRing,bioPct,'att');
+    function _startAtt(){startFaceCapture(bioVideo,bioCanvas,bioOval,bioBeam,bioRec,bioLabel,val,bar,btn,bioProgress,bioRing,bioPct,'att');}
+    var _as=false;function _ar(){if(_as)return;_as=true;bioVideo.removeEventListener('loadeddata',_ar);setTimeout(_startAtt,300);}
+    bioVideo.addEventListener('loadeddata',_ar);
+    var _ap=bioVideo.play();if(_ap&&typeof _ap.then==='function')_ap.catch(function(){});
+    setTimeout(_ar,1500);
 
   }).catch(function(){
     faceRan=false;val.innerHTML=faceAlertHTML('error','Camera access denied — enable it in device settings');
@@ -3578,7 +3584,10 @@ function renderHistory(){
 
   apiRequest('/api/attendance?faculty_id='+encodeURIComponent(fac.facultyId||''),'GET').then(function(resp){
     var rows=(resp && resp.records) || (Array.isArray(resp)?resp:[]);
-    historyFilterState.rawRows=rows.map(function(r){
+    historyFilterState.rawRows=rows.filter(function(r){
+      var s=r.status||'';
+      return s!=='rejected_face'&&s!=='rejected_location'&&!r.flagged_suspicious;
+    }).map(function(r){
       return {type:normalizeRecordType(r)==='check_out'?'check-out':'check-in',time:r.timestamp||r.time,status:r.status,dist:r.distance_to_boundary_m!=null?(r.distance_to_boundary_m+'m'):null,late_minutes:r.late_minutes||0};
     });
     applyHistoryFilterAndRender();

@@ -536,6 +536,11 @@
         <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4" width="14" height="13" rx="2"/><path d="M7 2v4M13 2v4M3 9h14"/><path d="M7 13h2M11 13h2" stroke-linecap="round"/></svg>
         Attendance
       </button>
+      <button class="nav-item" data-view="flagged">
+        <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 3v15M4 3l10 3.5L4 10" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Flagged Records
+        <span class="nav-badge" id="flagged-count">0</span>
+      </button>
       <button class="nav-item" data-view="approvals">
         <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="7" r="3.5"/><path d="M3 17c0-3.3 3.1-6 7-6s7 2.7 7 6"/><path d="M12 11l1.5 1.5L16 10" stroke-linecap="round" stroke-linejoin="round"/></svg>
         Pending Approvals
@@ -627,9 +632,6 @@
           <select class="filter" id="att-dept-filter" disabled>
             <option value="">Select a faculty first</option>
           </select>
-          <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--slate-300);cursor:pointer;">
-            <input autocomplete="off" type="checkbox" id="att-flagged-only"> Flagged only
-          </label>
           <button class="btn-ghost" onclick="loadAttendance()">Refresh</button>
           <button class="btn-ghost" id="export-excel-btn" onclick="exportAttendanceExcel()">Export Excel</button>
           <button class="btn-ghost" id="export-pdf-btn" onclick="exportAttendancePDF()">Export PDF</button>
@@ -641,6 +643,46 @@
               <tr><th>Faculty</th><th>Department</th><th>Type</th><th>Timestamp</th><th>GPS</th><th>Face Match</th><th>Status</th></tr>
             </thead>
             <tbody id="attendance-tbody">
+              <tr><td colspan="7" class="loading-row">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Flagged Records -->
+      <section class="view" id="view-flagged">
+        <div class="page-header">
+          <div>
+            <div class="page-title">Flagged Records</div>
+            <div class="page-desc">Rejected face matches, location violations, and suspicious check-ins</div>
+          </div>
+        </div>
+        <div class="live-bar">
+          <div class="live-stats">
+            <div class="live-stat">Total flagged <b id="flagged-total">0</b></div>
+            <div class="live-stat">Rejected Face <b id="flagged-face">0</b></div>
+            <div class="live-stat">Rejected Location <b id="flagged-location">0</b></div>
+            <div class="live-stat">Suspicious <b id="flagged-suspicious">0</b></div>
+          </div>
+        </div>
+        <div class="toolbar">
+          <input autocomplete="off" type="search" id="flagged-search" placeholder="Search by name…">
+          <input autocomplete="off" type="date" id="flagged-date-from">
+          <input autocomplete="off" type="date" id="flagged-date-to">
+          <select class="filter" id="flagged-reason-filter">
+            <option value="">All reasons</option>
+            <option value="rejected_face">Rejected Face</option>
+            <option value="rejected_location">Rejected Location</option>
+            <option value="suspicious">Suspicious</option>
+          </select>
+          <button class="btn-ghost" onclick="loadAttendance()">Refresh</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Faculty</th><th>Department</th><th>Type</th><th>Timestamp</th><th>GPS</th><th>Face Match</th><th>Reason</th></tr>
+            </thead>
+            <tbody id="flagged-tbody">
               <tr><td colspan="7" class="loading-row">Loading…</td></tr>
             </tbody>
           </table>
@@ -1378,6 +1420,9 @@ function handleAttendanceEvent(data) {
   const attendanceViewActive = document.getElementById('view-attendance')?.classList.contains('active');
   if (attendanceViewActive) renderAttendanceTable();
 
+  // 3b. Keep the flagged view and badge in sync.
+  renderFlaggedTable();
+
   // 4. If Analytics is currently visible, refresh its stats/charts.
   const analyticsViewActive = document.getElementById('view-analytics')?.classList.contains('active');
   if (analyticsViewActive) renderAnalytics();
@@ -1635,6 +1680,7 @@ async function loadAttendance() {
   try {
     attendanceCache = await api('/api/attendance');
     renderAttendanceTable();
+    renderFlaggedTable();
   } catch (err) {
     tbody.innerHTML = `<tr><td colspan="7" class="loading-row">Couldn't load attendance — ${err.message}</td></tr>`;
   }
@@ -1661,6 +1707,8 @@ function getFilteredAttendanceRows() {
   const flaggedOnly = document.getElementById('att-flagged-only').checked;
 
   return attendanceCache.filter(r => {
+    const s = r.status || '';
+    if (s === 'rejected_face' || s === 'rejected_location' || r.flagged_suspicious) return false;
     const name = (r.faculty_name || r.name || '').toLowerCase();
     const matchesQ = !q || name.includes(q);
     const matchesType = !statusFilter || r.record_type === statusFilter;
@@ -1673,8 +1721,7 @@ function getFilteredAttendanceRows() {
     const dept = getRecordDepartment(r);
     const matchesDept = !deptFilter || dept === deptFilter;
     const matchesFaculty = !facultyFilter || departmentToFaculty(dept) === facultyFilter;
-    const matchesFlagged = !flaggedOnly || r.flagged_suspicious;
-    return matchesQ && matchesType && matchesDate && matchesDept && matchesFaculty && matchesFlagged;
+    return matchesQ && matchesType && matchesDate && matchesDept && matchesFaculty;
   });
 }
 
@@ -1701,7 +1748,79 @@ function renderAttendanceTable() {
 ['att-search','att-date-from','att-date-to'].forEach(id =>
   document.getElementById(id).addEventListener('input', renderAttendanceTable));
 document.getElementById('att-status-filter').addEventListener('change', renderAttendanceTable);
-document.getElementById('att-flagged-only').addEventListener('change', renderAttendanceTable);
+/* =========================================================================
+   FLAGGED RECORDS
+   ========================================================================= */
+
+function getFilteredFlaggedRows() {
+  const q = document.getElementById('flagged-search').value.trim().toLowerCase();
+  const from = document.getElementById('flagged-date-from').value;
+  const to = document.getElementById('flagged-date-to').value;
+  const reasonFilter = document.getElementById('flagged-reason-filter').value;
+
+  return attendanceCache.filter(r => {
+    const s = r.status || '';
+    const isFlagged = s === 'rejected_face' || s === 'rejected_location' || r.flagged_suspicious;
+    if (!isFlagged) return false;
+    const name = (r.faculty_name || r.name || '').toLowerCase();
+    if (q && !name.includes(q)) return false;
+    if ((from || to) && r.timestamp) {
+      const ts = new Date(r.timestamp);
+      if (from && ts < new Date(from)) return false;
+      if (to && ts > new Date(to + 'T23:59:59')) return false;
+    }
+    if (reasonFilter === 'rejected_face' && s !== 'rejected_face') return false;
+    if (reasonFilter === 'rejected_location' && s !== 'rejected_location') return false;
+    if (reasonFilter === 'suspicious' && !r.flagged_suspicious) return false;
+    return true;
+  });
+}
+
+function renderFlaggedTable() {
+  const tbody = document.getElementById('flagged-tbody');
+  if (!tbody) return;
+  const rows = getFilteredFlaggedRows();
+
+  // Update stats
+  let face = 0, loc = 0, sus = 0;
+  attendanceCache.forEach(r => {
+    const s = r.status || '';
+    if (s === 'rejected_face') face++;
+    else if (s === 'rejected_location') loc++;
+    if (r.flagged_suspicious) sus++;
+  });
+  const totalFlagged = face + loc + sus;
+  document.getElementById('flagged-total').textContent = totalFlagged;
+  document.getElementById('flagged-face').textContent = face;
+  document.getElementById('flagged-location').textContent = loc;
+  document.getElementById('flagged-suspicious').textContent = sus;
+  document.getElementById('flagged-count').textContent = totalFlagged || '';
+
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><div class="empty-title">No flagged records</div><div class="empty-sub">All attendance records are verified.</div></div></td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows.map(r => {
+    const s = r.status || '';
+    const reason = s === 'rejected_face' ? 'Face mismatch'
+      : s === 'rejected_location' ? 'Location violation'
+      : r.flagged_suspicious ? (r.flag_reason || 'Suspicious') : s;
+    return `<tr class="row-flagged">
+      <td class="cell-name">${r.faculty_name || r.name || r.faculty_id || '—'}</td>
+      <td>${getRecordDepartment(r) || '—'}</td>
+      <td><span class="status-pill status-${r.record_type === 'check_in' ? 'checkin' : 'checkout'}">${r.record_type === 'check_in' ? 'Check-in' : 'Check-out'}</span></td>
+      <td class="mono">${fmtDate(r.timestamp)}</td>
+      <td>${r.gps_distance != null ? r.gps_distance + 'm' : '—'}</td>
+      <td>${r.face_match_score != null ? (r.face_match_score * 100).toFixed(0) + '%' : '—'}</td>
+      <td><span class="flag-badge">⚠ ${reason}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+['flagged-search','flagged-date-from','flagged-date-to'].forEach(id =>
+  document.getElementById(id).addEventListener('input', renderFlaggedTable));
+document.getElementById('flagged-reason-filter').addEventListener('change', renderFlaggedTable);
 
 /* =========================================================================
    ATTENDANCE EXPORT (Excel / PDF / CSV)
