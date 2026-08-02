@@ -274,12 +274,19 @@ def verify_face_from_frames(candidate_frames_b64: List[str], enrolled_embeddings
     """
     extraction = get_best_face_embedding(candidate_frames_b64, collect_all=True)
     if extraction["embedding"] is None:
+        extraction.pop("all_embeddings", None)
+        extraction.pop("all_face_crops", None)
         return {"score": 0.0, "verified": "fail", "reason": extraction["reason"]}
 
     liveness = _check_liveness(
         extraction.get("all_embeddings", []),
         extraction.get("all_face_crops", []),
     )
+
+    del extraction["all_embeddings"]
+    del extraction["all_face_crops"]
+    extraction.pop("thumbnail", None)
+
     if not liveness["alive"]:
         return {
             "score": 0.0,
@@ -289,6 +296,8 @@ def verify_face_from_frames(candidate_frames_b64: List[str], enrolled_embeddings
         }
 
     live = np.array(extraction["embedding"])
+    del extraction
+
     enrolled_list = str_to_embeddings(enrolled_embeddings_str)
 
     best_score = max(cosine_similarity(live, enrolled) for enrolled in enrolled_list)
