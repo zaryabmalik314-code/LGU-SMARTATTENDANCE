@@ -133,7 +133,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#1a1a2e;color:var(--g
 .pill-navy{background:#e8f0fc;color:#1a3a8a}.pill-navy::before{background:#1e3a8a}
 
 /* FACE - MODERN BIOMETRIC SCANNER */
-.face-val{font-size:13px;color:var(--g500);text-align:center;min-height:18px}
+.face-val{font-size:14px;color:var(--g500);text-align:center;min-height:20px}
 .face-result{background:var(--gbg);border-radius:var(--r14);padding:14px;display:none;margin-top:12px}
 .match-row{display:flex;align-items:center;gap:12px}
 .match-avatar{width:44px;height:44px;border-radius:50%;background:var(--gold);font-size:13px;font-weight:700;color:var(--navy);display:flex;align-items:center;justify-content:center;flex-shrink:0}
@@ -172,9 +172,9 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#1a1a2e;color:var(--g
 .scan-idle{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px}
 .scan-idle-icon{width:120px;height:155px;border-radius:30px;border:2px dashed rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center}
 .scan-idle-text{font-size:12px;color:rgba(255,255,255,.3);letter-spacing:.04em}
-.scan-controls{padding:18px 20px 20px}
-.scan-phases{display:flex;gap:6px;margin-bottom:14px;flex-wrap:nowrap;overflow-x:auto}
-.bphase{display:flex;align-items:center;gap:4px;font-size:11px;font-weight:500;padding:5px 12px;border-radius:var(--rpill);background:var(--g50);color:var(--g500);border:1px solid var(--g100);transition:all .4s;white-space:nowrap}
+.scan-controls{padding:22px 22px 24px}
+.scan-phases{display:flex;gap:8px;margin-bottom:18px;flex-wrap:nowrap;overflow-x:auto}
+.bphase{display:flex;align-items:center;gap:5px;font-size:12px;font-weight:500;padding:7px 14px;border-radius:var(--rpill);background:var(--g50);color:var(--g500);border:1px solid var(--g100);transition:all .4s;white-space:nowrap}
 .bphase.active{background:#e8f4ff;color:#1260b3;border-color:#a8d0f5}
 .bphase.done{background:var(--gbg);color:var(--green);border-color:#a8e6cc}
 .bphase .tick{display:none}.bphase.done .tick{display:inline}
@@ -630,47 +630,48 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
     <div class="scroll" id="homePanel">
 
       <!-- Dashboard header -->
-      <div style="background:linear-gradient(160deg,#0b1f4b 0%,#132963 50%,#1a3a7a 100%);padding:20px 20px 24px;margin:-1px -1px 0;border-radius:0 0 24px 24px;position:relative;overflow:hidden">
-        <div style="position:absolute;top:-30px;right:-30px;width:120px;height:120px;border-radius:50%;background:rgba(201,168,76,.06);pointer-events:none"></div>
-        <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px">
-          <div class="avatar" id="homeAvatar" style="width:48px;height:48px;border-radius:14px;font-size:15px;border:2px solid rgba(201,168,76,.4);box-shadow:0 2px 10px rgba(0,0,0,.2)">--</div>
+      <div style="background:linear-gradient(160deg,#0b1f4b 0%,#132963 50%,#1a3a7a 100%);padding:24px 22px 32px;margin:-1px -1px 0;border-radius:0 0 28px 28px;position:relative;overflow:hidden">
+        <div style="position:absolute;top:-40px;right:-40px;width:160px;height:160px;border-radius:50%;background:rgba(201,168,76,.06);pointer-events:none"></div>
+        <div style="position:absolute;bottom:-50px;left:-30px;width:120px;height:120px;border-radius:50%;background:rgba(59,130,246,.04);pointer-events:none"></div>
+        <div style="display:flex;align-items:center;gap:16px;margin-bottom:24px">
+          <div class="avatar" id="homeAvatar" style="width:54px;height:54px;border-radius:16px;font-size:17px;border:2px solid rgba(201,168,76,.4);box-shadow:0 4px 16px rgba(0,0,0,.25)">--</div>
           <div style="flex:1;min-width:0">
-            <div style="font-size:15px;font-weight:700;color:#fff;letter-spacing:-.01em" id="homeName">&mdash;</div>
-            <div style="font-size:11px;color:rgba(255,255,255,.45);margin-top:1px" id="homeDeptRole">&mdash;</div>
+            <div style="font-size:17px;font-weight:700;color:#fff;letter-spacing:-.01em" id="homeName">&mdash;</div>
+            <div style="font-size:12px;color:rgba(255,255,255,.45);margin-top:3px" id="homeDeptRole">&mdash;</div>
           </div>
           <div style="text-align:right">
-            <div style="font-size:9px;color:rgba(255,255,255,.3);letter-spacing:.06em;text-transform:uppercase" id="homeTeacherId">&mdash;</div>
+            <div style="font-size:10px;color:rgba(255,255,255,.3);letter-spacing:.06em;text-transform:uppercase" id="homeTeacherId">&mdash;</div>
           </div>
         </div>
 
-        <div style="text-align:center;margin-bottom:16px">
-          <div class="home-clock" id="homeClock" style="font-size:42px;font-weight:700;color:#fff;letter-spacing:-.02em;line-height:1;font-family:'DM Serif Display',serif">&mdash;</div>
-          <div class="home-date" id="homeDate" style="font-size:12px;color:rgba(255,255,255,.4);margin-top:6px;letter-spacing:.02em">&mdash;</div>
+        <div style="text-align:center;margin-bottom:22px">
+          <div class="home-clock" id="homeClock" style="font-size:52px;font-weight:700;color:#fff;letter-spacing:-.02em;line-height:1;font-family:'DM Serif Display',serif">&mdash;</div>
+          <div class="home-date" id="homeDate" style="font-size:13px;color:rgba(255,255,255,.4);margin-top:8px;letter-spacing:.02em">&mdash;</div>
         </div>
 
         <div id="geoStatusWrap" style="text-align:center">
-          <span class="status-chip locating" id="geoChip" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.7)"><span class="dot"></span><span id="geoChipTxt">Checking your location&hellip;</span></span>
+          <span class="status-chip locating" id="geoChip" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.7);padding:8px 18px;font-size:12px;border-radius:24px"><span class="dot"></span><span id="geoChipTxt">Checking your location&hellip;</span></span>
         </div>
       </div>
 
-      <div style="padding:18px 18px 0">
-      <div class="card" style="text-align:center;border:1px solid var(--g100);margin-top:-16px;position:relative;z-index:2;box-shadow:0 4px 24px rgba(11,31,75,.1);border-radius:20px;padding:28px 22px 24px">
+      <div style="padding:20px 18px 0">
+      <div class="card" style="text-align:center;border:1px solid var(--g100);margin-top:-20px;position:relative;z-index:2;box-shadow:0 6px 32px rgba(11,31,75,.12);border-radius:24px;padding:36px 24px 32px">
 
         <!-- Idle check-in state -->
         <div id="checkinIdle">
-          <div style="margin-bottom:20px">
-            <div style="width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,rgba(201,168,76,.12),rgba(201,168,76,.06));border:2px solid rgba(201,168,76,.2);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;color:var(--gold);font-size:30px"><svg class="i"><use href="#ic-camera"/></svg></div>
-            <div style="font-size:18px;font-weight:700;color:var(--navy);margin-bottom:6px">Mark Attendance</div>
-            <div style="font-size:13px;color:var(--g500);line-height:1.6;max-width:280px;margin:0 auto">Scan your face to check in. GPS is verified automatically in the background.</div>
+          <div style="margin-bottom:28px">
+            <div style="width:88px;height:88px;border-radius:50%;background:linear-gradient(135deg,rgba(201,168,76,.14),rgba(201,168,76,.06));border:2.5px solid rgba(201,168,76,.2);display:flex;align-items:center;justify-content:center;margin:0 auto 18px;color:var(--gold);font-size:36px"><svg class="i"><use href="#ic-camera"/></svg></div>
+            <div style="font-size:22px;font-weight:700;color:var(--navy);margin-bottom:10px">Mark Attendance</div>
+            <div style="font-size:14px;color:var(--g500);line-height:1.7;max-width:300px;margin:0 auto">Scan your face to check in. GPS is verified automatically in the background.</div>
           </div>
-          <button class="scan-cta" id="scanFaceBtn" disabled onclick="openScanFace()" style="border-radius:16px;padding:16px 28px;font-size:15px;font-weight:600"><span class="btn-ico"><svg class="i"><use href="#ic-camera"/></svg></span>Scan Face to Check In</button>
+          <button class="scan-cta" id="scanFaceBtn" disabled onclick="openScanFace()" style="border-radius:16px;padding:18px 32px;font-size:16px;font-weight:600"><span class="btn-ico" style="font-size:18px"><svg class="i"><use href="#ic-camera"/></svg></span>Scan Face to Check In</button>
         </div>
 
         <!-- Face scan card (hidden until location verified + tapped) -->
         <div id="checkinFaceCard" style="display:none">
-          <div style="background:#fff;border-radius:20px;border:1px solid #e8e6e2;overflow:hidden;margin-bottom:14px;box-shadow:0 4px 24px rgba(11,31,75,.1)">
+          <div style="background:#fff;border-radius:24px;border:1px solid #e8e6e2;overflow:hidden;margin-bottom:16px;box-shadow:0 6px 32px rgba(11,31,75,.12)">
             <!-- Camera viewport -->
-            <div id="bioScanner" class="scan-viewport" style="height:380px;background:#050a14">
+            <div id="bioScanner" class="scan-viewport" style="height:400px;background:#050a14">
               <!-- Idle state -->
               <div id="bioIdle" class="scan-idle">
                 <div class="scan-idle-icon">
@@ -713,8 +714,8 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
                 <div id="ph2" class="bphase"><svg class="i"><use href="#ic-user"/></svg> Filtering</div>
                 <div id="ph3" class="bphase"><svg class="i"><use href="#ic-check-circle"/></svg> Submitting</div>
               </div>
-              <div class="face-val" id="faceVal" style="margin-bottom:10px">Ready to scan</div>
-              <div style="height:4px;background:var(--g100);border-radius:4px;margin-bottom:16px;overflow:hidden">
+              <div class="face-val" id="faceVal" style="margin-bottom:14px">Ready to scan</div>
+              <div style="height:5px;background:var(--g100);border-radius:4px;margin-bottom:20px;overflow:hidden">
                 <div id="faceBar" style="height:100%;width:0%;background:linear-gradient(90deg,#3b82f6,#06b6d4);border-radius:4px;transition:width .4s"></div>
               </div>
               <div class="face-result" id="faceResult" style="margin-bottom:16px">
@@ -728,10 +729,10 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
                 </div>
                 <div><span class="face-verified-badge" id="faceVerifiedBadge"><svg class="i"><use href="#ic-loader"/></svg> Awaiting server verification&hellip;</span></div>
               </div>
-              <button class="btn-primary" id="faceBtn" onclick="runFace()" style="border-radius:14px;padding:16px;font-size:15px;background:linear-gradient(135deg,var(--navy),#1e40af)"><span class="btn-ico"><svg class="i"><use href="#ic-camera"/></svg></span>Start Face Scan</button>
+              <button class="btn-primary" id="faceBtn" onclick="runFace()" style="border-radius:16px;padding:18px;font-size:16px;background:linear-gradient(135deg,var(--navy),#1e40af)"><span class="btn-ico" style="font-size:18px"><svg class="i"><use href="#ic-camera"/></svg></span>Start Face Scan</button>
             </div>
           </div>
-          <button class="btn-outline" onclick="closeScanFace()" style="border-radius:14px;padding:14px"><svg class="i"><use href="#ic-chevron-left"/></svg> Cancel</button>
+          <button class="btn-outline" onclick="closeScanFace()" style="border-radius:16px;padding:16px;font-size:14px;margin-top:12px"><svg class="i"><use href="#ic-chevron-left"/></svg> Cancel</button>
         </div>
       </div>
       </div>
