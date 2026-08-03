@@ -3151,7 +3151,34 @@ function startGeoWatch(){
     setGeoChip('denied','GPS not supported on this device');
     return;
   }
-  var samples=0, maxSamples=4;
+  if(_isIOS){
+    navigator.geolocation.getCurrentPosition(function(pos){
+      _handleGeoPos(pos);
+      _startGeoWatch();
+    },function(err){
+      if(err.code===1){
+        setGeoChip('denied','Location denied — open Settings → Privacy → Location Services → Safari Websites → Allow');
+      } else {
+        _startGeoWatch();
+      }
+    },{enableHighAccuracy:true,timeout:10000,maximumAge:30000});
+    return;
+  }
+  _startGeoWatch();
+}
+function _handleGeoPos(pos){
+  geoReadings.push({
+    latitude:pos.coords.latitude,
+    longitude:pos.coords.longitude,
+    accuracy:pos.coords.accuracy,
+    altitude:pos.coords.altitude,
+    altitude_accuracy:pos.coords.altitudeAccuracy,
+    speed:pos.coords.speed,
+    heading:pos.coords.heading
+  });
+}
+function _startGeoWatch(){
+  var samples=geoReadings.length, maxSamples=4;
   geoWatchId=navigator.geolocation.watchPosition(function(pos){
     samples++;
     geoReadings.push({
@@ -3182,11 +3209,20 @@ function startGeoWatch(){
     }
   },function(err){
     stopGeoWatch();
-    var msg=err.code===1?'Location permission denied':err.code===2?'Position unavailable':'Location request timed out';
-    setGeoChip('denied',msg+' — tap to retry');
+    if(err.code===1){
+      if(_isIOS){
+        setGeoChip('denied','Location denied — open Settings → Privacy → Location Services → Safari Websites → Allow');
+      } else {
+        setGeoChip('denied','Location permission denied — tap the lock icon in your browser address bar to allow');
+      }
+    } else if(err.code===2){
+      setGeoChip('denied','Position unavailable — make sure Location/GPS is turned on');
+    } else {
+      setGeoChip('denied','Location timed out — tap to retry');
+    }
     document.getElementById('geoChip').style.cursor='pointer';
     document.getElementById('geoChip').onclick=startGeoWatch;
-  },{enableHighAccuracy:true,timeout:15000,maximumAge:0});
+  },{enableHighAccuracy:true,timeout:20000,maximumAge:10000});
 }
 function stopGeoWatch(){
   if(geoWatchId!==null && navigator.geolocation){navigator.geolocation.clearWatch(geoWatchId);}
