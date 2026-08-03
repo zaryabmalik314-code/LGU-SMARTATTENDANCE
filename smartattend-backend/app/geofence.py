@@ -12,7 +12,6 @@ from .schemas import GPSReading
 CAMPUS_BOUNDARY: List[Tuple[float, float]] = [
     (31.463801, 74.441493),
     (31.464043, 74.441724),
-    (31.463901, 74.441514),
     (31.464234, 74.441990),
     (31.464446, 74.442265),
     (31.464764, 74.442671),
@@ -49,8 +48,8 @@ HOME_BOUNDARY: List[Tuple[float, float]] = [
 # All allowed zones — point must be inside at least one.
 ALLOWED_BOUNDARIES = [CAMPUS_BOUNDARY, HOME_BOUNDARY]
 
-MAX_ACCEPTABLE_ACCURACY_M = 30.0  # reject readings noisier than this
-BOUNDARY_BUFFER_M = 15.0  # treat points within this distance of edge as "inside" too
+MAX_ACCEPTABLE_ACCURACY_M = 100.0  # reject readings noisier than this
+BOUNDARY_BUFFER_M = 50.0  # treat points within this distance of edge as "inside" too
 
 
 def pick_best_reading(readings: List[GPSReading]) -> GPSReading:
