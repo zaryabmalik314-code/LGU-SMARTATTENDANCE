@@ -162,6 +162,11 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#1a1a2e;color:var(--g
 @keyframes beamSweep{0%{top:15%;opacity:0}8%{opacity:1}92%{opacity:1}100%{top:85%;opacity:0}}
 @keyframes fpDetecting{0%,100%{opacity:1}50%{opacity:.4}}
 .fp-detecting{animation:fpDetecting 1.5s ease-in-out infinite}
+.scan-verifying{position:absolute;inset:0;z-index:20;background:rgba(5,10,20,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px}
+.scan-verifying .sv-spinner{width:48px;height:48px;border:3px solid rgba(255,255,255,.15);border-top-color:#60a5fa;border-radius:50%;animation:svSpin .8s linear infinite}
+.scan-verifying .sv-text{color:#fff;font-size:15px;font-weight:600;letter-spacing:.02em}
+.scan-verifying .sv-sub{color:rgba(255,255,255,.5);font-size:12px}
+@keyframes svSpin{to{transform:rotate(360deg)}}
 .scan-rec{position:absolute;top:16px;left:16px;display:none;align-items:center;gap:6px;z-index:8;background:rgba(0,0,0,.5);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.1);border-radius:20px;padding:5px 12px}
 .scan-rec .rdot{width:7px;height:7px;border-radius:50%;background:#ef4444;animation:livePulse 1s infinite;flex-shrink:0}
 .scan-rec span{font-size:10px;font-weight:700;color:rgba(255,255,255,.85);letter-spacing:.08em}
@@ -1025,7 +1030,7 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
         <div id="xstep1" style="display:none">
           <div style="background:#fff;border-radius:20px;border:1px solid #e8e6e2;overflow:hidden;margin-bottom:14px;box-shadow:0 4px 24px rgba(11,31,75,.1)">
             <!-- Camera viewport -->
-            <div class="scan-viewport" style="height:380px;background:#050a14">
+            <div id="xBioScanner" class="scan-viewport" style="height:380px;background:#050a14">
               <!-- Idle state -->
               <div id="xBioIdle" class="scan-idle">
                 <div class="scan-idle-icon">
@@ -2353,6 +2358,8 @@ function onExitScanComplete(now,faceImages){
     return;
   }
 
+  showScanVerifying('xBioScanner');
+
   var fac=getFaculty()||{};
   var last=exitGeoReadings.length?exitGeoReadings[exitGeoReadings.length-1]:(geoReadings.length?geoReadings[geoReadings.length-1]:null);
   var dist=last?Math.round(haversineMetres(last.latitude,last.longitude,GEO_LAT,GEO_LNG)):null;
@@ -2366,6 +2373,7 @@ function onExitScanComplete(now,faceImages){
     wifi_ssid: null,
     face_images: faceImages
   }).then(function(resp){
+    hideScanVerifying('xBioScanner');
     console.log('[check-out] response:', resp);
     var status=(resp&&resp.status)||'present';
 
@@ -2399,6 +2407,7 @@ function onExitScanComplete(now,faceImages){
     paintCheckinButton();
     showExitConfirm();
   }).catch(function(e){
+    hideScanVerifying('xBioScanner');
     console.warn('check-out API call failed:',e);
     showToast(e && e.message ? e.message : 'Check-out failed — could not reach the server.');
     xFaceRan=false;
@@ -3287,6 +3296,18 @@ function runFace(){
 // Called by startFaceCapture when mode==='att' completes successfully.
 // faceImages is an array of blur-filtered base64 JPEG data URLs — the
 // backend picks the best-matching frame itself.
+function showScanVerifying(containerId){
+  var c=document.getElementById(containerId);if(!c)return;
+  var old=c.querySelector('.scan-verifying');if(old)old.remove();
+  var d=document.createElement('div');d.className='scan-verifying';
+  d.innerHTML='<div class="sv-spinner"></div><div class="sv-text">Verifying your identity…</div><div class="sv-sub">Please wait, do not close</div>';
+  c.appendChild(d);
+}
+function hideScanVerifying(containerId){
+  var c=document.getElementById(containerId);if(!c)return;
+  var o=c.querySelector('.scan-verifying');if(o)o.remove();
+}
+
 function onCheckinScanComplete(faceImages){
   try{
     assertFaceImagesNonEmpty(faceImages,'check-in');
@@ -3296,6 +3317,9 @@ function onCheckinScanComplete(faceImages){
     resetFaceScannerUI();
     return;
   }
+
+  stopBioCamera();
+  showScanVerifying('bioScanner');
 
   var fac=getFaculty()||{};
   document.getElementById('faceResultAvatar').textContent=initials(fac.name);
@@ -3367,6 +3391,7 @@ function setVerifyBadges(state, scoreText){
 }
 
 function finishCheckin(now, dist, resp, errorMsg){
+  hideScanVerifying('bioScanner');
   var fac=getFaculty()||{};
   // A network/parse failure (errorMsg set, resp null) must NEVER fall through
   // to 'present' — that previously showed a false "Attendance Marked!" for a
