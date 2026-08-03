@@ -499,7 +499,7 @@ async function api(path, options = {}) {
   const res = await fetch(BASE_URL + path, { ...options, headers });
   if (!res.ok) {
     let msg = 'Request failed (' + res.status + ')';
-    try { const body = await res.json(); if (body.detail) msg = body.detail; } catch(e){}
+    try { const body = await res.json(); if (body.detail) msg = typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail); } catch(e){}
     throw new Error(msg);
   }
   if (res.status === 204) return null;
@@ -914,9 +914,11 @@ function closeRejectModal() {
 
 document.getElementById('reject-confirm-btn').addEventListener('click', function() {
   if (pendingRejectId === null) return;
+  var id = pendingRejectId;
+  var btn = pendingRejectBtn;
   var note = document.getElementById('reject-note').value.trim() || null;
   closeRejectModal();
-  decideLeave(pendingRejectId, 'rejected', pendingRejectBtn, note);
+  decideLeave(id, 'rejected', btn, note);
 });
 
 document.getElementById('reject-modal').addEventListener('click', function(e) {

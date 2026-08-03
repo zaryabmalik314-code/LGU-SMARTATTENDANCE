@@ -1814,7 +1814,11 @@ def create_leave_request(payload: schemas.LeaveRequestCreate, db: Session = Depe
             "department": req.faculty.department if req.faculty else None,
         }
     })
-    return req
+    return _leave_request_out(req)
+
+
+@app.get("/api/leave-requests", response_model=List[schemas.LeaveRequestOut])
+def get_faculty_leave_requests(faculty_id: int, db: Session = Depends(get_db)):
     faculty = db.query(models.Faculty).filter(models.Faculty.id == faculty_id).first()
     if not faculty:
         raise HTTPException(status_code=404, detail="Faculty not found")
@@ -1825,4 +1829,4 @@ def create_leave_request(payload: schemas.LeaveRequestCreate, db: Session = Depe
         .order_by(models.LeaveRequest.created_at.desc())
         .all()
     )
-    return requests
+    return [_leave_request_out(r) for r in requests]
