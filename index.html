@@ -1839,15 +1839,17 @@ function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,
       // backend rejected those frames, but only after a wasted upload and
       // an InsightFace pass, and the UI gave the user no clue why. Now the
       // clock only advances while a face is actually visible.
-      var fmAtt=getFaceMesh();
-      if(fmAtt && !meshBusy){
-        meshBusy=true;
-        try{
-          var sr=fmAtt.send({image:video});
-          if(sr && typeof sr.then==='function'){
-            sr.then(function(){meshBusy=false;},function(){meshBusy=false;});
-          } else { meshBusy=false; }
-        }catch(e){ meshBusy=false; }
+      if(!_isIOS){
+        var fmAtt=getFaceMesh();
+        if(fmAtt && !meshBusy){
+          meshBusy=true;
+          try{
+            var sr=fmAtt.send({image:video});
+            if(sr && typeof sr.then==='function'){
+              sr.then(function(){meshBusy=false;},function(){meshBusy=false;});
+            } else { meshBusy=false; }
+          }catch(e){ meshBusy=false; }
+        }
       }
 
       // If FaceMesh never loads at all (CDN blocked, old browser), don't
