@@ -203,7 +203,7 @@ def compute_late_minutes(utc_timestamp: datetime, db: Session, department: Optio
     grace_deadline = expected + timedelta(minutes=grace)
     if local_time <= grace_deadline:
         return 0
-    return int((local_time - grace_deadline).total_seconds() // 60)
+    return int((local_time - expected).total_seconds() // 60)
 
 
 def get_current_admin(authorization: Optional[str] = Header(None), db: Session = Depends(get_db)) -> models.Admin:
@@ -1050,6 +1050,7 @@ def admin_recalculate_balance(
     for r in check_ins:
         if r.timestamp:
             unique_days.add(r.timestamp.date())
+            r.late_minutes = compute_late_minutes(r.timestamp, db, faculty.department)
         total_late += r.late_minutes or 0
 
     approved_leaves = (
