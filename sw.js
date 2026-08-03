@@ -1,4 +1,4 @@
-var CACHE_NAME = 'smartattend-v4';
+var CACHE_NAME = 'smartattend-v5';
 var PRECACHE = [
   './',
   './index.html',
@@ -9,7 +9,9 @@ var PRECACHE = [
 self.addEventListener('install', function(e) {
   e.waitUntil(
     caches.open(CACHE_NAME).then(function(cache) {
-      return cache.addAll(PRECACHE);
+      return cache.addAll(PRECACHE.map(function(url) {
+        return new Request(url, {cache: 'no-store'});
+      }));
     })
   );
   self.skipWaiting();
@@ -33,7 +35,7 @@ self.addEventListener('fetch', function(e) {
   if (e.request.method !== 'GET') return;
 
   e.respondWith(
-    fetch(e.request).then(function(resp) {
+    fetch(e.request, {cache: 'no-store'}).then(function(resp) {
       var clone = resp.clone();
       caches.open(CACHE_NAME).then(function(cache) {
         cache.put(e.request, clone);
