@@ -32,8 +32,6 @@ async def on_startup():
 # Add any new real domain here before pointing a frontend at this backend.
 ALLOWED_ORIGINS = [
     "https://zaryabmalik314-code.github.io",
-    "https://preeminent-kulfi-f8576a.netlify.app",
-    "https://brilliant-pothos-ee9a7a.netlify.app",
     "http://localhost:5500",
     "http://127.0.0.1:5500",
     "http://localhost:8000",
@@ -45,6 +43,7 @@ ALLOWED_ORIGINS = [
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=r"https://.*\.netlify\.app",
     allow_methods=["*"],
     allow_headers=["*"],
 )
