@@ -1,4 +1,4 @@
-var CACHE_NAME = 'smartattend-v2';
+var CACHE_NAME = 'smartattend-v3';
 var PRECACHE = [
   './',
   './index.html',
