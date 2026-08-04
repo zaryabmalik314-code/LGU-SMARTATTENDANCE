@@ -1,72 +1,40 @@
-var CACHE_NAME = 'smartattend-v9';
-var PRECACHE = [
-  './',
-  './index.html',
-  './manifest.json',
-  './icon-192x192.png',
-  './logo.png'
-];
+// Retired service worker - deliberately does nothing but remove itself.
+//
+// Earlier versions cached static assets. On devices that had one installed the
+// app could come up blank and stay that way until the user cleared storage,
+// because the resident worker kept serving its own stale cache. Deleting this
+// file outright would not have helped: browsers keep running the last worker
+// they installed, so the fix has to be a worker that tears itself down.
+//
+// There is intentionally NO fetch handler. Without one, requests bypass the
+// worker entirely and go straight to the network, so nothing can be served
+// stale even in the window before the unregister below completes.
+//
+// Do not add caching logic here. The app is a TWA shell over a live site and
+// has no offline requirement.
 
-self.addEventListener('install', function(e) {
-  e.waitUntil(
-    caches.open(CACHE_NAME).then(function(cache) {
-      return cache.addAll(PRECACHE);
-    })
-  );
+self.addEventListener('install', function() {
   self.skipWaiting();
 });
 
 self.addEventListener('activate', function(e) {
   e.waitUntil(
-    caches.keys().then(function(names) {
-      return Promise.all(
-        names.filter(function(n) { return n !== CACHE_NAME; })
-             .map(function(n) { return caches.delete(n); })
-      );
-    })
-  );
-  self.clients.claim();
-});
-
-self.addEventListener('fetch', function(e) {
-  var url = new URL(e.request.url);
-  if (url.origin !== location.origin) return;
-  if (e.request.method !== 'GET') return;
-
-  var isHTML = e.request.mode === 'navigate' ||
-    (e.request.headers.get('accept') || '').indexOf('text/html') !== -1;
-
-  if (isHTML) {
-    // Network-first for pages so code changes show up on the next launch.
-    e.respondWith(
-      fetch(e.request).then(function(res) {
-        var clone = res.clone();
-        caches.open(CACHE_NAME).then(function(cache) { cache.put(e.request, clone); });
-        return res;
-      }).catch(function() {
-        return caches.match(e.request);
+    caches.keys()
+      .then(function(keys) {
+        return Promise.all(keys.map(function(k) { return caches.delete(k); }));
       })
-    );
-  } else {
-    // Cache-first for static assets. These are content-stable, so going to the
-    // network for them on every launch just stalls startup; revalidate in the
-    // background instead and pick the update up next time.
-    e.respondWith(
-      caches.match(e.request).then(function(cached) {
-        if (cached) {
-          fetch(e.request).then(function(res) {
-            if (res && res.ok) {
-              caches.open(CACHE_NAME).then(function(cache) { cache.put(e.request, res); });
-            }
-          }).catch(function() {});
-          return cached;
-        }
-        return fetch(e.request).then(function(res) {
-          var clone = res.clone();
-          caches.open(CACHE_NAME).then(function(cache) { cache.put(e.request, clone); });
-          return res;
+      .then(function() {
+        return self.registration.unregister();
+      })
+      .then(function() {
+        // Reload open clients so they come back under no worker at all.
+        return self.clients.matchAll({ type: 'window' });
+      })
+      .then(function(clients) {
+        clients.forEach(function(c) {
+          if ('navigate' in c) { c.navigate(c.url); }
         });
       })
-    );
-  }
+      .catch(function() {})
+  );
 });

@@ -4016,13 +4016,23 @@ document.addEventListener('DOMContentLoaded', function(){
     if(sp)sp.classList.add('hide');
   }, 900);
 
-  // Register service worker for installable PWA / APK support
+  // No service worker. It cached assets that went stale and left the app stuck
+  // on a blank screen until storage was cleared manually - the app is a TWA
+  // shell over a live site, so there is nothing here that needs offline
+  // support. LGU-GATE-PASS runs without one for the same reason.
+  //
+  // This actively tears down any worker a device already installed, because
+  // deleting the registration call alone would leave those phones broken: the
+  // old worker stays resident and keeps serving its cache.
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js').then(function(reg) {
-      console.log('Service Worker registered successfully with scope:', reg.scope);
-    }).catch(function(err) {
-      console.warn('Service Worker registration failed:', err);
-    });
+    navigator.serviceWorker.getRegistrations().then(function(regs) {
+      regs.forEach(function(r) { r.unregister(); });
+    }).catch(function() {});
+  }
+  if (window.caches && caches.keys) {
+    caches.keys().then(function(keys) {
+      keys.forEach(function(k) { caches.delete(k); });
+    }).catch(function() {});
   }
 });
 </script>
