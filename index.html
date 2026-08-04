@@ -1248,7 +1248,9 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
   <div id="toast"></div>
 </div>
 <script>
-var LOGO_SRC='./icon-512x512.png';
+// 192px is plenty - the largest the UI ever renders this is the 100px splash
+// logo. Pulling the 512 here cost ~5x the bytes for no visible gain.
+var LOGO_SRC='./icon-192x192.png';
 
 
 /* Globals used by the capture / exit-flow code below */

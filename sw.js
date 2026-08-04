@@ -1,19 +1,16 @@
-var CACHE_NAME = 'smartattend-v8';
+var CACHE_NAME = 'smartattend-v9';
 var PRECACHE = [
   './',
   './index.html',
-  './signup.html',
+  './manifest.json',
   './icon-192x192.png',
-  './icon-512x512.png',
   './logo.png'
 ];
 
 self.addEventListener('install', function(e) {
   e.waitUntil(
     caches.open(CACHE_NAME).then(function(cache) {
-      return cache.addAll(PRECACHE.map(function(url) {
-        return new Request(url, {cache: 'no-store'});
-      }));
+      return cache.addAll(PRECACHE);
     })
   );
   self.skipWaiting();
@@ -36,15 +33,40 @@ self.addEventListener('fetch', function(e) {
   if (url.origin !== location.origin) return;
   if (e.request.method !== 'GET') return;
 
-  e.respondWith(
-    fetch(e.request, {cache: 'no-store'}).then(function(resp) {
-      var clone = resp.clone();
-      caches.open(CACHE_NAME).then(function(cache) {
-        cache.put(e.request, clone);
-      });
-      return resp;
-    }).catch(function() {
-      return caches.match(e.request);
-    })
-  );
+  var isHTML = e.request.mode === 'navigate' ||
+    (e.request.headers.get('accept') || '').indexOf('text/html') !== -1;
+
+  if (isHTML) {
+    // Network-first for pages so code changes show up on the next launch.
+    e.respondWith(
+      fetch(e.request).then(function(res) {
+        var clone = res.clone();
+        caches.open(CACHE_NAME).then(function(cache) { cache.put(e.request, clone); });
+        return res;
+      }).catch(function() {
+        return caches.match(e.request);
+      })
+    );
+  } else {
+    // Cache-first for static assets. These are content-stable, so going to the
+    // network for them on every launch just stalls startup; revalidate in the
+    // background instead and pick the update up next time.
+    e.respondWith(
+      caches.match(e.request).then(function(cached) {
+        if (cached) {
+          fetch(e.request).then(function(res) {
+            if (res && res.ok) {
+              caches.open(CACHE_NAME).then(function(cache) { cache.put(e.request, res); });
+            }
+          }).catch(function() {});
+          return cached;
+        }
+        return fetch(e.request).then(function(res) {
+          var clone = res.clone();
+          caches.open(CACHE_NAME).then(function(cache) { cache.put(e.request, clone); });
+          return res;
+        });
+      })
+    );
+  }
 });
