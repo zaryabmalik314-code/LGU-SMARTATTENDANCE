@@ -3125,25 +3125,34 @@ function closeProfile(ev){
 var geoInsideCampus=false, geoReadings=[], geoWatchId=null, geoSettled=false;
 var checkInTime=null, attendanceMarked=false;
 
+function _safe(label, fn){
+  try{ fn(); }catch(e){ console.error(label+' failed:', e); }
+}
+
 function enterMainApp(){
   var fac=getFaculty()||{};
   document.getElementById('homeName').textContent=fac.name||'—';
   document.getElementById('homeDeptRole').textContent=(fac.department||'—')+' · Faculty';
   document.getElementById('homeTeacherId').textContent='ID: '+(fac.teacherId||'—');
   document.getElementById('semProfLine').textContent=(fac.name||'—')+' · '+(fac.department||'—');
-  applyAvatarPhoto();
+  _safe('applyAvatarPhoto', applyAvatarPhoto);
 
+  // Render the main screen before anything that can fail, so a bad startup step
+  // degrades into a partly-populated app rather than no app at all.
   goScreen('scr-main');
   mainTab(0);
   document.getElementById('facBottomBar').style.display='flex';
-  resetCheckin();
-  startGeoWatch();
-  renderExitAvailability();
-  tick();
-  
-  // Fetch real leave details on entry
-  syncLeaveBalance();
-  syncLeaveRequests();
+
+  // Best-effort startup work. None of it should be able to stop the main screen
+  // rendering: a geolocation error, a missing element or a failed API call used
+  // to propagate out through routeOnLoad() and strand the intro splash on top
+  // of everything, which read as "the app won't open".
+  _safe('resetCheckin', resetCheckin);
+  _safe('startGeoWatch', startGeoWatch);
+  _safe('renderExitAvailability', renderExitAvailability);
+  _safe('tick', tick);
+  _safe('syncLeaveBalance', syncLeaveBalance);
+  _safe('syncLeaveRequests', syncLeaveRequests);
 }
 
 function mainTab(n){
@@ -4022,7 +4031,22 @@ function escapeHtml(text) {
 /* ============================================================
    BOOTSTRAP
    ============================================================ */
+function hideIntroSplash(){
+  var sp=document.getElementById('introSplash');
+  if(sp)sp.classList.add('hide');
+}
+
 document.addEventListener('DOMContentLoaded', function(){
+  // Tear the splash down FIRST. This used to be scheduled after routeOnLoad(),
+  // so anything throwing in there meant the timer was never registered and
+  // #introSplash - fixed, full-screen, z-index 999999 - covered the app
+  // forever. That is why the app opened fine when logged out (routeOnLoad only
+  // shows the login screen) but came up dead on the next launch after login,
+  // when it runs enterMainApp() and touches geolocation, the DOM and network.
+  setTimeout(hideIntroSplash, 900);
+  // Belt and braces: the splash must never outlive startup, whatever happens.
+  window.addEventListener('load', function(){ setTimeout(hideIntroSplash, 1500); });
+
   document.querySelectorAll('.app-logo-img').forEach(function(img){img.src=LOGO_SRC;});
 
   // Numeric-only PIN inputs
@@ -4031,12 +4055,15 @@ document.addEventListener('DOMContentLoaded', function(){
     if(el)el.addEventListener('input', function(){el.value=el.value.replace(/\D/g,'').slice(0,4);});
   });
 
-  routeOnLoad();
-
-  setTimeout(function(){
-    var sp=document.getElementById('introSplash');
-    if(sp)sp.classList.add('hide');
-  }, 900);
+  // A throw in here must not strand the user on a dead screen. Falling back to
+  // the login screen is always safe to render.
+  try{
+    routeOnLoad();
+  }catch(e){
+    console.error('routeOnLoad failed:', e);
+    try{ goScreen('scr-login'); }catch(e2){}
+    hideIntroSplash();
+  }
 
   // No service worker is registered. See the teardown snippet in <head>.
 });

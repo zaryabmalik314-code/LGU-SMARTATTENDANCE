@@ -1241,6 +1241,17 @@ document.addEventListener('DOMContentLoaded', function(){
   var LOGO_SRC='./icon-192x192.png';
   document.querySelectorAll('.app-logo-img').forEach(function(img){ img.src=LOGO_SRC; });
 
+  // Schedule the splash teardown before any routing runs. It used to sit at the
+  // end, so a throw while routing - or the early return on the approved path -
+  // left #introSplash covering the page. Same failure index.html had.
+  function hideSplash(){
+    var s=document.getElementById('introSplash');
+    if(s)s.classList.add('hide');
+    setTimeout(function(){if(s)s.style.display='none';},600);
+  }
+  setTimeout(hideSplash,400);
+  window.addEventListener('load', function(){ setTimeout(hideSplash,1500); });
+
   // Clock
   function tick(){
     var d=new Date();
@@ -1251,25 +1262,23 @@ document.addEventListener('DOMContentLoaded', function(){
   tick();setInterval(tick,15000);
 
   // Route
-  var fac=getFaculty();
-  var status=getStatus();
-  if(fac && status==='approved'){
-    window.location.href='index.html';
-    return;
+  try{
+    var fac=getFaculty();
+    var status=getStatus();
+    if(fac && status==='approved'){
+      window.location.href='index.html';
+      return;
+    }
+    if(fac && (status==='pending' || status==='rejected')){
+      document.getElementById('pendName').textContent=fac.name||'—';
+      document.getElementById('pendMeta').textContent=(fac.teacherId||'—')+' · '+(fac.department||'—');
+      renderPendNote(fac.reviewNote||null, status==='rejected');
+      goScreen('scr-pending');
+    }
+  }catch(e){
+    console.error('signup routing failed:', e);
+    hideSplash();
   }
-  if(fac && (status==='pending' || status==='rejected')){
-    document.getElementById('pendName').textContent=fac.name||'—';
-    document.getElementById('pendMeta').textContent=(fac.teacherId||'—')+' · '+(fac.department||'—');
-    renderPendNote(fac.reviewNote||null, status==='rejected');
-    goScreen('scr-pending');
-  }
-
-  // Hide splash
-  setTimeout(function(){
-    var s=document.getElementById('introSplash');
-    if(s)s.classList.add('hide');
-    setTimeout(function(){if(s)s.style.display='none';},600);
-  },400);
 });
 </script>
 </body>
