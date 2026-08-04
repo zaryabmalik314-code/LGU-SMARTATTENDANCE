@@ -6,6 +6,28 @@
 <meta name="theme-color" content="#0f2860">
 <link rel="icon" href="logo.png">
 <meta charset="UTF-8">
+<script>
+/* Runs before any other script. Tears down a service worker left over from an
+   earlier build: a resident worker keeps serving its own cache and survives
+   updates to sw.js, which left the app blank until storage was cleared by hand.
+   Deliberately NOT inside DOMContentLoaded and not below the app code - this is
+   the recovery path, so it must not be reachable only if everything else parses
+   and runs without throwing. */
+(function(){
+  try{
+    if('serviceWorker' in navigator){
+      navigator.serviceWorker.getRegistrations().then(function(rs){
+        rs.forEach(function(r){r.unregister();});
+      }).catch(function(){});
+    }
+    if(window.caches&&caches.keys){
+      caches.keys().then(function(ks){
+        ks.forEach(function(k){caches.delete(k);});
+      }).catch(function(){});
+    }
+  }catch(e){}
+})();
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -4016,24 +4038,7 @@ document.addEventListener('DOMContentLoaded', function(){
     if(sp)sp.classList.add('hide');
   }, 900);
 
-  // No service worker. It cached assets that went stale and left the app stuck
-  // on a blank screen until storage was cleared manually - the app is a TWA
-  // shell over a live site, so there is nothing here that needs offline
-  // support. LGU-GATE-PASS runs without one for the same reason.
-  //
-  // This actively tears down any worker a device already installed, because
-  // deleting the registration call alone would leave those phones broken: the
-  // old worker stays resident and keeps serving its cache.
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.getRegistrations().then(function(regs) {
-      regs.forEach(function(r) { r.unregister(); });
-    }).catch(function() {});
-  }
-  if (window.caches && caches.keys) {
-    caches.keys().then(function(keys) {
-      keys.forEach(function(k) { caches.delete(k); });
-    }).catch(function() {});
-  }
+  // No service worker is registered. See the teardown snippet in <head>.
 });
 </script>
 </body>

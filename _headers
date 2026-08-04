@@ -1,0 +1,24 @@
+# The browser re-fetches sw.js on navigation to check for updates, and that
+# request bypasses the service worker but NOT the HTTP/CDN cache. If a stale
+# sw.js is served here the teardown never reaches the device, which is what
+# kept the old worker resident through four releases.
+/sw.js
+  Cache-Control: no-cache, no-store, must-revalidate
+
+# Pages carry the recovery snippet, so they must never be served stale either.
+/
+  Cache-Control: no-cache
+/index.html
+  Cache-Control: no-cache
+/signup.html
+  Cache-Control: no-cache
+/smartattend-hod.html
+  Cache-Control: no-cache
+/smartattend-admin.html
+  Cache-Control: no-cache
+/manifest.json
+  Cache-Control: no-cache
+
+# Icons are content-stable and renamed when they change.
+/*.png
+  Cache-Control: public, max-age=604800
