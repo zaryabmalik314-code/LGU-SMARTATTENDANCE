@@ -3,6 +3,6 @@
       "target": {
         "namespace": "android_app",
         "package_name": "app.netlify.lgusmartattend.twa",
-        "sha256_cert_fingerprints": ["BE:9E:F3:88:F0:62:B7:4B:A2:24:38:66:5E:B1:E4:B9:FD:56:57:E0:16:0E:78:53:FD:A9:EB:1E:EB:BA:06:E2"]
+        "sha256_cert_fingerprints": ["0F:5B:22:13:6E:C8:1C:47:75:B7:7B:74:24:A7:C5:33:BC:90:7C:5B:DE:47:77:8D:DD:D0:AC:13:09:D6:45:0E"]
       }
     }]
