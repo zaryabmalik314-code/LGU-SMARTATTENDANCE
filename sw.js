@@ -1,9 +1,11 @@
-var CACHE_NAME = 'smartattend-v5';
+var CACHE_NAME = 'smartattend-v6';
 var PRECACHE = [
   './',
   './index.html',
+  './signup.html',
   './icon-192x192.png',
-  './icon-512x512.png'
+  './icon-512x512.png',
+  './logo.png'
 ];
 
 self.addEventListener('install', function(e) {

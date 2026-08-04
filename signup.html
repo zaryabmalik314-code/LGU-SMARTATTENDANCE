@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous" async></script>
 <meta name="theme-color" content="#0f2860">
 <link rel="icon" href="logo.png">
 <meta charset="UTF-8">
@@ -41,7 +41,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#1a1a2e;color:var(--g
 @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 .splash-bg{background:var(--navy);flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 28px 28px;overflow-y:auto}
 .splash-bg::-webkit-scrollbar{display:none}
-.logo-img{width:100px;height:100px;border-radius:50%;border:3px solid var(--gold);object-fit:cover;margin-bottom:16px;box-shadow:0 0 0 6px rgba(201,168,76,.15)}
+.logo-img{width:100px;height:100px;border-radius:50%;border:3px solid var(--gold);object-fit:contain;background:#fff;margin-bottom:16px;box-shadow:0 0 0 6px rgba(201,168,76,.15)}
 .app-title{font-family:'DM Serif Display',serif;font-size:26px;font-weight:400;color:#fff;letter-spacing:-.01em;margin-bottom:3px;text-align:center}
 .app-sub{font-size:12px;color:rgba(255,255,255,.45);text-align:center;margin-bottom:32px;letter-spacing:.03em}
 .login-card{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:24px 20px;width:100%}
@@ -51,7 +51,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#1a1a2e;color:var(--g
 .nav-back{background:none;border:none;color:rgba(255,255,255,.7);cursor:pointer;display:flex;align-items:center;gap:3px;font-size:22px;padding:6px;border-radius:8px;transition:background .15s,transform .12s ease}
 .nav-back:active{background:rgba(255,255,255,.1);transform:scale(.93)}
 .nav-brand{display:flex;align-items:center;gap:9px}
-.nav-logo-img{width:32px;height:32px;border-radius:50%;border:1.5px solid var(--gold);object-fit:cover}
+.nav-logo-img{width:32px;height:32px;border-radius:50%;border:1.5px solid var(--gold);object-fit:contain;background:#fff}
 .nav-title{color:#fff;font-size:13px;font-weight:600;line-height:1.2}
 .nav-title span{color:rgba(255,255,255,.45);font-weight:400;font-size:11px;display:block}
 .nav-pill{background:rgba(201,168,76,.18);border:1px solid rgba(201,168,76,.35);color:var(--gold2);font-size:10px;padding:4px 11px;border-radius:var(--rpill);font-weight:500;letter-spacing:.03em}
@@ -85,6 +85,26 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#1a1a2e;color:var(--g
 .scan-frame.detecting div div{background:rgba(0,180,255,.95)!important;box-shadow:0 0 12px rgba(0,180,255,.6);animation:cornerPulse 1.8s ease-in-out infinite}
 .scan-frame.verified div div{background:rgba(74,222,128,.95)!important;box-shadow:0 0 12px rgba(74,222,128,.6)}
 .scan-frame.bad div div{background:rgba(251,191,36,.95)!important;box-shadow:0 0 12px rgba(251,191,36,.6)}
+.coach-dir{position:absolute;z-index:7;top:50%;transform:translateY(-50%);pointer-events:none;opacity:0;transition:opacity .3s,transform .3s}
+.coach-dir.show{opacity:1}
+.coach-dir svg{filter:drop-shadow(0 2px 8px rgba(0,0,0,.5))}
+.coach-dir.left{left:8px}
+.coach-dir.right{right:8px}
+@keyframes bounceR{0%,100%{transform:translateY(-50%) translateX(0)}50%{transform:translateY(-50%) translateX(6px)}}
+@keyframes bounceL{0%,100%{transform:translateY(-50%) translateX(0)}50%{transform:translateY(-50%) translateX(-6px)}}
+.coach-dir.right.bounce{animation:bounceR .9s ease-in-out infinite}
+.coach-dir.left.bounce{animation:bounceL .9s ease-in-out infinite}
+.coach-step-badge{position:absolute;top:50px;left:50%;transform:translateX(-50%);z-index:9;pointer-events:none;background:rgba(0,0,0,.6);backdrop-filter:blur(8px);padding:6px 16px;border-radius:20px;font-size:13px;font-weight:700;color:#fff;letter-spacing:.06em;white-space:nowrap;border:1px solid rgba(255,255,255,.15)}
+.coach-big-txt{position:absolute;bottom:14px;left:0;right:0;text-align:center;z-index:9;pointer-events:none}
+.coach-big-txt span{display:inline-block;background:rgba(0,0,0,.65);backdrop-filter:blur(8px);padding:10px 22px;border-radius:16px;font-size:16px;font-weight:700;color:#fff;letter-spacing:.02em;max-width:88%;line-height:1.35;border:1px solid rgba(255,255,255,.12);transition:background .3s,border-color .3s}
+.coach-big-txt span.state-locked{background:rgba(16,185,129,.35);border-color:rgba(16,185,129,.5)}
+.coach-big-txt span.state-bad{background:rgba(245,158,11,.3);border-color:rgba(245,158,11,.45)}
+.coach-big-txt span.state-near{background:rgba(59,130,246,.3);border-color:rgba(59,130,246,.45)}
+.enroll-start-cta{animation:ctaPulse 2s ease-in-out infinite}
+@keyframes ctaPulse{0%,100%{box-shadow:0 0 0 0 rgba(201,168,76,.5)}50%{box-shadow:0 0 0 12px rgba(201,168,76,0)}}
+.coach-check{display:inline-flex;align-items:center;justify-content:center;width:64px;height:64px;border-radius:50%;background:rgba(16,185,129,.2);border:2px solid rgba(16,185,129,.6);position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:8;pointer-events:none;opacity:0;transition:opacity .3s}
+.coach-check.show{opacity:1}
+.coach-check svg{width:32px;height:32px;stroke:#10b981;stroke-width:3;fill:none}
 .pending-hero{width:84px;height:84px;border-radius:26px;background:rgba(201,168,76,.15);border:1.5px solid rgba(201,168,76,.3);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:38px}
 .field-group{margin-bottom:14px}
 .field-label{font-size:11px;color:var(--gold2);letter-spacing:.04em;font-weight:600;margin-bottom:6px;display:block}
@@ -200,7 +220,7 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
     <div class="scroll">
       <div class="card">
         <div class="card-title"><span class="ico"><svg class="i"><use href="#ic-camera"/></svg></span>Enroll Your Face</div>
-        <div class="card-sub">This creates your biometric profile for attendance check-ins. Just look at the camera, then tilt your head slightly to one side and the other &mdash; no need to turn far. The frame turns green while it&rsquo;s capturing.</div>
+        <div class="card-sub">Just 3 easy steps: <strong>look straight</strong>, then <strong>turn slightly left</strong>, then <strong>turn slightly right</strong>. Follow the arrows on screen &mdash; no need to turn far!</div>
         <div style="background:#fff;border-radius:20px;border:1px solid #e8e6e2;overflow:hidden;box-shadow:0 4px 24px rgba(11,31,75,.1)">
           <div id="enrollScanner" style="width:100%;background:#050a14;position:relative;overflow:hidden;height:380px;display:flex;align-items:center;justify-content:center">
             <!-- Idle state -->
@@ -208,7 +228,7 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
               <div style="width:120px;height:155px;border-radius:30px;border:2px dashed rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center">
                 <svg width="56" height="56" viewBox="0 0 56 56" fill="none"><circle cx="28" cy="20" r="11" stroke="rgba(255,255,255,.25)" stroke-width="2"/><path d="M8 48c0-11.046 8.954-20 20-20s20 8.954 20 20" stroke="rgba(255,255,255,.25)" stroke-width="2" stroke-linecap="round"/></svg>
               </div>
-              <div style="font-size:12px;color:rgba(255,255,255,.3);letter-spacing:.04em">Position your face in the frame</div>
+              <div style="font-size:14px;color:rgba(255,255,255,.4);letter-spacing:.04em">Starting camera&hellip;</div>
             </div>
             <!-- Scan frame with corner brackets -->
             <div id="enOval" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:200px;height:260px;z-index:5;pointer-events:none">
@@ -224,6 +244,15 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
             <svg id="enMask" style="display:none"></svg>
             <!-- Scan beam -->
             <div id="enBeam" style="position:absolute;z-index:6;left:50%;transform:translateX(-50%);width:180px;height:2px;background:linear-gradient(90deg,transparent 0%,rgba(0,180,255,.8) 30%,rgba(0,180,255,1) 50%,rgba(0,180,255,.8) 70%,transparent 100%);border-radius:2px;display:none;animation:beamSweep 2s ease-in-out infinite;pointer-events:none;box-shadow:0 0 16px rgba(0,180,255,.4)"></div>
+            <!-- Direction arrows -->
+            <div id="enArrowL" class="coach-dir left"><svg width="36" height="56" viewBox="0 0 36 56"><path d="M28 4 L8 28 L28 52" stroke="rgba(96,165,250,.95)" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div id="enArrowR" class="coach-dir right"><svg width="36" height="56" viewBox="0 0 36 56"><path d="M8 4 L28 28 L8 52" stroke="rgba(96,165,250,.95)" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <!-- Step badge -->
+            <div id="enStepBadge" class="coach-step-badge" style="display:none">STEP 1 OF 3</div>
+            <!-- Big coaching text -->
+            <div id="enCoachBig" class="coach-big-txt" style="display:none"><span id="enCoachBigTxt">Look straight at the camera</span></div>
+            <!-- Step complete check -->
+            <div id="enCheck" class="coach-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
             <!-- REC badge -->
             <div id="enRec" style="display:none;position:absolute;top:16px;left:16px;align-items:center;gap:6px;z-index:8;background:rgba(0,0,0,.5);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.1);border-radius:20px;padding:5px 12px"><div style="width:7px;height:7px;border-radius:50%;background:#ef4444;animation:livePulse 1s infinite;flex-shrink:0"></div><span style="font-size:10px;font-weight:700;color:rgba(255,255,255,.85);letter-spacing:.08em">CAPTURING</span></div>
             <!-- Progress ring -->
@@ -242,15 +271,15 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
             <div id="enPhases" style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:nowrap;overflow-x:auto">
               <div class="bphase" id="eph0"><svg class="i"><use href="#ic-camera"/></svg> Camera</div>
               <div class="bphase" id="eph1"><svg class="i"><use href="#ic-user"/></svg> Centre</div>
-              <div class="bphase" id="eph2"><svg class="i"><use href="#ic-camera"/></svg> Turn 1</div>
-              <div class="bphase" id="eph3"><svg class="i"><use href="#ic-check-circle"/></svg> Turn 2</div>
+              <div class="bphase" id="eph2"><svg class="i"><use href="#ic-camera"/></svg> Left</div>
+              <div class="bphase" id="eph3"><svg class="i"><use href="#ic-check-circle"/></svg> Right</div>
             </div>
             <div class="face-val" id="enVal" style="margin-bottom:10px">Ready to scan</div>
             <div style="height:4px;background:var(--g100);border-radius:4px;margin-bottom:16px;overflow:hidden"><div class="prog-bar green" id="enBar" style="height:100%;border-radius:4px"></div></div>
           </div>
         </div>
       </div>
-      <button class="btn-primary" id="enBtn" onclick="runEnrollFace()" style="border-radius:14px;padding:16px;font-size:15px"><span class="btn-ico"><svg class="i"><use href="#ic-camera"/></svg></span>Start Face Capture</button>
+      <button class="btn-primary enroll-start-cta" id="enBtn" onclick="runEnrollFace()" style="border-radius:14px;padding:16px;font-size:15px"><span class="btn-ico"><svg class="i"><use href="#ic-camera"/></svg></span>Tap to Start Camera</button>
       <button class="btn-outline" id="enSubmitBtn" style="display:none" onclick="submitSignup()"><span class="btn-ico"><svg class="i"><use href="#ic-check"/></svg></span>Submit for Approval</button>
       <div id="enSubmitErr" style="display:none;margin-top:10px;padding:10px 12px;border-radius:10px;background:rgba(227,51,51,.1);border:1px solid rgba(227,51,51,.35);color:#e33;font-size:12px;line-height:1.5"></div>
     </div>
@@ -510,21 +539,21 @@ function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,
   faceMeshEverRan = false;
   faceMeshLastSeen = 0;
 
-  var YAW_NEAR   = 0.055;
-  var YAW_FULL   = 0.10;
-  var YAW_CENTER = 0.05;
+  var YAW_NEAR   = 0.04;
+  var YAW_FULL   = 0.07;
+  var YAW_CENTER = 0.06;
 
   var ENROLL_STEPS=[
     {key:'center', label:'Look straight at the camera', pill:'Centre'},
-    {key:'turnA',  label:'Slowly turn your head to one side', pill:'Turn 1'},
-    {key:'turnB',  label:'Now slowly turn the other way', pill:'Turn 2'}
+    {key:'turnA',  label:'Turn your head either way', pill:'Left'},
+    {key:'turnB',  label:'Now turn the other way', pill:'Right'}
   ];
 
-  var STEP_TIMEOUT_MS=30000;
-  var HOLD_SAMPLES=2;
+  var STEP_TIMEOUT_MS=20000;
+  var HOLD_SAMPLES=1;
   var LOST_FACE_MS=1200;
-  var FALLBACK_AFTER_MS=4000;
-  var SETTLE_MS=4000;
+  var FALLBACK_AFTER_MS=2500;
+  var SETTLE_MS=2500;
 
   var stepIndex=0;
   var stepElapsed=0;
@@ -608,6 +637,9 @@ function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,
   function commitStep(singleKey){
     if(singleKey) commitMilestone(singleKey);
     if(typeof showToast==='function')showToast(ENROLL_STEPS[stepIndex].pill+' captured');
+    if(navigator.vibrate)try{navigator.vibrate([80,50,80]);}catch(e){}
+    var chk=document.getElementById('enCheck');
+    if(chk){chk.classList.add('show');setTimeout(function(){chk.classList.remove('show');},600);}
     stepIndex++;
     stepElapsed=0;
     holdCount=0;
@@ -617,27 +649,86 @@ function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,
   }
 
   function updateEnrollPhase(){
+    var arrowL=document.getElementById('enArrowL');
+    var arrowR=document.getElementById('enArrowR');
+    var stepBadge=document.getElementById('enStepBadge');
+    var coachBig=document.getElementById('enCoachBig');
+    var coachBigTxt=document.getElementById('enCoachBigTxt');
+
     if(stepIndex>=ENROLL_STEPS.length){
       setPills(PILL_COUNT);
       setOvalState(oval,'locked');
       label.textContent='All angles captured';
       val.textContent='Finalising…';
+      if(arrowL)arrowL.className='coach-dir left';
+      if(arrowR)arrowR.className='coach-dir right';
+      if(stepBadge)stepBadge.style.display='none';
+      if(coachBig)coachBig.style.display='none';
       return;
     }
     setPills(stepIndex+1);
     setOvalState(oval,coachState);
     label.textContent=ENROLL_STEPS[stepIndex].label;
     val.textContent=coachText||'Getting ready…';
+
+    if(stepBadge){stepBadge.style.display='block';stepBadge.textContent='STEP '+(stepIndex+1)+' OF 3';}
+    var oldLabel=document.getElementById('enLabel');
+    if(coachBig&&coachBigTxt){
+      coachBig.style.display='block';
+      coachBigTxt.textContent=coachText||ENROLL_STEPS[stepIndex].label;
+      coachBigTxt.className=coachState==='locked'?'state-locked':coachState==='bad'?'state-bad':coachState==='near'?'state-near':'';
+      if(oldLabel)oldLabel.style.display='none';
+    }
+
+    var step=ENROLL_STEPS[stepIndex];
+    if(step.key==='center'){
+      if(arrowL)arrowL.className='coach-dir left';
+      if(arrowR)arrowR.className='coach-dir right';
+    } else if(step.key==='turnA'){
+      var curYaw=currentYaw||0;
+      if(Math.abs(curYaw)>0.025){
+        if(curYaw<0){
+          if(arrowL)arrowL.className='coach-dir left show bounce';
+          if(arrowR)arrowR.className='coach-dir right';
+        } else {
+          if(arrowR)arrowR.className='coach-dir right show bounce';
+          if(arrowL)arrowL.className='coach-dir left';
+        }
+      } else {
+        if(arrowL)arrowL.className='coach-dir left show bounce';
+        if(arrowR)arrowR.className='coach-dir right show bounce';
+      }
+    } else if(step.key==='turnB'){
+      if(turnSign>0){
+        if(arrowL)arrowL.className='coach-dir left show bounce';
+        if(arrowR)arrowR.className='coach-dir right';
+      } else {
+        if(arrowR)arrowR.className='coach-dir right show bounce';
+        if(arrowL)arrowL.className='coach-dir left';
+      }
+    }
+    if(coachState==='locked'){
+      if(arrowL)arrowL.className='coach-dir left';
+      if(arrowR)arrowR.className='coach-dir right';
+    }
+  }
+
+  function hideCoachOverlays(){
+    var els=['enArrowL','enArrowR','enStepBadge','enCoachBig'];
+    els.forEach(function(id){var e=document.getElementById(id);if(e){e.style.display='none';}});
+    var oldLabel=document.getElementById('enLabel');
+    if(oldLabel)oldLabel.style.display='block';
   }
 
   function failStep(reason){
     scanDone=true;
     if(faceInt){clearInterval(faceInt);faceInt=null;}
+    hideCoachOverlays();
     oval.className='scan-frame bad';
     label.innerHTML='<svg class="i"><use href="#ic-alert"/></svg> Scan Incomplete';
     val.textContent=reason;
     if(progress&&progress.style)progress.style.display='none';
-    if(btn){btn.disabled=false;btn.innerHTML='<svg class="i"><use href="#ic-camera"/></svg> Retry';btn.style.display='flex';}
+    if(btn){btn.disabled=false;btn.classList.add('enroll-start-cta');btn.innerHTML='<svg class="i"><use href="#ic-camera"/></svg> Retry';btn.style.display='flex';}
     if(mode==='enroll'){if(typeof stopBioCamera==='function')stopBioCamera();}
   }
 
@@ -651,6 +742,7 @@ function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,
     beam.style.display='none';
     rec.style.opacity='0';
     if(progress&&progress.style)progress.style.display='none';
+    if(isEnroll)hideCoachOverlays();
     [0,1,2,3].forEach(function(i){
       var p=document.getElementById(phasePrefix+'ph'+i);
       if(p){p.classList.remove('active');p.classList.add('done');}
@@ -961,6 +1053,7 @@ function signupGoFace(){
   err.style.display='none';
   signupDraft={name:name,teacherId:teacherId,email:email,department:dept,pin:pin};
   goScreen('scr-enroll');
+  setTimeout(function(){runEnrollFace();},800);
 }
 
 function runEnrollFace(){

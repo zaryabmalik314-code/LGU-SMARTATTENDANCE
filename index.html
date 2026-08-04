@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <link rel="manifest" href="manifest.json">
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous" async></script>
 <meta name="theme-color" content="#0f2860">
 <link rel="icon" href="logo.png">
 <meta charset="UTF-8">
@@ -47,7 +47,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#1a1a2e;color:var(--g
 /* SPLASH */
 .splash-bg{background:var(--navy);flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 28px 28px;overflow-y:auto}
 .splash-bg::-webkit-scrollbar{display:none}
-.logo-img{width:100px;height:100px;border-radius:50%;border:3px solid var(--gold);object-fit:cover;margin-bottom:16px;box-shadow:0 0 0 6px rgba(201,168,76,.15)}
+.logo-img{width:100px;height:100px;border-radius:50%;border:3px solid var(--gold);object-fit:contain;background:#fff;margin-bottom:16px;box-shadow:0 0 0 6px rgba(201,168,76,.15)}
 .app-title{font-family:'DM Serif Display',serif;font-size:26px;font-weight:400;color:#fff;letter-spacing:-.01em;margin-bottom:3px;text-align:center}
 .app-sub{font-size:12px;color:rgba(255,255,255,.45);text-align:center;margin-bottom:32px;letter-spacing:.03em}
 .login-card{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:24px 20px;width:100%}
@@ -66,7 +66,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#1a1a2e;color:var(--g
 .nav-back{background:none;border:none;color:rgba(255,255,255,.7);cursor:pointer;display:flex;align-items:center;gap:3px;font-size:22px;padding:6px;border-radius:8px;transition:background .15s,transform .12s ease}
 .nav-back:active{background:rgba(255,255,255,.1);transform:scale(.93)}
 .nav-brand{display:flex;align-items:center;gap:9px}
-.nav-logo-img{width:32px;height:32px;border-radius:50%;border:1.5px solid var(--gold);object-fit:cover}
+.nav-logo-img{width:32px;height:32px;border-radius:50%;border:1.5px solid var(--gold);object-fit:contain;background:#fff}
 .nav-title{color:#fff;font-size:13px;font-weight:600;line-height:1.2}
 .nav-title span{color:rgba(255,255,255,.45);font-weight:400;font-size:11px;display:block}
 .nav-pill{background:rgba(201,168,76,.18);border:1px solid rgba(201,168,76,.35);color:var(--gold2);font-size:10px;padding:4px 11px;border-radius:var(--rpill);font-weight:500;letter-spacing:.03em}
