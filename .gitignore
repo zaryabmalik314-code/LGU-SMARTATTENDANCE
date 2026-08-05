@@ -1,3 +1,7 @@
 screenshots/
 node_modules/
+
+# Build output stays out of git, except the one APK published for direct-link
+# distribution from the site.
 *.apk
+!SmartAttend.apk
