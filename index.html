@@ -1272,6 +1272,13 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
 <script>
 // 192px is plenty - the largest the UI ever renders this is the 100px splash
 // logo. Pulling the 512 here cost ~5x the bytes for no visible gain.
+// Global. This used to be declared with var inside startFaceCapture(), so it
+// was function-scoped and invisible everywhere else. startGeoWatch() and the
+// watchPosition error handler both reference it, so every location check threw
+// "ReferenceError: _isIOS is not defined" before it could reach the platform
+// API - which also took enterMainApp() down with it and stranded the splash.
+var _isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(/Macintosh/.test(navigator.userAgent)&&'ontouchend' in document);
+
 var LOGO_SRC='./icon-192x192.png';
 
 
@@ -1636,7 +1643,7 @@ function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,
   var stepMilestones={};       // which milestones of the current turn are already banked
   var coachText='';            // live instruction shown under the oval
   var coachState='idle';       // drives the oval tint: idle / near / locked / bad
-  var _isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(/Macintosh/.test(navigator.userAgent)&&'ontouchend' in document);
+  // _isIOS is declared globally near LOGO_SRC - do not re-declare it here.
   var meshFallback=_isIOS;     // skip FaceMesh entirely on iOS — use timed buckets
   var meshBusy=false;          // one FaceMesh inference in flight at a time
 
