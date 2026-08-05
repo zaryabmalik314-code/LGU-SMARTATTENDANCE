@@ -223,6 +223,7 @@ tbody tr:hover td{background:rgba(22,31,54,.4)}
 .pill{display:inline-flex;align-items:center;gap:5px;padding:4px 12px;border-radius:20px;font-size:11.5px;font-weight:600;text-transform:capitalize}
 .pill-present{background:var(--green-bg);color:var(--green)}
 .pill-absent{background:var(--red-bg);color:var(--red)}
+.pill-leave{background:var(--blue-bg);color:var(--blue)}
 .pill-waiting{background:rgba(148,163,184,.12);color:var(--text-3)}
 .pill-pending{background:var(--amber-bg);color:var(--amber)}
 .pill-approved{background:var(--green-bg);color:var(--green)}
@@ -399,6 +400,7 @@ tbody tr:hover td{background:rgba(22,31,54,.4)}
           <div class="stat-card gold"><div class="stat-label">Total Faculty</div><div class="stat-value" id="stat-total">0</div></div>
           <div class="stat-card green"><div class="stat-label">Present Today</div><div class="stat-value" id="stat-present" style="color:var(--green)">0</div></div>
           <div class="stat-card red"><div class="stat-label">Absent Today</div><div class="stat-value" id="stat-absent" style="color:var(--red)">0</div></div>
+          <div class="stat-card blue"><div class="stat-label">On Leave</div><div class="stat-value" id="stat-leave" style="color:var(--blue)">0</div></div>
         </div>
         <div class="toolbar">
           <input autocomplete="off" type="search" class="search-input" id="att-search" placeholder="Search by name or teacher ID..." oninput="renderFacultyTable()">
@@ -683,8 +685,13 @@ function isBeforeWindow() {
   return now < windowStart;
 }
 
+function isOnLeaveToday(f) { return f.on_leave_today === true; }
+
 function facultyStatus(f) {
+  // Present wins over leave deliberately: if someone on approved leave checked
+  // in anyway, they worked, and the attendance record is the ground truth.
   if (isPresentToday(f)) return 'present';
+  if (isOnLeaveToday(f)) return 'leave';
   if (isBeforeWindow()) return 'waiting';
   return 'absent';
 }
@@ -693,11 +700,19 @@ function renderFacultyTable() {
   var tbody = document.getElementById('faculty-tbody');
   var active = facultyCache.filter(function(f){ return f.is_active !== false && f.approval_status === 'approved'; });
   document.getElementById('stat-total').textContent = active.length;
-  var present = 0, absent = 0;
+  var present = 0, absent = 0, onLeave = 0;
   var beforeWindow = isBeforeWindow();
-  active.forEach(function(f){ if (isPresentToday(f)) present++; else if (!beforeWindow) absent++; });
+  active.forEach(function(f){
+    if (isPresentToday(f)) present++;
+    // Counted separately, never as absent - that is what inflated the absence
+    // figure for anyone with approved leave.
+    else if (isOnLeaveToday(f)) onLeave++;
+    else if (!beforeWindow) absent++;
+  });
   document.getElementById('stat-present').textContent = present;
   document.getElementById('stat-absent').textContent = beforeWindow ? '—' : absent;
+  var leaveStat = document.getElementById('stat-leave');
+  if (leaveStat) leaveStat.textContent = onLeave;
 
   var q = (document.getElementById('att-search')?.value || '').trim().toLowerCase();
   if (q) {
@@ -710,7 +725,7 @@ function renderFacultyTable() {
     tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state"><div class="empty-title">' + (q ? 'No matches' : 'No approved faculty yet') + '</div><div class="empty-sub">' + (q ? 'Try a different name or teacher ID.' : 'Faculty in your department will show up here once approved.') + '</div></div></td></tr>';
     return;
   }
-  var statusLabels = {present:'Present', absent:'Absent', waiting:'Not Started'};
+  var statusLabels = {present:'Present', absent:'Absent', waiting:'Not Started', leave:'On Leave'};
   tbody.innerHTML = active.map(function(f) {
     var st = facultyStatus(f);
     var safeName = (f.name||'').replace(/'/g,"\\'");

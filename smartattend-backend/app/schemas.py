@@ -74,6 +74,7 @@ class FacultyOut(BaseModel):
     review_note: Optional[str] = None
     is_active: bool = True
     checked_in_today: bool = False  # computed by the HOD endpoint — True if a "present" check-in record exists today (PKT)
+    on_leave_today: bool = False  # computed by the HOD endpoint — True if an approved leave request covers today (PKT)
     profile_photo: Optional[str] = None
     face_photos: Optional[List[str]] = None  # up to 3 small thumbnails, one per enrolled angle — admin review only
 

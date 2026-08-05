@@ -811,10 +811,34 @@ def hod_department_faculty(db: Session = Depends(get_db), hod: models.HOD = Depe
         )
         present_today_ids = {row[0] for row in present_rows}
 
+    # Approved leave covering today. Without this the dashboard had no way to
+    # tell "on leave" from "never showed up" and reported both as absent.
+    #
+    # start_date/end_date are stored as naive UTC (the client sends the local
+    # PKT day boundaries as ISO and the create endpoint strips tzinfo), so they
+    # compare directly against the same UTC window used for attendance above.
+    # Half-open overlap: leave starts before tomorrow and ends at/after today.
+    today_end_utc = today_start_utc + timedelta(days=1)
+    on_leave_today_ids = set()
+    if faculty_ids:
+        leave_rows = (
+            db.query(models.LeaveRequest.faculty_id)
+            .filter(
+                models.LeaveRequest.faculty_id.in_(faculty_ids),
+                models.LeaveRequest.status == "approved",
+                models.LeaveRequest.start_date < today_end_utc,
+                models.LeaveRequest.end_date >= today_start_utc,
+            )
+            .distinct()
+            .all()
+        )
+        on_leave_today_ids = {row[0] for row in leave_rows}
+
     out = []
     for f in faculty_rows:
         item = schemas.FacultyOut.model_validate(f)
         item.checked_in_today = f.id in present_today_ids
+        item.on_leave_today = f.id in on_leave_today_ids
         out.append(item)
     return out
 
