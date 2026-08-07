@@ -34,10 +34,13 @@ class CheckInRequest(BaseModel):
 class CheckInResponse(BaseModel):
     status: str
     reason: Optional[str] = None
+    face_reason: Optional[str] = None
     distance_to_boundary_m: Optional[float] = None
     face_match_score: Optional[float] = None
     gps_accuracy_used: Optional[float] = None
     record_id: Optional[int] = None
+    spoof_warning: Optional[str] = None
+    spoof_attempt_count: Optional[int] = None
 
 
 class FacultyEnrollRequest(BaseModel):
@@ -558,6 +561,36 @@ class SemesterSnapshotOut(BaseModel):
     days_attended: int
     casual_leave_used: int
     created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class SpoofAttemptOut(BaseModel):
+    id: int
+    faculty_id: int
+    faculty_name: Optional[str] = None
+    teacher_id: Optional[str] = None
+    department: Optional[str] = None
+    profile_photo: Optional[str] = None
+    attempt_type: str
+    face_reason: Optional[str] = None
+    full_frame_b64: Optional[str] = None
+    face_crop_b64: Optional[str] = None
+    spoof_scores: Optional[str] = None
+    gps_lat: Optional[float] = None
+    gps_lng: Optional[float] = None
+    gps_distance_m: Optional[float] = None
+    record_type: str = "check_in"
+    resolved: bool = False
+    admin_notes: Optional[str] = None
+    created_at: datetime
+
+    @field_serializer('created_at')
+    def serialize_created_at(self, dt: datetime, _info):
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.isoformat()
 
     class Config:
         from_attributes = True

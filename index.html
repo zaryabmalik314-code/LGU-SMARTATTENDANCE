@@ -2406,7 +2406,13 @@ function onExitScanComplete(now,faceImages){
     var status=(resp&&resp.status)||'present';
 
     if(status==='rejected_face'||status==='rejected_location'){
-      showToast('Check-out rejected: '+(resp.reason||status));
+      if(resp&&resp.spoof_warning){
+        showSpoofWarningPopup(resp.spoof_attempt_count||1);
+        showToast('Spoofing detected. Attempt logged.');
+      } else {
+        var detail=resp&&resp.reason?resp.reason:status==='rejected_face'?'Face not verified':'Outside campus';
+        showToast('Check-out rejected: '+detail);
+      }
       xFaceRan=false;
       if(btn){btn.disabled=false;btn.innerHTML='<svg class="i"><use href="#ic-camera"/></svg> Retry';btn.style.display='flex';}
       return;
@@ -2648,6 +2654,31 @@ function showToast(msg){
   showToast._tid=setTimeout(function(){
     t.style.opacity='0';t.style.transform='translateX(-50%) translateY(16px)';
   },2400);
+}
+
+function showSpoofWarningPopup(count){
+  var existing=document.getElementById('spoofWarningOverlay');
+  if(existing)existing.remove();
+  var overlay=document.createElement('div');
+  overlay.id='spoofWarningOverlay';
+  overlay.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;padding:24px;';
+  var card=document.createElement('div');
+  card.style.cssText='background:#1a1a2e;border:2px solid #e74c3c;border-radius:16px;padding:32px 24px;max-width:400px;width:100%;text-align:center;animation:spoofShake 0.5s ease;';
+  card.innerHTML='<div style="font-size:48px;margin-bottom:12px;">⚠️</div>'
+    +'<h2 style="color:#e74c3c;font-size:20px;margin:0 0 12px;">SPOOFING DETECTED</h2>'
+    +'<p style="color:#ff6b6b;font-size:14px;line-height:1.5;margin:0 0 16px;">Using photos, videos, or any spoofing method to bypass face verification is <strong>strictly prohibited</strong>.</p>'
+    +'<p style="color:#ffd93d;font-size:13px;margin:0 0 16px;">This attempt has been <strong>logged and reported</strong> to administration.</p>'
+    +'<div style="background:#2d1b1b;border-radius:8px;padding:12px;margin:0 0 20px;">'
+    +'<p style="color:#e74c3c;font-size:15px;font-weight:700;margin:0;">Total Violations: '+count+'</p>'
+    +'<p style="color:#999;font-size:12px;margin:4px 0 0;">Further violations may result in account suspension</p></div>'
+    +'<button onclick="this.closest(\'#spoofWarningOverlay\').remove()" style="background:#e74c3c;color:#fff;border:none;padding:12px 32px;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;">I Understand</button>';
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+  if(!document.getElementById('spoofShakeStyle')){
+    var s=document.createElement('style');s.id='spoofShakeStyle';
+    s.textContent='@keyframes spoofShake{0%,100%{transform:translateX(0)}10%,30%,50%,70%,90%{transform:translateX(-4px)}20%,40%,60%,80%{transform:translateX(4px)}}';
+    document.head.appendChild(s);
+  }
 }
 
 /* ============================================================
@@ -3509,7 +3540,7 @@ function finishCheckin(now, dist, resp, errorMsg){
   // to 'present' — that previously showed a false "Attendance Marked!" for a
   // request that never actually succeeded. Give it its own explicit status.
   var status=errorMsg ? 'network_error' : ((resp && resp.status) || 'present');
-  var matchScore=(resp && resp.face_match_score!=null) ? ((resp.face_match_score*100).toFixed(1)+'%') : 'Verified (score n/a)';
+  var matchScore=(resp && resp.face_match_score!=null) ? ((resp.face_match_score*100).toFixed(1)+'%') : (status==='present'?'Verified':'N/A');
   var distText=(resp && resp.distance_to_boundary_m!=null) ? resp.distance_to_boundary_m+'m' : (dist!=null?dist+'m':'—');
   var logId='ATT-'+Math.floor(10000+Math.random()*90000);
   var t=now.toLocaleTimeString('en-PK',{hour:'2-digit',minute:'2-digit'});
@@ -3536,9 +3567,34 @@ function finishCheckin(now, dist, resp, errorMsg){
     reason.style.display='block';
   } else if(status==='rejected_face'){
     icon.className='confirm-icon rejected';
-    icon.innerHTML='<svg class="i"><use href="#ic-x-circle"/></svg>';
-    title.textContent='Check-in Failed \u2014 Face Not Verified';
-    reason.style.display='none';
+    var faceReason=resp&&resp.face_reason;
+    if(resp&&resp.spoof_warning){
+      icon.innerHTML='<svg class="i"><use href="#ic-alert"/></svg>';
+      title.textContent='\u26a0 SPOOFING DETECTED';
+      reason.textContent=resp.spoof_warning;
+      reason.style.display='block';
+      showSpoofWarningPopup(resp.spoof_attempt_count||1);
+    } else if(faceReason==='face_mismatch'){
+      icon.innerHTML='<svg class="i"><use href="#ic-x-circle"/></svg>';
+      title.textContent='Check-in Failed \u2014 Face Mismatch';
+      reason.textContent=resp.reason||'Face does not match enrolled profile.';
+      reason.style.display='block';
+    } else if(faceReason==='no_face_detected'){
+      icon.innerHTML='<svg class="i"><use href="#ic-x-circle"/></svg>';
+      title.textContent='Check-in Failed \u2014 No Face Detected';
+      reason.textContent=resp.reason||'Please face the camera directly.';
+      reason.style.display='block';
+    } else if(faceReason==='low_confidence'){
+      icon.innerHTML='<svg class="i"><use href="#ic-x-circle"/></svg>';
+      title.textContent='Check-in Failed \u2014 Face Not Clear';
+      reason.textContent=resp.reason||'Try better lighting and face the camera.';
+      reason.style.display='block';
+    } else {
+      icon.innerHTML='<svg class="i"><use href="#ic-x-circle"/></svg>';
+      title.textContent='Check-in Failed \u2014 Face Not Verified';
+      reason.textContent=resp&&resp.reason?resp.reason:'Face verification failed.';
+      reason.style.display='block';
+    }
   } else if(status==='network_error'){
     // The request never reached / never came back from the backend — show the
     // real error text (from response.detail via apiRequest, or the fetch

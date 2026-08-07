@@ -283,6 +283,27 @@ class Semester(Base):
     snapshots = relationship("SemesterSnapshot", back_populates="semester")
 
 
+class SpoofAttempt(Base):
+    __tablename__ = "spoof_attempts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    faculty_id = Column(Integer, ForeignKey("faculty.id"), nullable=False, index=True)
+    attempt_type = Column(String, nullable=False)  # "photo_replay" | "screen_display" | "spoof_detected" | "location_spoof"
+    face_reason = Column(String, nullable=True)  # specific sub-reason from anti-spoofing
+    full_frame_b64 = Column(Text, nullable=True)  # full camera frame as base64 JPEG
+    face_crop_b64 = Column(Text, nullable=True)  # detected face crop as base64 JPEG
+    spoof_scores = Column(Text, nullable=True)  # JSON dict of anti-spoofing signal scores
+    gps_lat = Column(Float, nullable=True)
+    gps_lng = Column(Float, nullable=True)
+    gps_distance_m = Column(Float, nullable=True)
+    record_type = Column(String, default="check_in", nullable=False)  # "check_in" | "check_out"
+    resolved = Column(Boolean, default=False, nullable=False)
+    admin_notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    faculty = relationship("Faculty")
+
+
 class SemesterSnapshot(Base):
     """
     Immutable per-faculty record of what was owed at the moment a

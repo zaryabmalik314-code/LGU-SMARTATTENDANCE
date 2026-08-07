@@ -559,6 +559,11 @@
         Flagged Records
         <span class="nav-badge" id="flagged-count">0</span>
       </button>
+      <button class="nav-item" data-view="spoofing">
+        <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 2L2 7v2h16V7L10 2z" stroke-linejoin="round"/><path d="M10 11v3M10 16v.5" stroke-linecap="round"/><rect x="4" y="9" width="12" height="9" rx="1"/></svg>
+        Spoof Attempts
+        <span class="nav-badge" id="spoof-count" style="background:#e74c3c">0</span>
+      </button>
       <button class="nav-item" data-view="latecomers">
         <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="10" r="7.5"/><path d="M10 5.5V10l3 2" stroke-linecap="round" stroke-linejoin="round"/><path d="M15 15l2 2" stroke-linecap="round"/></svg>
         Late Comers
@@ -711,6 +716,58 @@
           </table>
         </div>
       </section>
+
+      <!-- Spoof Attempts -->
+      <section class="view" id="view-spoofing">
+        <div class="page-header">
+          <div>
+            <div class="page-title">Spoof Attempts</div>
+            <div class="page-subtitle">Photo, video, and location spoofing attempts</div>
+          </div>
+        </div>
+        <div class="live-stats" id="spoof-stats">
+          <div class="stat-chip"><span class="stat-val" id="spoof-total">0</span><span class="stat-lbl">Total</span></div>
+          <div class="stat-chip"><span class="stat-val" id="spoof-unresolved" style="color:#e74c3c">0</span><span class="stat-lbl">Unresolved</span></div>
+          <div class="stat-chip"><span class="stat-val" id="spoof-photo">0</span><span class="stat-lbl">Photo/Video</span></div>
+          <div class="stat-chip"><span class="stat-val" id="spoof-screen">0</span><span class="stat-lbl">Screen</span></div>
+        </div>
+        <div class="toolbar">
+          <select id="spoof-filter" class="input" style="width:160px">
+            <option value="all">All types</option>
+            <option value="photo_replay">Photo Replay</option>
+            <option value="flat_image">Flat Image</option>
+            <option value="screen_display">Screen Display</option>
+            <option value="spoof_detected">Multi-signal</option>
+          </select>
+          <select id="spoof-resolved-filter" class="input" style="width:140px">
+            <option value="unresolved">Unresolved</option>
+            <option value="all">All</option>
+            <option value="resolved">Resolved</option>
+          </select>
+          <button class="btn btn-ghost" onclick="loadSpoofAttempts()">Refresh</button>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr><th>Faculty</th><th>Department</th><th>Type</th><th>Timestamp</th><th>Evidence</th><th>Scores</th><th>Actions</th></tr>
+            </thead>
+            <tbody id="spoof-tbody">
+              <tr><td colspan="7" class="loading-row">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Spoof Image Modal -->
+      <div id="spoofImageModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.85);align-items:center;justify-content:center;padding:24px;">
+        <div style="background:var(--card);border-radius:12px;padding:20px;max-width:600px;width:100%;max-height:90vh;overflow-y:auto;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+            <h3 style="margin:0;font-size:16px;" id="spoofModalTitle">Evidence</h3>
+            <button onclick="document.getElementById('spoofImageModal').style.display='none'" class="btn btn-ghost" style="padding:4px 10px;">✕</button>
+          </div>
+          <div id="spoofModalContent" style="display:flex;gap:16px;flex-wrap:wrap;justify-content:center;"></div>
+        </div>
+      </div>
 
       <!-- Late Comers -->
       <section class="view" id="view-latecomers">
@@ -1313,6 +1370,9 @@ function enterApp() {
   loadAttendance().then(() => {
     updateLiveStats();
   });
+  api('/api/spoof-attempts/count').then(c => {
+    document.getElementById('spoof-count').textContent = c.unresolved || '';
+  }).catch(() => {});
   connectWebSocket();
 }
 
@@ -1394,6 +1454,12 @@ function connectWebSocket() {
       // Admin approved/rejected a faculty — reload faculty directory if visible.
       const facView = document.getElementById('view-faculty');
       if (facView && facView.style.display !== 'none') loadFaculty();
+    } else if (msg.event === 'spoof_attempt' && msg.data) {
+      const badge = document.getElementById('spoof-count');
+      if (badge) badge.textContent = (parseInt(badge.textContent, 10) || 0) + 1;
+      const spoofView = document.getElementById('view-spoofing');
+      if (spoofView && spoofView.classList.contains('active')) loadSpoofAttempts();
+      showToast('⚠ Spoof attempt detected: ' + (msg.data.faculty_name || 'Unknown') + ' — ' + (msg.data.attempt_type || ''));
     }
   };
 
@@ -1525,6 +1591,7 @@ document.querySelectorAll('.nav-item[data-view]').forEach(btn => {
     if (btn.dataset.view === 'analytics') renderAnalytics();
     if (btn.dataset.view === 'attendance') renderAttendanceTable();
     if (btn.dataset.view === 'latecomers') loadLateComers();
+    if (btn.dataset.view === 'spoofing') loadSpoofAttempts();
   });
 });
 document.getElementById('menu-btn').addEventListener('click', () => {
@@ -1887,6 +1954,117 @@ function renderFlaggedTable() {
 ['flagged-search','flagged-date-from','flagged-date-to'].forEach(id =>
   document.getElementById(id).addEventListener('input', renderFlaggedTable));
 document.getElementById('flagged-reason-filter').addEventListener('change', renderFlaggedTable);
+
+/* =========================================================================
+   SPOOF ATTEMPTS
+   ========================================================================= */
+
+let spoofCache = [];
+
+const SPOOF_TYPE_LABELS = {
+  photo_replay: 'Photo Replay',
+  flat_image: 'Flat Image / Print',
+  screen_display: 'Screen Display',
+  spoof_detected: 'Multi-signal Spoof',
+  location_spoof: 'Location Spoof',
+};
+
+async function loadSpoofAttempts() {
+  const tbody = document.getElementById('spoof-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="7" class="loading-row">Loading…</td></tr>';
+  try {
+    spoofCache = await api('/api/spoof-attempts');
+    renderSpoofTable();
+  } catch(e) {
+    tbody.innerHTML = '<tr><td colspan="7" class="loading-row">Failed to load</td></tr>';
+  }
+  try {
+    const counts = await api('/api/spoof-attempts/count');
+    document.getElementById('spoof-count').textContent = counts.unresolved || '';
+  } catch(e) {}
+}
+
+function getFilteredSpoofRows() {
+  let rows = spoofCache;
+  const typeF = document.getElementById('spoof-filter').value;
+  const resolvedF = document.getElementById('spoof-resolved-filter').value;
+  if (typeF !== 'all') rows = rows.filter(r => r.attempt_type === typeF);
+  if (resolvedF === 'unresolved') rows = rows.filter(r => !r.resolved);
+  else if (resolvedF === 'resolved') rows = rows.filter(r => r.resolved);
+  return rows;
+}
+
+function renderSpoofTable() {
+  const tbody = document.getElementById('spoof-tbody');
+  if (!tbody) return;
+  const rows = getFilteredSpoofRows();
+
+  let photo = 0, screen = 0, unres = 0;
+  spoofCache.forEach(r => {
+    if (r.attempt_type === 'photo_replay' || r.attempt_type === 'flat_image' || r.attempt_type === 'spoof_detected') photo++;
+    if (r.attempt_type === 'screen_display') screen++;
+    if (!r.resolved) unres++;
+  });
+  document.getElementById('spoof-total').textContent = spoofCache.length;
+  document.getElementById('spoof-unresolved').textContent = unres;
+  document.getElementById('spoof-photo').textContent = photo;
+  document.getElementById('spoof-screen').textContent = screen;
+  document.getElementById('spoof-count').textContent = unres || '';
+
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><div class="empty-title">No spoof attempts</div><div class="empty-sub">No spoofing has been detected.</div></div></td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows.map(r => {
+    const typeLabel = SPOOF_TYPE_LABELS[r.attempt_type] || r.attempt_type;
+    const hasImg = r.face_crop_b64 || r.full_frame_b64;
+    let scores = '';
+    try { const s = JSON.parse(r.spoof_scores || '{}'); scores = Object.entries(s).map(([k,v]) => k.replace(/_/g,' ')+': '+v).join(', '); } catch(e) {}
+    return `<tr class="${r.resolved ? '' : 'row-flagged'}">
+      <td class="cell-name">${r.profile_photo ? '<img src="'+r.profile_photo+'" class="avatar" style="width:28px;height:28px;border-radius:50%;margin-right:6px;vertical-align:middle;">' : '<span class="avatar-circle">'+(r.faculty_name||'?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2)+'</span>'}${r.faculty_name || '—'}</td>
+      <td>${r.department || '—'}</td>
+      <td><span class="flag-badge" style="background:${r.attempt_type==='screen_display'?'#9b59b6':'#e74c3c'}22;color:${r.attempt_type==='screen_display'?'#9b59b6':'#e74c3c'};">⚠ ${typeLabel}</span></td>
+      <td class="mono">${fmtDate(r.created_at)}</td>
+      <td>${hasImg ? '<button class="btn btn-ghost btn-sm" onclick="showSpoofEvidence('+r.id+')">View</button>' : '—'}</td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--muted);" title="${scores}">${scores || '—'}</td>
+      <td>${r.resolved ? '<span style="color:var(--muted)">Resolved</span>' : '<button class="btn btn-sm" style="background:#27ae60;color:#fff;border:none;padding:4px 12px;border-radius:6px;cursor:pointer;" onclick="resolveSpoofAttempt('+r.id+')">Resolve</button>'}</td>
+    </tr>`;
+  }).join('');
+}
+
+function showSpoofEvidence(id) {
+  const r = spoofCache.find(a => a.id === id);
+  if (!r) return;
+  const modal = document.getElementById('spoofImageModal');
+  const content = document.getElementById('spoofModalContent');
+  document.getElementById('spoofModalTitle').textContent = (r.faculty_name || 'Unknown') + ' — ' + (SPOOF_TYPE_LABELS[r.attempt_type] || r.attempt_type);
+  let html = '';
+  if (r.face_crop_b64) {
+    html += '<div style="text-align:center;"><div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Face Crop</div><img src="data:image/jpeg;base64,' + r.face_crop_b64 + '" style="max-width:240px;max-height:240px;border-radius:8px;border:2px solid #e74c3c;"></div>';
+  }
+  if (r.full_frame_b64) {
+    html += '<div style="text-align:center;"><div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Full Frame</div><img src="data:image/jpeg;base64,' + r.full_frame_b64 + '" style="max-width:320px;max-height:320px;border-radius:8px;border:2px solid #e67e22;"></div>';
+  }
+  if (!html) html = '<p style="color:var(--muted);">No image evidence available.</p>';
+  content.innerHTML = html;
+  modal.style.display = 'flex';
+}
+
+async function resolveSpoofAttempt(id) {
+  try {
+    await api('/api/spoof-attempts/' + id + '/resolve', { method: 'PUT' });
+    const r = spoofCache.find(a => a.id === id);
+    if (r) r.resolved = true;
+    renderSpoofTable();
+  } catch(e) {
+    alert('Failed to resolve: ' + (e.message || e));
+  }
+}
+
+document.getElementById('spoof-filter').addEventListener('change', renderSpoofTable);
+document.getElementById('spoof-resolved-filter').addEventListener('change', renderSpoofTable);
 
 /* =========================================================================
    LATE COMERS

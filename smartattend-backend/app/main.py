@@ -1532,6 +1532,72 @@ def get_semester_snapshots(
     ).order_by(models.SemesterSnapshot.department, models.SemesterSnapshot.faculty_name).all()
 
 
+SPOOF_REASONS = {"photo_replay", "flat_image", "screen_display", "spoof_detected"}
+
+
+def _save_spoof_attempt(db: Session, faculty, face_result, location_check, best_reading, record_type, face_images):
+    """Save a spoof attempt record when face anti-spoofing triggers."""
+    reason = face_result.get("reason", "")
+    if reason not in SPOOF_REASONS:
+        return 0
+
+    full_frame_b64 = None
+    if face_images:
+        raw = face_images[0]
+        if raw.startswith("data:"):
+            raw = raw.split(",", 1)[-1]
+        if len(raw) < 500_000:
+            full_frame_b64 = raw
+
+    attempt = models.SpoofAttempt(
+        faculty_id=faculty.id,
+        attempt_type=reason,
+        face_reason=reason,
+        full_frame_b64=full_frame_b64,
+        face_crop_b64=face_result.get("face_crop_b64"),
+        spoof_scores=json.dumps(face_result.get("liveness_scores", {})),
+        gps_lat=best_reading.latitude if best_reading else None,
+        gps_lng=best_reading.longitude if best_reading else None,
+        gps_distance_m=location_check.get("distance_to_boundary_m"),
+        record_type=record_type,
+    )
+    db.add(attempt)
+    db.flush()
+
+    count = db.query(func.count(models.SpoofAttempt.id)).filter(
+        models.SpoofAttempt.faculty_id == faculty.id
+    ).scalar() or 0
+
+    manager.broadcast_threadsafe({
+        "event": "spoof_attempt",
+        "data": {
+            "faculty_id": faculty.id,
+            "faculty_name": faculty.name,
+            "department": faculty.department,
+            "attempt_type": reason,
+            "record_type": record_type,
+            "total_attempts": count,
+        },
+    })
+
+    return count
+
+
+def _face_reason_detail(face_result):
+    """Map face_verify reason codes to human-readable rejection details."""
+    reason = face_result.get("reason")
+    if reason == "no_usable_face_detected":
+        return "no_face_detected", "No face detected. Please face the camera directly in good lighting."
+    if reason == "low_detection_confidence":
+        return "low_confidence", "Face not clearly visible. Try better lighting and face the camera."
+    if reason in SPOOF_REASONS:
+        return reason, None
+    if reason is None and face_result.get("verified") == "fail":
+        score_pct = round(face_result.get("score", 0) * 100, 1)
+        return "face_mismatch", f"Face does not match your enrolled profile (score: {score_pct}%)."
+    return reason, None
+
+
 @app.post("/api/attendance/check-in", response_model=schemas.CheckInResponse)
 def check_in(payload: schemas.CheckInRequest, db: Session = Depends(get_db)):
     faculty = db.query(models.Faculty).filter(models.Faculty.id == payload.faculty_id).first()
@@ -1575,15 +1641,20 @@ def check_in(payload: schemas.CheckInRequest, db: Session = Depends(get_db)):
             faculty.face_fail_count = 0
             faculty.face_locked_until = None
 
-    # 5. Flag (don't block) if travel since last known location was implausibly fast
+    # 5. Save spoof attempt if anti-spoofing triggered
+    spoof_count = 0
+    face_reason, face_detail = _face_reason_detail(face_result)
+    spoof_warning = None
+    if status == "rejected_face" and face_result.get("reason") in SPOOF_REASONS:
+        spoof_count = _save_spoof_attempt(db, faculty, face_result, location_check, best_reading, "check_in", payload.face_images)
+        spoof_warning = "SPOOFING DETECTED. This attempt has been logged and reported to administration. Further violations may result in account suspension."
+
+    # 6. Flag (don't block) if travel since last known location was implausibly fast
     now = resolve_record_timestamp(payload.captured_at)
     movement_check = check_movement_against_last_record(
         db, faculty.id, best_reading.latitude, best_reading.longitude, now
     )
 
-    # Late minutes belong to THIS check-in event, independent of whether it's
-    # the day's first (that distinction only matters for the running
-    # LeaveBalance totals below, not for what happened at this specific time).
     record_late_minutes = compute_late_minutes(now, db, faculty.department) if status == "present" else 0
 
     record = models.AttendanceRecord(
@@ -1607,10 +1678,7 @@ def check_in(payload: schemas.CheckInRequest, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(record)
 
-    # Count this as an attended working day (once per calendar day, only if present)
-    # and track late-arrival minutes against the fixed 9:00 AM start time.
     if status == "present":
-        # Calculate PKT calendar day boundary in UTC
         local_now = datetime.utcnow() + timedelta(hours=PKT_OFFSET_HOURS)
         local_today_start = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
         today_start = local_today_start - timedelta(hours=PKT_OFFSET_HOURS)
@@ -1651,13 +1719,17 @@ def check_in(payload: schemas.CheckInRequest, db: Session = Depends(get_db)):
         },
     })
 
+    resp_reason = face_detail or location_check["reason"] if status != "present" else None
     return schemas.CheckInResponse(
         status=status,
-        reason=location_check["reason"] if status != "present" else face_result.get("reason"),
+        reason=resp_reason,
+        face_reason=face_reason if status == "rejected_face" else None,
         distance_to_boundary_m=location_check["distance_to_boundary_m"],
         face_match_score=face_result["score"],
         gps_accuracy_used=best_reading.accuracy,
         record_id=record.id,
+        spoof_warning=spoof_warning,
+        spoof_attempt_count=spoof_count if spoof_count > 0 else None,
     )
 
 
@@ -1852,6 +1924,13 @@ def check_out(payload: schemas.CheckOutRequest, db: Session = Depends(get_db)):
             faculty.face_fail_count = 0
             faculty.face_locked_until = None
 
+    spoof_count = 0
+    face_reason, face_detail = _face_reason_detail(face_result)
+    spoof_warning = None
+    if status == "rejected_face" and face_result.get("reason") in SPOOF_REASONS:
+        spoof_count = _save_spoof_attempt(db, faculty, face_result, location_check, best_reading, "check_out", payload.face_images)
+        spoof_warning = "SPOOFING DETECTED. This attempt has been logged and reported to administration. Further violations may result in account suspension."
+
     now = resolve_record_timestamp(payload.captured_at)
     movement_check = check_movement_against_last_record(
         db, faculty.id, best_reading.latitude, best_reading.longitude, now
@@ -1898,14 +1977,99 @@ def check_out(payload: schemas.CheckOutRequest, db: Session = Depends(get_db)):
         },
     })
 
+    resp_reason = face_detail or location_check["reason"] if status != "present" else None
     return schemas.CheckInResponse(
         status=status,
-        reason=location_check["reason"] if status != "present" else face_result.get("reason"),
+        reason=resp_reason,
+        face_reason=face_reason if status == "rejected_face" else None,
         distance_to_boundary_m=location_check["distance_to_boundary_m"],
         face_match_score=face_result["score"],
         gps_accuracy_used=best_reading.accuracy,
         record_id=record.id,
+        spoof_warning=spoof_warning,
+        spoof_attempt_count=spoof_count if spoof_count > 0 else None,
     )
+
+
+@app.get("/api/spoof-attempts", response_model=List[schemas.SpoofAttemptOut])
+def list_spoof_attempts(
+    resolved: Optional[bool] = None,
+    db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(None),
+):
+    admin = None
+    if authorization and authorization.startswith("Bearer "):
+        admin = validate_admin_token(authorization.removeprefix("Bearer ").strip(), db)
+    if not admin:
+        raise HTTPException(status_code=401, detail="Admin authorization required")
+
+    q = db.query(models.SpoofAttempt).options(joinedload(models.SpoofAttempt.faculty))
+    if resolved is not None:
+        q = q.filter(models.SpoofAttempt.resolved == resolved)
+    attempts = q.order_by(models.SpoofAttempt.created_at.desc()).limit(200).all()
+
+    return [
+        schemas.SpoofAttemptOut(
+            id=a.id,
+            faculty_id=a.faculty_id,
+            faculty_name=a.faculty.name if a.faculty else None,
+            teacher_id=a.faculty.teacher_id if a.faculty else None,
+            department=a.faculty.department if a.faculty else None,
+            profile_photo=a.faculty.profile_photo if a.faculty else None,
+            attempt_type=a.attempt_type,
+            face_reason=a.face_reason,
+            full_frame_b64=a.full_frame_b64,
+            face_crop_b64=a.face_crop_b64,
+            spoof_scores=a.spoof_scores,
+            gps_lat=a.gps_lat,
+            gps_lng=a.gps_lng,
+            gps_distance_m=a.gps_distance_m,
+            record_type=a.record_type,
+            resolved=a.resolved,
+            admin_notes=a.admin_notes,
+            created_at=a.created_at,
+        )
+        for a in attempts
+    ]
+
+
+@app.put("/api/spoof-attempts/{attempt_id}/resolve")
+def resolve_spoof_attempt(
+    attempt_id: int,
+    db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(None),
+):
+    admin = None
+    if authorization and authorization.startswith("Bearer "):
+        admin = validate_admin_token(authorization.removeprefix("Bearer ").strip(), db)
+    if not admin:
+        raise HTTPException(status_code=401, detail="Admin authorization required")
+
+    attempt = db.query(models.SpoofAttempt).filter(models.SpoofAttempt.id == attempt_id).first()
+    if not attempt:
+        raise HTTPException(status_code=404, detail="Spoof attempt not found")
+
+    attempt.resolved = True
+    db.commit()
+    return {"status": "ok"}
+
+
+@app.get("/api/spoof-attempts/count")
+def spoof_attempt_count(
+    db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(None),
+):
+    admin = None
+    if authorization and authorization.startswith("Bearer "):
+        admin = validate_admin_token(authorization.removeprefix("Bearer ").strip(), db)
+    if not admin:
+        raise HTTPException(status_code=401, detail="Admin authorization required")
+
+    total = db.query(func.count(models.SpoofAttempt.id)).scalar() or 0
+    unresolved = db.query(func.count(models.SpoofAttempt.id)).filter(
+        models.SpoofAttempt.resolved == False
+    ).scalar() or 0
+    return {"total": total, "unresolved": unresolved}
 
 
 @app.get("/api/leave-balance", response_model=schemas.LeaveBalanceOut)

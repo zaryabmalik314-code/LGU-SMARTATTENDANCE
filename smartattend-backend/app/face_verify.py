@@ -352,7 +352,7 @@ def _check_liveness(all_embeddings: List[np.ndarray], all_face_crops: List[np.nd
         result["scores"]["frame_similarity"] = round(avg_sim, 4)
         if avg_sim > LIVENESS_SIMILARITY_CEIL:
             result["alive"] = False
-            result["reason"] = "liveness_failed"
+            result["reason"] = "photo_replay"
             return result
 
     if not all_face_crops:
@@ -372,7 +372,7 @@ def _check_liveness(all_embeddings: List[np.ndarray], all_face_crops: List[np.nd
         result["scores"]["texture"] = round(median_texture, 2)
         if median_texture < LIVENESS_TEXTURE_FLOOR:
             result["alive"] = False
-            result["reason"] = "liveness_failed"
+            result["reason"] = "flat_image"
             return result
 
     # --- Weighted scoring across all advanced signals ---
@@ -406,7 +406,10 @@ def _check_liveness(all_embeddings: List[np.ndarray], all_face_crops: List[np.nd
 
     if weighted >= SPOOF_SCORE_THRESHOLD:
         result["alive"] = False
-        result["reason"] = "liveness_failed"
+        if avg_moire >= 0.4:
+            result["reason"] = "screen_display"
+        else:
+            result["reason"] = "spoof_detected"
 
     return result
 
@@ -455,9 +458,10 @@ def verify_face_from_frames(candidate_frames_b64: List[str], enrolled_embeddings
         extraction.pop("all_face_crops", None)
         return {"score": 0.0, "verified": "fail", "reason": extraction["reason"]}
 
+    all_crops = extraction.get("all_face_crops", [])
     liveness = _check_liveness(
         extraction.get("all_embeddings", []),
-        extraction.get("all_face_crops", []),
+        all_crops,
     )
 
     del extraction["all_embeddings"]
@@ -465,11 +469,19 @@ def verify_face_from_frames(candidate_frames_b64: List[str], enrolled_embeddings
     extraction.pop("thumbnail", None)
 
     if not liveness["alive"]:
+        face_crop_b64 = None
+        if all_crops:
+            try:
+                _, buf = cv2.imencode(".jpg", all_crops[0], [cv2.IMWRITE_JPEG_QUALITY, 70])
+                face_crop_b64 = base64.b64encode(buf).decode("ascii")
+            except Exception:
+                pass
         return {
             "score": 0.0,
             "verified": "fail",
             "reason": liveness["reason"],
             "liveness_scores": liveness["scores"],
+            "face_crop_b64": face_crop_b64,
         }
 
     live = np.array(extraction["embedding"])
