@@ -1562,7 +1562,7 @@ function getFaceMesh(){
 // the picked frame(s) to the mode's onXScanComplete callback as a
 // face_images array of data URLs (never raw pixel embeddings).
 function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,ring,pct,mode){
-  var CIRC=125.6;
+  var CIRC=parseFloat(ring.getAttribute('stroke-dasharray'))||125.6;
   var isEnroll=(mode==='enroll'||mode==='reenroll');
   var totalMs=5000;                     // 5s scan window for all modes for liveness-detection
   var sampleMs=isEnroll?220:200;       // frame-grab cadence (enroll runs open-ended, so sample slower)
@@ -2098,9 +2098,7 @@ function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,
 
         // Safety cap so one impossible step can't hang the screen forever.
         if(stepIndex<ENROLL_STEPS.length && stepElapsed>=STEP_TIMEOUT_MS){
-          if(capturedOrder.length>=2){
-            // Enough usable angles already banked — finish rather than
-            // throwing away a run the user has put effort into.
+          if(capturedOrder.length>=3){
             console.warn('[enroll] step "'+step.key+'" timed out; submitting '+capturedOrder.length+' angles');
             stepIndex=ENROLL_STEPS.length;
             updateEnrollPhase();
@@ -2794,7 +2792,7 @@ function runReenrollFace(){
     btn.style.display='none';
     document.getElementById('reph0').classList.add('active');
 
-    function _startRe(){startFaceCapture(bioVideo,bioCanvas,bioOval,bioBeam,bioRec,bioLabel,val,bar,btn,bioRing.parentElement,bioRing,bioPct,'reenroll');}
+    function _startRe(){startFaceCapture(bioVideo,bioCanvas,bioOval,bioBeam,bioRec,bioLabel,val,bar,btn,document.getElementById('reProgress'),bioRing,bioPct,'reenroll');}
     var _rs=false;function _rr(){if(_rs)return;_rs=true;bioVideo.removeEventListener('loadeddata',_rr);setTimeout(_startRe,300);}
     bioVideo.addEventListener('loadeddata',_rr);
     var _rp=bioVideo.play();if(_rp&&typeof _rp.then==='function')_rp.catch(function(){});

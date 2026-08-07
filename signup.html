@@ -535,7 +535,7 @@ function pickCandidateFrames(frames){
 // startFaceCapture — unified capture loop
 // ============================================================
 function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,ring,pct,mode){
-  var CIRC=100.5;
+  var CIRC=parseFloat(ring.getAttribute('stroke-dasharray'))||100.5;
   var isEnroll=(mode==='enroll'||mode==='reenroll');
   var totalMs=5000;
   var sampleMs=isEnroll?220:200;
@@ -1100,7 +1100,7 @@ function runEnrollFace(){
 
     function _startCapture(){
       startFaceCapture(bioVideo,bioCanvas,bioOval,bioBeam,bioRec,bioLabel,val,bar,btn,
-        bioRing.parentElement,bioRing,bioPct,'enroll');
+        document.getElementById('enProgress'),bioRing,bioPct,'enroll');
     }
     var _started=false;
     function _onReady(){if(_started)return;_started=true;bioVideo.removeEventListener('loadeddata',_onReady);setTimeout(_startCapture,300);}
