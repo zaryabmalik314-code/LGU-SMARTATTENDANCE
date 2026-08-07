@@ -210,7 +210,7 @@ def check_gps_spoofing(readings: List["GPSReading"]) -> dict:
 
     all_alt_null = all(getattr(r, "altitude", None) is None for r in readings)
     all_spd_null = all(getattr(r, "speed", None) is None for r in readings)
-    if all_alt_null and all_spd_null and unique_accs == 1:
+    if all_alt_null and all_spd_null and unique_accs == 1 and lat_std < GPS_SPOOF_JITTER_FLOOR and lng_std < GPS_SPOOF_JITTER_FLOOR:
         return {"spoofed": True, "reason": "gps_metadata_absent"}
 
     return {"spoofed": False, "reason": None}
