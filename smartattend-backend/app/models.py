@@ -304,6 +304,24 @@ class SpoofAttempt(Base):
     faculty = relationship("Faculty")
 
 
+class PushSubscription(Base):
+    """
+    A single Web Push subscription for one device/browser. A faculty member
+    or admin can have several (one per device they enable notifications on),
+    so uniqueness is on the push endpoint, not the subscriber.
+    """
+    __tablename__ = "push_subscriptions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    subscriber_type = Column(String, nullable=False, index=True)  # "faculty" | "admin" | "hod"
+    subscriber_id = Column(Integer, nullable=False, index=True)
+    endpoint = Column(String, nullable=False, unique=True, index=True)
+    p256dh = Column(String, nullable=False)  # client public key for payload encryption
+    auth = Column(String, nullable=False)    # client auth secret
+    user_agent = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class SemesterSnapshot(Base):
     """
     Immutable per-faculty record of what was owed at the moment a

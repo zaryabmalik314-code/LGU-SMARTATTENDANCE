@@ -566,6 +566,24 @@ class SemesterSnapshotOut(BaseModel):
         from_attributes = True
 
 
+class PushKeys(BaseModel):
+    p256dh: str
+    auth: str
+
+
+class PushSubscribeRequest(BaseModel):
+    # The browser PushSubscription, plus who is subscribing.
+    endpoint: str
+    keys: PushKeys
+    subscriber_type: str  # "faculty" | "admin" | "hod"
+    faculty_id: Optional[int] = None  # required when subscriber_type == "faculty"
+    user_agent: Optional[str] = None
+
+
+class PushUnsubscribeRequest(BaseModel):
+    endpoint: str
+
+
 class SpoofAttemptOut(BaseModel):
     id: int
     faculty_id: int

@@ -10,3 +10,5 @@ insightface==0.7.3
 onnxruntime>=1.19.2,<1.20
 opencv-python-headless==4.10.0.84
 Pillow==10.4.0
+pywebpush==2.0.0
+APScheduler==3.10.4

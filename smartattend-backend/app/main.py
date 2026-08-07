@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, Header, WebSocket, WebSocketDisconnect, Request
+from fastapi import FastAPI, Depends, HTTPException, Header, WebSocket, WebSocketDisconnect, Request, Query
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session, joinedload
@@ -8,6 +8,7 @@ from typing import List, Optional
 import asyncio
 import json
 import secrets
+import os
 
 from . import models, schemas
 from .database import engine, get_db, run_simple_migrations, SessionLocal
@@ -15,6 +16,7 @@ from .geofence import pick_best_reading, check_location, check_impossible_moveme
 from .face_verify import verify_face_from_frames, enroll_from_frames, embeddings_to_str
 from .auth import hash_pin, verify_pin, hash_password, verify_password
 from .ws_manager import manager
+from . import push
 
 models.Base.metadata.create_all(bind=engine)
 run_simple_migrations()
@@ -22,9 +24,76 @@ run_simple_migrations()
 app = FastAPI(title="SmartAttend API")
 
 
+_scheduler = None
+
+
 @app.on_event("startup")
 async def on_startup():
     manager.set_loop(asyncio.get_running_loop())
+    _start_checkout_reminder_scheduler()
+
+
+def run_checkout_reminders():
+    """
+    Daily job: notify faculty who checked in today (PKT) but never checked out.
+    Opens its own DB session — it runs on the scheduler thread, not a request.
+    """
+    db = SessionLocal()
+    try:
+        local_now = datetime.utcnow() + timedelta(hours=PKT_OFFSET_HOURS)
+        local_day_start = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+        day_start_utc = local_day_start - timedelta(hours=PKT_OFFSET_HOURS)
+
+        checked_in = {
+            row[0] for row in db.query(models.AttendanceRecord.faculty_id).filter(
+                models.AttendanceRecord.record_type == "check_in",
+                models.AttendanceRecord.status == "present",
+                models.AttendanceRecord.timestamp >= day_start_utc,
+            ).distinct().all()
+        }
+        checked_out = {
+            row[0] for row in db.query(models.AttendanceRecord.faculty_id).filter(
+                models.AttendanceRecord.record_type == "check_out",
+                models.AttendanceRecord.timestamp >= day_start_utc,
+            ).distinct().all()
+        }
+        pending = checked_in - checked_out
+        for faculty_id in pending:
+            push.push_to_subscribers(
+                db, "faculty", faculty_id,
+                title="Don't forget to check out",
+                body="You checked in today but haven't checked out yet. Please mark your exit.",
+                url="./index.html",
+                tag="checkout-reminder",
+            )
+        print(f"[checkout-reminder] {len(pending)} faculty reminded to check out")
+    except Exception as e:
+        print(f"[checkout-reminder] job failed: {e}")
+    finally:
+        db.close()
+
+
+def _start_checkout_reminder_scheduler():
+    """Single in-process daily scheduler. Guarded against double-start."""
+    global _scheduler
+    if _scheduler is not None:
+        return
+    try:
+        from apscheduler.schedulers.background import BackgroundScheduler
+        from apscheduler.triggers.cron import CronTrigger
+    except Exception as e:
+        print(f"[checkout-reminder] APScheduler unavailable, scheduler disabled: {e}")
+        return
+    hour = int(os.getenv("CHECKOUT_REMINDER_UTC_HOUR", "12"))  # 12:00 UTC = 17:00 PKT
+    _scheduler = BackgroundScheduler(timezone="UTC")
+    _scheduler.add_job(
+        run_checkout_reminders,
+        CronTrigger(hour=hour, minute=0),
+        id="checkout_reminders",
+        replace_existing=True,
+    )
+    _scheduler.start()
+    print(f"[checkout-reminder] scheduler started — daily at {hour:02d}:00 UTC")
 
 
 # Locked to actual known frontend origins — GitHub Pages (teacher app +
@@ -927,6 +996,27 @@ def hod_leave_requests(db: Session = Depends(get_db), hod: models.HOD = Depends(
     return [_leave_request_out(r) for r in rows]
 
 
+def _notify_leave_decision(db: Session, req: models.LeaveRequest):
+    """Push the leave approve/reject outcome to the faculty member's devices."""
+    verb = "approved" if req.status == "approved" else "rejected"
+    try:
+        start = req.start_date.date().isoformat()
+        end = req.end_date.date().isoformat()
+        span = start if start == end else f"{start} to {end}"
+    except Exception:
+        span = "your requested dates"
+    body = f"Your leave request ({span}) was {verb}."
+    if req.decision_note:
+        body += f" Note: {req.decision_note}"
+    push.push_to_subscribers(
+        db, "faculty", req.faculty_id,
+        title=f"Leave {verb}",
+        body=body,
+        url="./index.html",
+        tag=f"leave-{req.id}",
+    )
+
+
 @app.post("/api/hod/leave-requests/{request_id}", response_model=schemas.LeaveRequestOut)
 def hod_decide_leave_request(
     request_id: int,
@@ -963,6 +1053,7 @@ def hod_decide_leave_request(
                   "faculty_id": req.faculty_id,
                   "department": req.faculty.department if req.faculty else None}
     })
+    _notify_leave_decision(db, req)
     return _leave_request_out(req)
 
 
@@ -1008,6 +1099,7 @@ def admin_decide_leave_request(
                   "faculty_id": req.faculty_id,
                   "department": req.faculty.department if req.faculty else None}
     })
+    _notify_leave_decision(db, req)
     return _leave_request_out(req)
 
 
@@ -1580,6 +1672,17 @@ def _save_spoof_attempt(db: Session, faculty, face_result, location_check, best_
         },
     })
 
+    _alert_body = f"{faculty.name} ({faculty.department}) — {reason.replace('_', ' ')}. Total attempts: {count}."
+    push.push_to_all_admins(
+        db, title="Spoof attempt detected", body=_alert_body,
+        url="./smartattend-admin.html", tag=f"spoof-{faculty.id}",
+    )
+    if faculty.department:
+        push.push_to_department_hods(
+            db, faculty.department, title="Spoof attempt detected", body=_alert_body,
+            url="./smartattend-hod.html", tag=f"spoof-{faculty.id}",
+        )
+
     return count
 
 
@@ -1800,6 +1903,184 @@ def list_attendance(
         )
         for r in records
     ]
+
+
+def _resolve_admin_or_hod(authorization: Optional[str], db: Session):
+    """Returns (admin, hod) — at most one is non-None."""
+    admin = None
+    hod = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.removeprefix("Bearer ").strip()
+        admin = validate_admin_token(token, db)
+        if not admin:
+            hs = db.query(models.HODSession).filter(models.HODSession.token == token).first()
+            if hs and hs.expires_at > datetime.utcnow():
+                hod = db.query(models.HOD).filter(models.HOD.id == hs.hod_id).first()
+    return admin, hod
+
+
+def _working_days_in_range(db: Session, department: Optional[str], start_date, end_date) -> int:
+    """Count working days (non-holiday, non-'off') in [start_date, end_date] inclusive."""
+    count = 0
+    d = start_date
+    while d <= end_date:
+        local_dt = datetime(d.year, d.month, d.day, 12, 0, 0)
+        if resolve_expected_start(local_dt, db, department) is not None:
+            count += 1
+        d += timedelta(days=1)
+    return count
+
+
+@app.get("/api/analytics/summary")
+def analytics_summary(
+    from_date: Optional[str] = Query(None, alias="from"),
+    to_date: Optional[str] = Query(None, alias="to"),
+    db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(None),
+):
+    """
+    Per-faculty / per-department / overall attendance rollup for a date range
+    (defaults to the current PKT month). Admin sees everyone; an HOD is scoped
+    to their own department. Reuses the same late/working-day rules as check-in.
+    """
+    admin, hod = _resolve_admin_or_hod(authorization, db)
+    if not admin and not hod:
+        raise HTTPException(status_code=401, detail="Admin or HOD authorization required")
+
+    from datetime import date as _date
+    today_local = (datetime.utcnow() + timedelta(hours=PKT_OFFSET_HOURS)).date()
+    try:
+        start_d = _date.fromisoformat(from_date) if from_date else today_local.replace(day=1)
+        end_d = _date.fromisoformat(to_date) if to_date else today_local
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Dates must be YYYY-MM-DD")
+    if start_d > end_d:
+        raise HTTPException(status_code=400, detail="'from' must be on or before 'to'")
+
+    # UTC window covering the inclusive PKT date range
+    range_start_utc = datetime(start_d.year, start_d.month, start_d.day) - timedelta(hours=PKT_OFFSET_HOURS)
+    range_end_utc = datetime(end_d.year, end_d.month, end_d.day) + timedelta(days=1) - timedelta(hours=PKT_OFFSET_HOURS)
+
+    fac_q = db.query(models.Faculty).filter(models.Faculty.is_active == True)  # noqa: E712
+    if hod:
+        fac_q = fac_q.filter(models.Faculty.department == hod.department)
+    faculty_list = fac_q.all()
+    fac_ids = [f.id for f in faculty_list]
+
+    records = []
+    if fac_ids:
+        records = db.query(models.AttendanceRecord).filter(
+            models.AttendanceRecord.faculty_id.in_(fac_ids),
+            models.AttendanceRecord.timestamp >= range_start_utc,
+            models.AttendanceRecord.timestamp < range_end_utc,
+        ).all()
+
+    # Approved leave requests overlapping the range, per faculty
+    leave_rows = []
+    if fac_ids:
+        leave_rows = db.query(models.LeaveRequest).filter(
+            models.LeaveRequest.faculty_id.in_(fac_ids),
+            models.LeaveRequest.status == "approved",
+            models.LeaveRequest.start_date < range_end_utc,
+            models.LeaveRequest.end_date >= range_start_utc,
+        ).all()
+
+    def _leave_days_in_range(rows):
+        days = set()
+        for r in rows:
+            d = max(r.start_date.date(), start_d)
+            last = min(r.end_date.date(), end_d)
+            while d <= last:
+                days.add(d)
+                d += timedelta(days=1)
+        return days
+
+    leave_by_fac = {}
+    for lr in leave_rows:
+        leave_by_fac.setdefault(lr.faculty_id, []).append(lr)
+
+    # Per-faculty present-day set + late stats
+    present_days = {fid: set() for fid in fac_ids}
+    late_incidents = {fid: 0 for fid in fac_ids}
+    late_minutes_total = {fid: 0 for fid in fac_ids}
+    for r in records:
+        if r.record_type == "check_in" and r.status == "present":
+            pk_day = (r.timestamp + timedelta(hours=PKT_OFFSET_HOURS)).date()
+            present_days[r.faculty_id].add(pk_day)
+            if (r.late_minutes or 0) > 0:
+                late_incidents[r.faculty_id] += 1
+                late_minutes_total[r.faculty_id] += r.late_minutes
+
+    # Working days per department (memoized — same for all faculty in a dept)
+    wd_cache = {}
+    def working_days_for(dept):
+        if dept not in wd_cache:
+            wd_cache[dept] = _working_days_in_range(db, dept, start_d, end_d)
+        return wd_cache[dept]
+
+    per_faculty = []
+    dept_agg = {}
+    for f in faculty_list:
+        wd = working_days_for(f.department)
+        days_present = len(present_days.get(f.id, set()))
+        leave_days = len(_leave_days_in_range(leave_by_fac.get(f.id, [])))
+        days_absent = max(0, wd - days_present - leave_days)
+        pct = round((days_present / wd) * 100, 1) if wd else 0.0
+        row = {
+            "faculty_id": f.id,
+            "name": f.name,
+            "teacher_id": f.teacher_id,
+            "department": f.department,
+            "working_days": wd,
+            "days_present": days_present,
+            "days_late": late_incidents.get(f.id, 0),
+            "total_late_minutes": late_minutes_total.get(f.id, 0),
+            "leave_used": leave_days,
+            "days_absent": days_absent,
+            "attendance_pct": pct,
+        }
+        per_faculty.append(row)
+
+        d = dept_agg.setdefault(f.department or "—", {
+            "department": f.department or "—", "headcount": 0,
+            "sum_pct": 0.0, "late_incidents": 0, "present": 0, "absent": 0,
+        })
+        d["headcount"] += 1
+        d["sum_pct"] += pct
+        d["late_incidents"] += row["days_late"]
+        d["present"] += days_present
+        d["absent"] += days_absent
+
+    per_faculty.sort(key=lambda r: r["attendance_pct"])
+    departments = []
+    for d in dept_agg.values():
+        departments.append({
+            "department": d["department"],
+            "headcount": d["headcount"],
+            "avg_attendance_pct": round(d["sum_pct"] / d["headcount"], 1) if d["headcount"] else 0.0,
+            "late_incidents": d["late_incidents"],
+            "present": d["present"],
+            "absent": d["absent"],
+        })
+    departments.sort(key=lambda x: x["avg_attendance_pct"])
+
+    total_present = sum(r["days_present"] for r in per_faculty)
+    total_late = sum(r["days_late"] for r in per_faculty)
+    total_absent = sum(r["days_absent"] for r in per_faculty)
+    overall_pct = round(sum(r["attendance_pct"] for r in per_faculty) / len(per_faculty), 1) if per_faculty else 0.0
+
+    return {
+        "range": {"from": start_d.isoformat(), "to": end_d.isoformat()},
+        "overall": {
+            "faculty_count": len(per_faculty),
+            "avg_attendance_pct": overall_pct,
+            "total_present_days": total_present,
+            "total_absent_days": total_absent,
+            "total_late_incidents": total_late,
+        },
+        "departments": departments,
+        "faculty": per_faculty,
+    }
 
 
 @app.get("/api/attendance/late-comers", response_model=List[schemas.AttendanceOut])
@@ -2171,3 +2452,109 @@ def get_faculty_leave_requests(faculty_id: int, db: Session = Depends(get_db)):
         .all()
     )
     return [_leave_request_out(r) for r in requests]
+
+
+# =========================================================================
+# WEB PUSH — subscription management
+# =========================================================================
+@app.get("/api/push/vapid-public-key")
+def get_vapid_public_key():
+    """
+    The browser needs this application-server public key to build a push
+    subscription. 404 when push isn't configured so the frontend can hide
+    the "enable notifications" control gracefully.
+    """
+    key = push.vapid_public_key()
+    if not key:
+        raise HTTPException(status_code=404, detail="Push notifications are not configured")
+    return {"key": key}
+
+
+@app.post("/api/push/subscribe")
+def push_subscribe(
+    payload: schemas.PushSubscribeRequest,
+    db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(None),
+):
+    """
+    Stores (or upserts on endpoint) a browser push subscription.
+      - faculty identify by faculty_id in the body (same trust model as check-in)
+      - admin / hod identify by their bearer session token
+    """
+    stype = payload.subscriber_type
+    if stype == "faculty":
+        if not payload.faculty_id:
+            raise HTTPException(status_code=400, detail="faculty_id is required for faculty subscriptions")
+        faculty = db.query(models.Faculty).filter(models.Faculty.id == payload.faculty_id).first()
+        if not faculty:
+            raise HTTPException(status_code=404, detail="Faculty not found")
+        subscriber_id = faculty.id
+    elif stype == "admin":
+        token = authorization.removeprefix("Bearer ").strip() if authorization and authorization.startswith("Bearer ") else None
+        admin = validate_admin_token(token, db) if token else None
+        if not admin:
+            raise HTTPException(status_code=401, detail="Admin authorization required")
+        subscriber_id = admin.id
+    elif stype == "hod":
+        hod = get_current_hod(authorization, db)
+        subscriber_id = hod.id
+    else:
+        raise HTTPException(status_code=400, detail="Invalid subscriber_type")
+
+    existing = db.query(models.PushSubscription).filter(
+        models.PushSubscription.endpoint == payload.endpoint
+    ).first()
+    if existing:
+        existing.subscriber_type = stype
+        existing.subscriber_id = subscriber_id
+        existing.p256dh = payload.keys.p256dh
+        existing.auth = payload.keys.auth
+        existing.user_agent = payload.user_agent
+    else:
+        db.add(models.PushSubscription(
+            subscriber_type=stype,
+            subscriber_id=subscriber_id,
+            endpoint=payload.endpoint,
+            p256dh=payload.keys.p256dh,
+            auth=payload.keys.auth,
+            user_agent=payload.user_agent,
+        ))
+    db.commit()
+    return {"status": "subscribed"}
+
+
+@app.post("/api/push/unsubscribe")
+def push_unsubscribe(payload: schemas.PushUnsubscribeRequest, db: Session = Depends(get_db)):
+    db.query(models.PushSubscription).filter(
+        models.PushSubscription.endpoint == payload.endpoint
+    ).delete(synchronize_session=False)
+    db.commit()
+    return {"status": "unsubscribed"}
+
+
+@app.post("/api/push/test")
+def push_test(
+    db: Session = Depends(get_db),
+    admin: models.Admin = Depends(get_current_admin),
+):
+    """Admin-only. Sends a test notification to the calling admin's devices."""
+    if not push.is_enabled():
+        raise HTTPException(status_code=503, detail="Push notifications are not configured")
+    push.push_to_subscribers(
+        db, "admin", admin.id,
+        title="SmartAttend test",
+        body="Push notifications are working.",
+        url="./smartattend-admin.html",
+        tag="test",
+    )
+    return {"status": "sent"}
+
+
+@app.post("/api/tasks/run-checkout-reminders")
+def trigger_checkout_reminders(
+    db: Session = Depends(get_db),
+    admin: models.Admin = Depends(get_current_admin),
+):
+    """Admin-only manual trigger for the daily checkout-reminder job (for testing)."""
+    run_checkout_reminders()
+    return {"status": "ok"}

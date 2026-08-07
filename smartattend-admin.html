@@ -724,6 +724,7 @@
             <div class="page-title">Spoof Attempts</div>
             <div class="page-subtitle">Photo, video, and location spoofing attempts</div>
           </div>
+          <button class="btn btn-ghost" id="spoofAlertBtn" onclick="toggleAdminAlerts()" title="Get a push notification on this device when a spoof is detected, even if this panel is closed">Enable alerts</button>
         </div>
         <div class="live-stats" id="spoof-stats">
           <div class="stat-chip"><span class="stat-val" id="spoof-total">0</span><span class="stat-lbl">Total</span></div>
@@ -862,6 +863,16 @@
           </select>
           <button class="btn-ghost" onclick="renderAnalytics()">Apply</button>
           <button class="btn-ghost" onclick="document.getElementById('an-date-from').value='';document.getElementById('an-date-to').value='';document.getElementById('an-faculty-filter').value='';document.getElementById('an-name-search').value='';populateDeptFilter('','an-dept-filter');renderAnalytics();">Reset</button>
+          <button class="btn-ghost" id="sum-excel-btn" onclick="exportSummary('excel')" title="Per-faculty monthly summary (present/late/absent/leave/%)">Export summary (Excel)</button>
+          <button class="btn-ghost" id="sum-pdf-btn" onclick="exportSummary('pdf')">Export summary (PDF)</button>
+        </div>
+
+        <div class="live-stats" id="an-summary-stats" style="margin-bottom:14px">
+          <div class="stat-chip"><span class="stat-val" id="sum-avg">—</span><span class="stat-lbl">Avg attendance</span></div>
+          <div class="stat-chip"><span class="stat-val" id="sum-faculty">—</span><span class="stat-lbl">Faculty</span></div>
+          <div class="stat-chip"><span class="stat-val" id="sum-present">—</span><span class="stat-lbl">Present days</span></div>
+          <div class="stat-chip"><span class="stat-val" id="sum-late" style="color:#fbbf24">—</span><span class="stat-lbl">Late incidents</span></div>
+          <div class="stat-chip"><span class="stat-val" id="sum-absent" style="color:#f87171">—</span><span class="stat-lbl">Absent days</span></div>
         </div>
 
         <div class="analytics-stack">
@@ -1297,6 +1308,80 @@ function initials(name) {
   return name.trim().split(/\s+/).slice(0,2).map(w => w[0]?.toUpperCase() || '').join('');
 }
 
+/* ---- Web Push (admin spoof alerts) ---- */
+const LS_ADMIN_NOTIF = 'sa_admin_notif';
+function pushSupported() { return ('serviceWorker' in navigator) && ('PushManager' in window) && ('Notification' in window); }
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  const arr = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+  return arr;
+}
+function updateAdminAlertBtn(state) {
+  const btn = document.getElementById('spoofAlertBtn');
+  if (!btn) return;
+  btn.disabled = false;
+  if (!pushSupported()) { btn.textContent = 'Alerts not supported'; btn.disabled = true; return; }
+  if (state === 'on') btn.textContent = 'Alerts on ✓';
+  else if (state === 'pending') { btn.textContent = 'Please wait…'; btn.disabled = true; }
+  else btn.textContent = 'Enable alerts';
+}
+async function subscribeAdminPush(silent) {
+  try {
+    const resp = await api('/api/push/vapid-public-key');
+    const reg = await navigator.serviceWorker.register('push-sw.js');
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(resp.key) });
+    const j = sub.toJSON();
+    await api('/api/push/subscribe', {
+      method: 'POST',
+      body: JSON.stringify({ endpoint: j.endpoint, keys: { p256dh: j.keys.p256dh, auth: j.keys.auth }, subscriber_type: 'admin', user_agent: navigator.userAgent })
+    });
+    localStorage.setItem(LS_ADMIN_NOTIF, '1');
+    updateAdminAlertBtn('on');
+    if (!silent) showToast('Spoof alerts enabled on this device.');
+  } catch (e) {
+    updateAdminAlertBtn(localStorage.getItem(LS_ADMIN_NOTIF) === '1' ? 'on' : 'off');
+    if (!silent) showToast(e && e.message && e.message.includes('not configured') ? 'Push not configured on server.' : 'Could not enable alerts.', true);
+    console.warn('admin push subscribe failed', e);
+  }
+}
+async function disableAdminPush() {
+  updateAdminAlertBtn('pending');
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = reg && await reg.pushManager.getSubscription();
+    if (sub) {
+      const ep = sub.endpoint;
+      await sub.unsubscribe();
+      await api('/api/push/unsubscribe', { method: 'POST', body: JSON.stringify({ endpoint: ep }) }).catch(() => {});
+    }
+  } catch (e) { console.warn(e); }
+  localStorage.removeItem(LS_ADMIN_NOTIF);
+  updateAdminAlertBtn('off');
+  showToast('Spoof alerts turned off.');
+}
+function toggleAdminAlerts() {
+  if (!pushSupported()) { showToast('Notifications are not supported on this browser.', true); return; }
+  if (localStorage.getItem(LS_ADMIN_NOTIF) === '1') { disableAdminPush(); return; }
+  updateAdminAlertBtn('pending');
+  Notification.requestPermission().then(perm => {
+    if (perm !== 'granted') { updateAdminAlertBtn('off'); showToast('Notification permission denied.', true); return; }
+    subscribeAdminPush(false);
+  });
+}
+function refreshAdminAlertState() {
+  if (!pushSupported()) { updateAdminAlertBtn('off'); return; }
+  if (localStorage.getItem(LS_ADMIN_NOTIF) === '1') {
+    updateAdminAlertBtn('on');
+    if (Notification.permission === 'granted') subscribeAdminPush(true);
+  } else {
+    updateAdminAlertBtn('off');
+  }
+}
+
 // Backend timestamps are UTC but sometimes come back without a 'Z' or
 // +00:00 offset. Without that marker, JS treats the string as being in
 // the BROWSER's local timezone instead of UTC — which silently corrupts
@@ -1591,7 +1676,7 @@ document.querySelectorAll('.nav-item[data-view]').forEach(btn => {
     if (btn.dataset.view === 'analytics') renderAnalytics();
     if (btn.dataset.view === 'attendance') renderAttendanceTable();
     if (btn.dataset.view === 'latecomers') loadLateComers();
-    if (btn.dataset.view === 'spoofing') loadSpoofAttempts();
+    if (btn.dataset.view === 'spoofing') { loadSpoofAttempts(); refreshAdminAlertState(); }
   });
 });
 document.getElementById('menu-btn').addEventListener('click', () => {
@@ -2344,6 +2429,89 @@ function renderAnalytics() {
   renderLateArrivalsChart();
   renderDeptChart(records);
   renderMonthlyChart(records);
+  loadAnalyticsSummary();
+}
+
+/* --- Backend summary (per-faculty rollup + stat bar + export) --- */
+let _summaryRows = [];
+let _summaryRange = null;
+function summaryQuery() {
+  const from = document.getElementById('an-date-from').value;
+  const to = document.getElementById('an-date-to').value;
+  const params = [];
+  if (from) params.push('from=' + encodeURIComponent(from));
+  if (to) params.push('to=' + encodeURIComponent(to));
+  return params.length ? '?' + params.join('&') : '';
+}
+async function loadAnalyticsSummary() {
+  try {
+    const data = await api('/api/analytics/summary' + summaryQuery());
+    _summaryRows = data.faculty || [];
+    _summaryRange = data.range || null;
+    const o = data.overall || {};
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    set('sum-avg', (o.avg_attendance_pct != null ? o.avg_attendance_pct : 0) + '%');
+    set('sum-faculty', o.faculty_count || 0);
+    set('sum-present', o.total_present_days || 0);
+    set('sum-late', o.total_late_incidents || 0);
+    set('sum-absent', o.total_absent_days || 0);
+  } catch (e) {
+    console.warn('summary load failed', e);
+  }
+}
+function getSummaryExportData() {
+  return _summaryRows.map(r => ({
+    'Faculty Name': r.name || r.faculty_id,
+    'Teacher ID': r.teacher_id || '—',
+    'Department': r.department || '—',
+    'Working Days': r.working_days,
+    'Present': r.days_present,
+    'Late': r.days_late,
+    'Total Late (min)': r.total_late_minutes,
+    'Leave Used': r.leave_used,
+    'Absent': r.days_absent,
+    'Attendance %': r.attendance_pct + '%'
+  }));
+}
+function summaryFilenameBase() {
+  const r = _summaryRange;
+  return r ? `attendance_summary_${r.from}_to_${r.to}` : 'attendance_summary';
+}
+function exportSummary(format) {
+  if (!_summaryRows.length) { alert('No summary data to export yet — open Analytics and apply a range first.'); return; }
+  const data = getSummaryExportData();
+  const base = summaryFilenameBase();
+  if (format === 'excel') {
+    try {
+      if (typeof XLSX === 'undefined') throw new Error('Excel library failed to load');
+      const ws = XLSX.utils.json_to_sheet(data);
+      ws['!cols'] = Object.keys(data[0]).map(k => ({ wch: Math.max(k.length, 14) }));
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Summary');
+      XLSX.writeFile(wb, `${base}.xlsx`);
+    } catch (err) { console.error(err); alert(`Excel export failed: ${err.message}`); }
+  } else {
+    try {
+      if (typeof window.jspdf === 'undefined') throw new Error('PDF library failed to load');
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ orientation: 'landscape' });
+      if (typeof doc.autoTable !== 'function') throw new Error('PDF table plugin failed to load');
+      doc.setFontSize(14);
+      doc.text('SmartAttend — Attendance Summary', 14, 15);
+      doc.setFontSize(9); doc.setTextColor(100);
+      const rangeTxt = _summaryRange ? `${_summaryRange.from} to ${_summaryRange.to}` : '';
+      doc.text(`${rangeTxt}   ·   Generated ${new Date().toLocaleString()}`, 14, 21);
+      const columns = Object.keys(data[0]);
+      doc.autoTable({
+        head: [columns],
+        body: data.map(row => columns.map(c => row[c])),
+        startY: 26,
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [30, 41, 59] }
+      });
+      doc.save(`${base}.pdf`);
+    } catch (err) { console.error(err); alert(`PDF export failed: ${err.message}`); }
+  }
 }
 
 /* --- 1. Overall attendance % (donut) --- */
