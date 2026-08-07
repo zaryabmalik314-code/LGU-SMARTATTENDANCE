@@ -32,8 +32,16 @@ MIN_DETECTION_CONFIDENCE = 0.4
 MIN_FACE_SIZE_PX = 80  # reject tiny/far-away faces
 
 LIVENESS_MIN_FRAMES = 3
-LIVENESS_SIMILARITY_CEIL = 0.98
-LIVENESS_TEXTURE_FLOOR = 12.0
+LIVENESS_SIMILARITY_CEIL = 0.97   # tightened from 0.98
+LIVENESS_TEXTURE_FLOOR = 15.0     # raised from 12.0
+
+# Anti-spoofing thresholds (each signal produces a 0-1 suspicion score)
+MOIRE_ENERGY_CEIL = 0.32          # FFT high-freq energy ratio; screens exceed this
+SKIN_RATIO_FLOOR = 0.20           # minimum YCbCr skin-tone pixels in face crop
+LBP_UNIFORMITY_CEIL = 0.06        # LBP histogram uniformity; flat surfaces exceed this
+COLOR_VARIANCE_FLOOR = 12.0       # per-channel saturation std; screens are more uniform
+MULTI_LAP_RATIO_FLOOR = 0.30      # fine-to-coarse Laplacian ratio; prints/screens are lower
+SPOOF_SCORE_THRESHOLD = 0.45      # weighted sum above this = rejected
 
 _face_app = None
 
@@ -190,17 +198,149 @@ def get_best_face_embedding(image_b64_list: List[str], *, collect_all: bool = Fa
     return result
 
 
+def _compute_lbp(gray: np.ndarray) -> np.ndarray:
+    """Vectorized 8-neighbor Local Binary Pattern."""
+    h, w = gray.shape
+    center = gray[1:h-1, 1:w-1].astype(np.int16)
+    lbp = np.zeros_like(center, dtype=np.uint8)
+    lbp |= (gray[0:h-2, 0:w-2].astype(np.int16) >= center).astype(np.uint8) << 7
+    lbp |= (gray[0:h-2, 1:w-1].astype(np.int16) >= center).astype(np.uint8) << 6
+    lbp |= (gray[0:h-2, 2:w  ].astype(np.int16) >= center).astype(np.uint8) << 5
+    lbp |= (gray[1:h-1, 2:w  ].astype(np.int16) >= center).astype(np.uint8) << 4
+    lbp |= (gray[2:h,   2:w  ].astype(np.int16) >= center).astype(np.uint8) << 3
+    lbp |= (gray[2:h,   1:w-1].astype(np.int16) >= center).astype(np.uint8) << 2
+    lbp |= (gray[2:h,   0:w-2].astype(np.int16) >= center).astype(np.uint8) << 1
+    lbp |= (gray[1:h-1, 0:w-2].astype(np.int16) >= center).astype(np.uint8) << 0
+    return lbp
+
+
+def _signal_moire(gray_crop: np.ndarray) -> float:
+    """Moiré / screen pixel-grid detection via FFT. Returns suspicion 0-1."""
+    if gray_crop.shape[0] < 64 or gray_crop.shape[1] < 64:
+        return 0.0
+    resized = cv2.resize(gray_crop, (128, 128)).astype(np.float32)
+    f = np.fft.fft2(resized)
+    fshift = np.fft.fftshift(f)
+    magnitude = np.abs(fshift)
+
+    h, w = magnitude.shape
+    cy, cx = h // 2, w // 2
+    total_energy = np.sum(magnitude)
+    if total_energy == 0:
+        return 0.0
+
+    Y, X = np.ogrid[:h, :w]
+    dist = np.sqrt((X - cx) ** 2 + (Y - cy) ** 2)
+    high_mask = dist > min(h, w) * 0.4
+    high_energy = np.sum(magnitude[high_mask])
+    ratio = float(high_energy / total_energy)
+
+    high_vals = magnitude[high_mask]
+    mean_hf = np.mean(high_vals)
+    peak_boost = 0.0
+    if mean_hf > 0:
+        cv_hf = float(np.std(high_vals) / mean_hf)
+        if cv_hf > 2.5:
+            peak_boost = 0.3
+
+    raw = (ratio / MOIRE_ENERGY_CEIL) + peak_boost
+    return min(raw, 1.0)
+
+
+def _signal_skin_color(bgr_crop: np.ndarray) -> float:
+    """YCbCr skin-color analysis. Returns suspicion 0-1."""
+    if bgr_crop.size == 0:
+        return 0.0
+    ycrcb = cv2.cvtColor(bgr_crop, cv2.COLOR_BGR2YCrCb)
+    lower = np.array([80, 133, 77], dtype=np.uint8)
+    upper = np.array([235, 173, 127], dtype=np.uint8)
+    mask = cv2.inRange(ycrcb, lower, upper)
+    total_px = mask.shape[0] * mask.shape[1]
+    skin_ratio = float(np.count_nonzero(mask) / total_px) if total_px > 0 else 0.0
+
+    hsv = cv2.cvtColor(bgr_crop, cv2.COLOR_BGR2HSV)
+    sat_std = float(np.std(hsv[:, :, 1].astype(np.float32)))
+
+    score = 0.0
+    if skin_ratio < SKIN_RATIO_FLOOR:
+        score += 0.6 * (1.0 - skin_ratio / SKIN_RATIO_FLOOR)
+    if sat_std < 15.0:
+        score += 0.4 * (1.0 - sat_std / 15.0)
+    return min(score, 1.0)
+
+
+def _signal_lbp_texture(gray_crop: np.ndarray) -> float:
+    """LBP micro-texture analysis. Returns suspicion 0-1."""
+    if gray_crop.shape[0] < 32 or gray_crop.shape[1] < 32:
+        return 0.0
+    resized = cv2.resize(gray_crop, (96, 96))
+    lbp = _compute_lbp(resized)
+    hist, _ = np.histogram(lbp.ravel(), bins=256, range=(0, 256))
+    hist = hist.astype(np.float64)
+    total = hist.sum()
+    if total == 0:
+        return 1.0
+    prob = hist / total
+    uniformity = float(np.sum(prob ** 2))
+    nonzero = prob[prob > 0]
+    entropy = float(-np.sum(nonzero * np.log2(nonzero)))
+
+    score = 0.0
+    if uniformity > LBP_UNIFORMITY_CEIL:
+        score += 0.5 * min((uniformity - LBP_UNIFORMITY_CEIL) / LBP_UNIFORMITY_CEIL, 1.0)
+    if entropy < 4.0:
+        score += 0.5 * (1.0 - entropy / 4.0)
+    return min(score, 1.0)
+
+
+def _signal_multi_laplacian(gray_crop: np.ndarray) -> float:
+    """Multi-scale Laplacian texture. Returns suspicion 0-1."""
+    if gray_crop.shape[0] < 32 or gray_crop.shape[1] < 32:
+        return 0.0
+    resized = cv2.resize(gray_crop, (128, 128)).astype(np.float32)
+    fine = float(cv2.Laplacian(resized, cv2.CV_64F, ksize=3).var())
+    coarse = float(cv2.Laplacian(resized, cv2.CV_64F, ksize=7).var())
+    if coarse == 0:
+        return 0.0
+    ratio = fine / coarse
+    if ratio < MULTI_LAP_RATIO_FLOOR:
+        return min((MULTI_LAP_RATIO_FLOOR - ratio) / MULTI_LAP_RATIO_FLOOR, 1.0)
+    return 0.0
+
+
+def _signal_color_uniformity(bgr_crop: np.ndarray) -> float:
+    """Screens produce more spatially uniform color than real skin. Returns suspicion 0-1."""
+    if bgr_crop.size == 0:
+        return 0.0
+    hsv = cv2.cvtColor(bgr_crop, cv2.COLOR_BGR2HSV)
+    sat = hsv[:, :, 1].astype(np.float32)
+    val = hsv[:, :, 2].astype(np.float32)
+    sat_std = float(np.std(sat))
+    val_std = float(np.std(val))
+    combined = (sat_std + val_std) / 2.0
+    if combined < COLOR_VARIANCE_FLOOR:
+        return min((COLOR_VARIANCE_FLOOR - combined) / COLOR_VARIANCE_FLOOR, 1.0)
+    return 0.0
+
+
 def _check_liveness(all_embeddings: List[np.ndarray], all_face_crops: List[np.ndarray]) -> dict:
     """
-    Two-signal liveness gate:
-    1. Embedding variance — real faces produce slightly different embeddings
-       across frames due to micro-movement; a held-up photo yields near-
-       identical embeddings (avg pairwise cosine sim > 0.98).
-    2. Texture frequency — Laplacian variance on face crops; printed photos
-       and matte screens score much lower than real skin.
+    Six-signal anti-spoofing gate with weighted scoring:
+      1. Embedding variance  — photo replay yields near-identical embeddings
+      2. Laplacian texture   — printed photos / matte screens have low variance
+      3. Moiré / FFT         — screens produce periodic high-frequency artifacts
+      4. YCbCr skin color    — real skin sits in a specific color-space range
+      5. LBP micro-texture   — flat surfaces have fewer distinct texture patterns
+      6. Multi-scale Laplacian — fine-to-coarse frequency ratio distinguishes skin
+    Plus a color-uniformity bonus signal.
+
+    Each signal produces a 0-1 suspicion score; the weighted sum is compared
+    to SPOOF_SCORE_THRESHOLD. Hard-fail thresholds on embedding similarity
+    and basic Laplacian are kept as instant-reject gates.
     """
     result = {"alive": True, "reason": None, "scores": {}}
 
+    # --- Gate 1: Embedding similarity (instant reject) ---
     if len(all_embeddings) >= LIVENESS_MIN_FRAMES:
         sims = []
         for i in range(len(all_embeddings)):
@@ -215,21 +355,58 @@ def _check_liveness(all_embeddings: List[np.ndarray], all_face_crops: List[np.nd
             result["reason"] = "liveness_failed"
             return result
 
-    if all_face_crops:
-        textures = []
-        for crop in all_face_crops:
-            if crop.size == 0:
-                continue
-            gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
-            lap_var = float(cv2.Laplacian(gray, cv2.CV_64F).var())
-            textures.append(lap_var)
-        if textures:
-            median_texture = float(np.median(textures))
-            result["scores"]["texture"] = round(median_texture, 2)
-            if median_texture < LIVENESS_TEXTURE_FLOOR:
-                result["alive"] = False
-                result["reason"] = "liveness_failed"
-                return result
+    if not all_face_crops:
+        return result
+
+    # --- Gate 2: Basic Laplacian texture (instant reject) ---
+    textures = []
+    grays = []
+    for crop in all_face_crops:
+        if crop.size == 0:
+            continue
+        gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+        grays.append(gray)
+        textures.append(float(cv2.Laplacian(gray, cv2.CV_64F).var()))
+    if textures:
+        median_texture = float(np.median(textures))
+        result["scores"]["texture"] = round(median_texture, 2)
+        if median_texture < LIVENESS_TEXTURE_FLOOR:
+            result["alive"] = False
+            result["reason"] = "liveness_failed"
+            return result
+
+    # --- Weighted scoring across all advanced signals ---
+    moire_scores = [_signal_moire(g) for g in grays]
+    skin_scores = [_signal_skin_color(c) for c in all_face_crops if c.size > 0]
+    lbp_scores = [_signal_lbp_texture(g) for g in grays]
+    mlap_scores = [_signal_multi_laplacian(g) for g in grays]
+    color_scores = [_signal_color_uniformity(c) for c in all_face_crops if c.size > 0]
+
+    avg_moire = float(np.mean(moire_scores)) if moire_scores else 0.0
+    avg_skin = float(np.mean(skin_scores)) if skin_scores else 0.0
+    avg_lbp = float(np.mean(lbp_scores)) if lbp_scores else 0.0
+    avg_mlap = float(np.mean(mlap_scores)) if mlap_scores else 0.0
+    avg_color = float(np.mean(color_scores)) if color_scores else 0.0
+
+    result["scores"]["moire"] = round(avg_moire, 4)
+    result["scores"]["skin_color"] = round(avg_skin, 4)
+    result["scores"]["lbp_texture"] = round(avg_lbp, 4)
+    result["scores"]["multi_laplacian"] = round(avg_mlap, 4)
+    result["scores"]["color_uniformity"] = round(avg_color, 4)
+
+    # Weights: moiré is the strongest screen indicator, skin color catches both
+    weighted = (
+        avg_moire * 0.30
+        + avg_skin * 0.25
+        + avg_lbp * 0.15
+        + avg_mlap * 0.15
+        + avg_color * 0.15
+    )
+    result["scores"]["spoof_score"] = round(weighted, 4)
+
+    if weighted >= SPOOF_SCORE_THRESHOLD:
+        result["alive"] = False
+        result["reason"] = "liveness_failed"
 
     return result
 
@@ -302,7 +479,7 @@ def verify_face_from_frames(candidate_frames_b64: List[str], enrolled_embeddings
 
     best_score = max(cosine_similarity(live, enrolled) for enrolled in enrolled_list)
     verified = "pass" if best_score >= FACE_MATCH_THRESHOLD else "fail"
-    return {"score": best_score, "verified": verified, "reason": None}
+    return {"score": best_score, "verified": verified, "reason": None, "liveness_scores": liveness["scores"]}
 
 
 def enroll_from_frames(image_b64_list: List[str]) -> dict:
