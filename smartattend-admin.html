@@ -559,6 +559,11 @@
         Flagged Records
         <span class="nav-badge" id="flagged-count">0</span>
       </button>
+      <button class="nav-item" data-view="latecomers">
+        <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="10" r="7.5"/><path d="M10 5.5V10l3 2" stroke-linecap="round" stroke-linejoin="round"/><path d="M15 15l2 2" stroke-linecap="round"/></svg>
+        Late Comers
+        <span class="nav-badge" id="late-count">0</span>
+      </button>
       <button class="nav-item" data-view="approvals">
         <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="7" r="3.5"/><path d="M3 17c0-3.3 3.1-6 7-6s7 2.7 7 6"/><path d="M12 11l1.5 1.5L16 10" stroke-linecap="round" stroke-linejoin="round"/></svg>
         Pending Approvals
@@ -658,10 +663,10 @@
         <div class="table-wrap">
           <table>
             <thead>
-              <tr><th>Faculty</th><th>Department</th><th>Type</th><th>Timestamp</th><th>GPS</th><th>Face Match</th><th>Status</th></tr>
+              <tr><th>Faculty</th><th>Department</th><th>Type</th><th>Timestamp</th><th>GPS</th><th>Face Match</th><th>Status</th><th>Late</th><th>Duration</th></tr>
             </thead>
             <tbody id="attendance-tbody">
-              <tr><td colspan="7" class="loading-row">Loading…</td></tr>
+              <tr><td colspan="9" class="loading-row">Loading…</td></tr>
             </tbody>
           </table>
         </div>
@@ -702,6 +707,36 @@
             </thead>
             <tbody id="flagged-tbody">
               <tr><td colspan="7" class="loading-row">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Late Comers -->
+      <section class="view" id="view-latecomers">
+        <div class="page-header">
+          <div>
+            <div class="page-title">Late Comers</div>
+            <div class="page-desc">Faculty who checked in after the expected arrival time</div>
+          </div>
+        </div>
+        <div class="live-bar">
+          <div class="live-stats">
+            <div class="live-stat">Late today <b id="lc-today-count">0</b></div>
+            <div class="live-stat">Total late minutes <b id="lc-today-minutes">0</b></div>
+          </div>
+        </div>
+        <div class="toolbar">
+          <input autocomplete="off" type="date" id="lc-date" value="">
+          <button class="btn-ghost" onclick="loadLateComers()">Refresh</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Faculty</th><th>Department</th><th>Timestamp</th><th>Late By</th><th>Duration Status</th></tr>
+            </thead>
+            <tbody id="latecomers-tbody">
+              <tr><td colspan="5" class="loading-row">Loading…</td></tr>
             </tbody>
           </table>
         </div>
@@ -1474,6 +1509,7 @@ function updateLiveStats() {
   presentEl.textContent = present;
   lateEl.textContent = late;
   rejectedEl.textContent = rejected;
+  updateLateBadge();
 }
 
 /* =========================================================================
@@ -1488,6 +1524,7 @@ document.querySelectorAll('.nav-item[data-view]').forEach(btn => {
     document.getElementById('sidebar').classList.remove('open');
     if (btn.dataset.view === 'analytics') renderAnalytics();
     if (btn.dataset.view === 'attendance') renderAttendanceTable();
+    if (btn.dataset.view === 'latecomers') loadLateComers();
   });
 });
 document.getElementById('menu-btn').addEventListener('click', () => {
@@ -1694,13 +1731,14 @@ document.getElementById('detail-overlay').addEventListener('click', (e) => {
 
 async function loadAttendance() {
   const tbody = document.getElementById('attendance-tbody');
-  tbody.innerHTML = '<tr><td colspan="7" class="loading-row">Loading…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="9" class="loading-row">Loading…</td></tr>';
   try {
     attendanceCache = await api('/api/attendance');
     renderAttendanceTable();
     renderFlaggedTable();
+    updateLateBadge();
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="7" class="loading-row">Couldn't load attendance — ${err.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="loading-row">Couldn't load attendance — ${err.message}</td></tr>`;
   }
 }
 
@@ -1747,11 +1785,19 @@ function renderAttendanceTable() {
   let rows = getFilteredAttendanceRows();
 
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="empty-title">No matching records</div><div class="empty-sub">Adjust your search, date range, or faculty/department filter.</div></div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9"><div class="empty-state"><div class="empty-title">No matching records</div><div class="empty-sub">Adjust your search, date range, or faculty/department filter.</div></div></td></tr>`;
     return;
   }
 
-  tbody.innerHTML = rows.map(r => `
+  tbody.innerHTML = rows.map(r => {
+    const lateMin = r.late_minutes || 0;
+    const isLate = r.is_late || lateMin > 0;
+    const durMin = r.duration_minutes;
+    const durStatus = r.duration_status;
+    const durLabel = durStatus === 'full_day' ? 'Full Day' : durStatus === 'half_day' ? 'Half Day' : durStatus === 'absent' ? 'Absent' : '';
+    const durColor = durStatus === 'full_day' ? 'var(--green-500)' : durStatus === 'half_day' ? 'var(--amber-500)' : durStatus === 'absent' ? 'var(--red-500)' : 'var(--slate-400)';
+    const durTime = durMin != null ? (Math.floor(durMin/60) + 'h ' + (durMin%60) + 'm') : '';
+    return `
     <tr${r.flagged_suspicious ? ' class="row-flagged"' : ''}>
       <td class="cell-name">${r.faculty_name || r.name || r.faculty_id || '—'}</td>
       <td>${getRecordDepartment(r) || '—'}</td>
@@ -1760,7 +1806,10 @@ function renderAttendanceTable() {
       <td>${r.gps_distance != null ? r.gps_distance + 'm' : '—'}</td>
       <td>${r.face_match_score != null ? (r.face_match_score * 100).toFixed(0) + '%' : '—'}</td>
       <td>${r.status || '—'}${r.flagged_suspicious ? `<span class="flag-badge" title="${(r.flag_reason || 'Flagged as suspicious').replace(/"/g, '&quot;')}">⚠ Flagged</span>` : ''}</td>
-    </tr>`).join('');
+      <td>${isLate && r.record_type === 'check_in' ? `<span style="background:var(--amber-bg);color:var(--amber-500);padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">${lateMin} min late</span>` : '—'}</td>
+      <td>${r.record_type === 'check_in' && durMin != null ? `<span style="color:${durColor};font-weight:600;font-size:12px">${durLabel}</span><br><span style="font-size:11px;color:var(--slate-400)">${durTime}</span>` : '—'}</td>
+    </tr>`;
+  }).join('');
 }
 ['att-search','att-date-from','att-date-to'].forEach(id =>
   document.getElementById(id).addEventListener('input', renderAttendanceTable));
@@ -1840,6 +1889,62 @@ function renderFlaggedTable() {
 document.getElementById('flagged-reason-filter').addEventListener('change', renderFlaggedTable);
 
 /* =========================================================================
+   LATE COMERS
+   ========================================================================= */
+
+function updateLateBadge() {
+  const todayLate = attendanceCache.filter(r =>
+    r.record_type === 'check_in' && (r.is_late || (r.late_minutes || 0) > 0) && r.timestamp && isTodayPK(r.timestamp)
+  );
+  document.getElementById('late-count').textContent = todayLate.length || '';
+}
+
+async function loadLateComers() {
+  const tbody = document.getElementById('latecomers-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="5" class="loading-row">Loading…</td></tr>';
+
+  const dateInput = document.getElementById('lc-date');
+  const dateParam = dateInput && dateInput.value ? `?date=${dateInput.value}` : '';
+
+  try {
+    const records = await api('/api/attendance/late-comers' + dateParam);
+    const totalMin = records.reduce((acc, r) => acc + (r.late_minutes || 0), 0);
+    document.getElementById('lc-today-count').textContent = records.length;
+    document.getElementById('lc-today-minutes').textContent = totalMin;
+
+    if (!records.length) {
+      tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state"><div class="empty-title">No late comers</div><div class="empty-sub">Everyone arrived on time!</div></div></td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = records.map(r => {
+      const durMin = r.duration_minutes;
+      const durStatus = r.duration_status;
+      const durLabel = durStatus === 'full_day' ? 'Full Day' : durStatus === 'half_day' ? 'Half Day' : durStatus === 'absent' ? 'Absent' : '—';
+      const durColor = durStatus === 'full_day' ? 'var(--green-500)' : durStatus === 'half_day' ? 'var(--amber-500)' : durStatus === 'absent' ? 'var(--red-500)' : 'var(--slate-400)';
+      const durTime = durMin != null ? (Math.floor(durMin/60) + 'h ' + (durMin%60) + 'm') : '';
+      return `<tr>
+        <td class="cell-name" style="display:flex;align-items:center;gap:8px">
+          ${r.profile_photo
+            ? `<img src="${r.profile_photo}" alt="" style="width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0">`
+            : `<span style="width:28px;height:28px;border-radius:50%;background:var(--navy-700);display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex-shrink:0;color:var(--slate-300)">${initials(r.faculty_name)}</span>`}
+          ${r.faculty_name || '—'}
+        </td>
+        <td>${r.department || '—'}</td>
+        <td class="mono">${fmtDate(r.timestamp)}</td>
+        <td><span style="background:var(--amber-bg);color:var(--amber-500);padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">${r.late_minutes} min</span></td>
+        <td>${durMin != null ? `<span style="color:${durColor};font-weight:600;font-size:12px">${durLabel}</span> <span style="font-size:11px;color:var(--slate-400)">${durTime}</span>` : '—'}</td>
+      </tr>`;
+    }).join('');
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><div class="empty-title">Error loading late comers</div><div class="empty-sub">${err.message}</div></div></td></tr>`;
+  }
+}
+
+document.getElementById('lc-date').addEventListener('change', loadLateComers);
+
+/* =========================================================================
    ATTENDANCE EXPORT (Excel / PDF / CSV)
    ========================================================================= */
 
@@ -1856,6 +1961,9 @@ function getAttendanceExportData(rows) {
     'GPS Distance': r.gps_distance != null ? r.gps_distance + 'm' : '—',
     'Face Match %': r.face_match_score != null ? (r.face_match_score * 100).toFixed(0) + '%' : '—',
     'Status': r.status || '—',
+    'Late (min)': r.late_minutes || 0,
+    'Duration Status': r.duration_status ? (r.duration_status === 'full_day' ? 'Full Day' : r.duration_status === 'half_day' ? 'Half Day' : r.duration_status === 'absent' ? 'Absent' : '') : '',
+    'Duration (min)': r.duration_minutes != null ? r.duration_minutes : '',
     'Flagged': r.flagged_suspicious ? `Yes — ${r.flag_reason || 'Flagged as suspicious'}` : 'No'
   }));
 }
@@ -3173,15 +3281,23 @@ async function openFacultyPersonalAnalytics(facultyId, facultyName) {
       <div style="font-size:12px;font-weight:600;color:var(--slate-400);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Recent Records</div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Date</th><th>Type</th><th>Status</th><th>Late (min)</th><th>Face Match</th></tr></thead>
+          <thead><tr><th>Date</th><th>Type</th><th>Status</th><th>Late</th><th>Duration</th><th>Face Match</th></tr></thead>
           <tbody>
-            ${records.slice(0,30).map(r=>`<tr>
+            ${records.slice(0,30).map(r=>{
+              const lm=r.late_minutes||0;
+              const ds=r.duration_status;
+              const dm=r.duration_minutes;
+              const dsLabel=ds==='full_day'?'Full Day':ds==='half_day'?'Half Day':ds==='absent'?'Absent':'';
+              const dsColor=ds==='full_day'?'var(--green-500)':ds==='half_day'?'var(--amber-500)':ds==='absent'?'var(--red-500)':'var(--slate-400)';
+              const dmText=dm!=null?(Math.floor(dm/60)+'h '+(dm%60)+'m'):'';
+              return `<tr>
               <td>${r.timestamp ? new Date(r.timestamp).toLocaleDateString('en-PK',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '—'}</td>
               <td><span style="background:${r.record_type==='check_in'?'rgba(52,211,153,.15)':'rgba(99,102,241,.15)'};color:${r.record_type==='check_in'?'#34d399':'#818cf8'};padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">${r.record_type==='check_in'?'Check-In':'Check-Out'}</span></td>
               <td><span style="color:${r.status==='present'?'var(--green-500)':'var(--red-500)'};font-weight:600;font-size:12px">${r.status}</span></td>
-              <td style="color:${(r.late_minutes||0)>0?'var(--amber-500)':'var(--slate-400)'}">${r.late_minutes||0}</td>
+              <td>${lm>0&&r.record_type==='check_in'?`<span style="background:var(--amber-bg);color:var(--amber-500);padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">${lm} min</span>`:`<span style="color:var(--slate-400)">—</span>`}</td>
+              <td>${r.record_type==='check_in'&&dm!=null?`<span style="color:${dsColor};font-weight:600;font-size:12px">${dsLabel}</span> <span style="font-size:11px;color:var(--slate-400)">${dmText}</span>`:'—'}</td>
               <td>${r.face_match_score!=null?Math.round(r.face_match_score*100)+'%':'—'}</td>
-            </tr>`).join('')}
+            </tr>`;}).join('')}
           </tbody>
         </table>
       </div>`;
@@ -3212,7 +3328,12 @@ function renderFacultyTable() {
   const id = f => f.id ?? f.teacher_id ?? f.faculty_id;
   const isActive = f => f.is_active !== false;
   tbody.innerHTML = rows.map(f => `<tr>
-    <td class="cell-name" onclick="openFacultyPersonalAnalytics('${id(f)}','${(f.name||'').replace(/'/g,"\\'")}' )" style="cursor:pointer;color:var(--gold-300)">${f.name || '—'}</td>
+    <td class="cell-name" onclick="openFacultyPersonalAnalytics('${id(f)}','${(f.name||'').replace(/'/g,"\\'")}' )" style="cursor:pointer;color:var(--gold-300);display:flex;align-items:center;gap:8px">
+      ${f.profile_photo
+        ? `<img src="${f.profile_photo}" alt="" style="width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0">`
+        : `<span style="width:28px;height:28px;border-radius:50%;background:var(--navy-700);display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex-shrink:0;color:var(--slate-300)">${initials(f.name)}</span>`}
+      ${f.name || '—'}
+    </td>
     <td class="mono">${f.teacher_id || '—'}</td>
     <td>${f.department || '—'}</td>
     <td>${f.email || '—'}</td>
@@ -3220,6 +3341,8 @@ function renderFacultyTable() {
     <td style="white-space:nowrap">
       <button class="btn-ghost" style="font-size:11px;padding:3px 8px;margin-right:4px"
         onclick="markManualAttendance('${id(f)}','check_in')">Mark In</button>
+      <button class="btn-ghost" style="font-size:11px;padding:3px 8px;margin-right:4px"
+        onclick="markManualAttendance('${id(f)}','check_out')">Mark Out</button>
       ${isActive(f)
         ? `<button class="btn-reject" style="font-size:11px;padding:3px 8px"
             onclick="removeFacultyPrompt('${id(f)}','${(f.name||'').replace(/'/g,"\\'")}')">Remove</button>`

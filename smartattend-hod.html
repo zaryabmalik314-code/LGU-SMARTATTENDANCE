@@ -730,7 +730,9 @@ function renderFacultyTable() {
     var st = facultyStatus(f);
     var safeName = (f.name||'').replace(/'/g,"\\'");
     return '<tr>' +
-      '<td><span class="avatar">' + initials(f.name) + '</span></td>' +
+      '<td>' + (f.profile_photo
+        ? '<img src="' + f.profile_photo + '" alt="" style="width:32px;height:32px;border-radius:50%;object-fit:cover">'
+        : '<span class="avatar">' + initials(f.name) + '</span>') + '</td>' +
       '<td><span class="faculty-link" onclick="openPersonalAnalytics(' + f.id + ',\'' + safeName + '\')">' + (f.name || '—') + '</span></td>' +
       '<td style="font-family:var(--font-mono);color:var(--text-2)">' + (f.teacher_id || '—') + '</td>' +
       '<td style="color:var(--text-3)">' + (f.email || '—') + '</td>' +
@@ -760,7 +762,7 @@ async function loadDeptAnalytics() {
       var checkIns = records.filter(function(r){ return r.record_type === 'check_in'; });
       var lateDays = checkIns.filter(function(r){ return (r.late_minutes || 0) > 0; }).length;
       var totalLateMin = checkIns.reduce(function(acc, r){ return acc + (r.late_minutes || 0); }, 0);
-      return { id: f.id, name: f.name, teacher_id: f.teacher_id, checkIns: checkIns.length, lateDays: lateDays, totalLateMin: totalLateMin, deductionDays: Math.floor(totalLateMin / 480) };
+      return { id: f.id, name: f.name, teacher_id: f.teacher_id, profile_photo: f.profile_photo, checkIns: checkIns.length, lateDays: lateDays, totalLateMin: totalLateMin, deductionDays: Math.floor(totalLateMin / 480) };
     }));
 
     deptAnalyticsCache = perFaculty;
@@ -791,7 +793,9 @@ function renderDeptAnalytics() {
   tbody.innerHTML = rows.map(function(r) {
     var safeName = (r.name||'').replace(/'/g,"\\'");
     return '<tr>' +
-      '<td><span class="avatar">' + initials(r.name) + '</span></td>' +
+      '<td>' + (r.profile_photo
+        ? '<img src="' + r.profile_photo + '" alt="" style="width:32px;height:32px;border-radius:50%;object-fit:cover">'
+        : '<span class="avatar">' + initials(r.name) + '</span>') + '</td>' +
       '<td><span class="faculty-link" onclick="openPersonalAnalytics(' + r.id + ',\'' + safeName + '\')">' + (r.name || '—') + '</span></td>' +
       '<td style="font-family:var(--font-mono);color:var(--text-2)">' + (r.teacher_id || '—') + '</td>' +
       '<td>' + r.checkIns + '</td>' +
@@ -853,7 +857,7 @@ async function openPersonalAnalytics(facultyId, facultyName) {
               '<td style="color:var(--text-2)">' + new Date(r.timestamp).toLocaleString('en-PK',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) + '</td>' +
               '<td style="text-transform:capitalize;color:var(--text-2)">' + (r.record_type||'').replace('_',' ') + '</td>' +
               '<td><span class="pill pill-' + (r.status==='present'?'present':'absent') + '"><span class="pill-dot"></span>' + r.status + '</span></td>' +
-              '<td style="color:' + ((r.late_minutes||0)>0?'var(--amber)':'var(--text-4)') + '">' + (r.late_minutes||0) + '</td>' +
+              '<td>' + ((r.late_minutes||0)>0 ? '<span style="background:rgba(251,191,36,.12);color:var(--amber);padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">' + (r.late_minutes||0) + ' min late</span>' : '<span style="color:var(--text-4)">0</span>') + '</td>' +
             '</tr>';
           }).join('') || '<tr><td colspan="4" class="loading-row">No records yet</td></tr>') +
         '</tbody></table></div>';

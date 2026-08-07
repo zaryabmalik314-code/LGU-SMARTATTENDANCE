@@ -205,6 +205,66 @@ def compute_late_minutes(utc_timestamp: datetime, db: Session, department: Optio
     return int((local_time - expected).total_seconds() // 60)
 
 
+def compute_duration_status(duration_minutes: int, db: Session) -> str:
+    """
+    Computes the attendance duration status based on hours worked and the
+    active TimeWindow's configured working hours.
+    Returns "full_day", "half_day", or "absent".
+    """
+    window = get_active_time_window(db)
+    if window:
+        try:
+            sh, sm = (int(p) for p in window.start_time.split(":"))
+            eh, em = (int(p) for p in window.end_time.split(":"))
+            total_configured = (eh * 60 + em) - (sh * 60 + sm)
+            if total_configured <= 0:
+                total_configured = 480
+        except (ValueError, AttributeError):
+            total_configured = 480
+    else:
+        total_configured = 480  # default 8 hours
+
+    half_threshold = total_configured // 2
+    if duration_minutes >= total_configured:
+        return "full_day"
+    elif duration_minutes >= half_threshold:
+        return "half_day"
+    else:
+        return "absent"
+
+
+def update_checkin_duration(db: Session, faculty_id: int, checkout_time: datetime):
+    """
+    Called at check-out time. Finds today's first successful check-in for
+    this faculty, computes the duration, and stores duration_minutes +
+    duration_status on that check-in record.
+    """
+    local_co = checkout_time + timedelta(hours=PKT_OFFSET_HOURS)
+    local_day_start = local_co.replace(hour=0, minute=0, second=0, microsecond=0)
+    day_start_utc = local_day_start - timedelta(hours=PKT_OFFSET_HOURS)
+
+    checkin_record = (
+        db.query(models.AttendanceRecord)
+        .filter(
+            models.AttendanceRecord.faculty_id == faculty_id,
+            models.AttendanceRecord.record_type == "check_in",
+            models.AttendanceRecord.status == "present",
+            models.AttendanceRecord.timestamp >= day_start_utc,
+        )
+        .order_by(models.AttendanceRecord.timestamp.asc())
+        .first()
+    )
+    if not checkin_record:
+        return
+
+    duration = int((checkout_time - checkin_record.timestamp).total_seconds() / 60)
+    if duration < 0:
+        return
+
+    checkin_record.duration_minutes = duration
+    checkin_record.duration_status = compute_duration_status(duration, db)
+
+
 def get_current_admin(authorization: Optional[str] = Header(None), db: Session = Depends(get_db)) -> models.Admin:
     """
     Protects admin-only endpoints. Expects header: Authorization: Bearer <token>
@@ -438,11 +498,12 @@ def mark_manual_attendance(
     # it uses sentinel values (0.0 / "manual_review") rather than loosening
     # those columns for every other record — the note+status makes it clear
     # this one was an admin override, not a real geofenced check-in.
+    now = datetime.utcnow()
     record = models.AttendanceRecord(
         faculty_id=faculty.id,
         record_type=payload.type,
         status="present",
-        timestamp=datetime.utcnow(),
+        timestamp=now,
         latitude=0.0,
         longitude=0.0,
         gps_accuracy=0.0,
@@ -453,6 +514,10 @@ def mark_manual_attendance(
         notes=f"Manual entry by admin ({admin.email}). {payload.note or ''}".strip(),
     )
     db.add(record)
+
+    if payload.type == "check_out":
+        update_checkin_duration(db, faculty.id, now)
+
     db.commit()
     db.refresh(record)
     return schemas.CheckInResponse(
@@ -1645,6 +1710,7 @@ def list_attendance(
             faculty_id=r.faculty_id,
             faculty_name=r.faculty.name if r.faculty else None,
             department=r.faculty.department if r.faculty else None,
+            profile_photo=r.faculty.profile_photo if r.faculty else None,
             timestamp=r.timestamp,
             latitude=r.latitude,
             longitude=r.longitude,
@@ -1654,6 +1720,89 @@ def list_attendance(
             status=r.status,
             record_type=r.record_type,
             late_minutes=r.late_minutes,
+            is_late=(r.late_minutes or 0) > 0,
+            duration_minutes=r.duration_minutes,
+            duration_status=r.duration_status,
+            flagged_suspicious=r.flagged_suspicious,
+            flag_reason=r.flag_reason,
+        )
+        for r in records
+    ]
+
+
+@app.get("/api/attendance/late-comers", response_model=List[schemas.AttendanceOut])
+def get_late_comers(
+    date: Optional[str] = None,
+    db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(None),
+):
+    """
+    Returns check-in records where late_minutes > 0 for a given date (defaults
+    to today PKT). Accessible by admin or HOD (HOD scoped to their department).
+    """
+    admin = None
+    hod = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.removeprefix("Bearer ").strip()
+        admin = validate_admin_token(token, db)
+        if not admin:
+            hod_session = db.query(models.HODSession).filter(models.HODSession.token == token).first()
+            if hod_session and hod_session.expires_at > datetime.utcnow():
+                hod = db.query(models.HOD).filter(models.HOD.id == hod_session.hod_id).first()
+
+    if not admin and not hod:
+        raise HTTPException(status_code=401, detail="Admin or HOD authorization required")
+
+    if date:
+        try:
+            target_date = datetime.strptime(date, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=400, detail='date must be in "YYYY-MM-DD" format')
+        local_day_start = target_date.replace(hour=0, minute=0, second=0, microsecond=0)
+    else:
+        local_now = datetime.utcnow() + timedelta(hours=PKT_OFFSET_HOURS)
+        local_day_start = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    day_start_utc = local_day_start - timedelta(hours=PKT_OFFSET_HOURS)
+    day_end_utc = day_start_utc + timedelta(days=1)
+
+    q = (
+        db.query(models.AttendanceRecord)
+        .filter(
+            models.AttendanceRecord.record_type == "check_in",
+            models.AttendanceRecord.status == "present",
+            models.AttendanceRecord.late_minutes > 0,
+            models.AttendanceRecord.timestamp >= day_start_utc,
+            models.AttendanceRecord.timestamp < day_end_utc,
+        )
+    )
+
+    if hod:
+        q = q.join(models.Faculty).filter(models.Faculty.department == hod.department)
+
+    records = q.options(joinedload(models.AttendanceRecord.faculty)).order_by(
+        models.AttendanceRecord.late_minutes.desc()
+    ).all()
+
+    return [
+        schemas.AttendanceOut(
+            id=r.id,
+            faculty_id=r.faculty_id,
+            faculty_name=r.faculty.name if r.faculty else None,
+            department=r.faculty.department if r.faculty else None,
+            profile_photo=r.faculty.profile_photo if r.faculty else None,
+            timestamp=r.timestamp,
+            latitude=r.latitude,
+            longitude=r.longitude,
+            gps_accuracy=r.gps_accuracy,
+            wifi_ssid=r.wifi_ssid,
+            face_match_score=r.face_match_score,
+            status=r.status,
+            record_type=r.record_type,
+            late_minutes=r.late_minutes,
+            is_late=True,
+            duration_minutes=r.duration_minutes,
+            duration_status=r.duration_status,
             flagged_suspicious=r.flagged_suspicious,
             flag_reason=r.flag_reason,
         )
@@ -1725,6 +1874,10 @@ def check_out(payload: schemas.CheckOutRequest, db: Session = Depends(get_db)):
         flag_reason=movement_check["reason"],
     )
     db.add(record)
+
+    if status == "present":
+        update_checkin_duration(db, faculty.id, now)
+
     db.commit()
     db.refresh(record)
 

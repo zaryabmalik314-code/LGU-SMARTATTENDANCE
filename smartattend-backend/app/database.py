@@ -129,6 +129,15 @@ def run_simple_migrations():
                 # this point forward get a real value.
                 print("[migration] Added missing column: attendance_records.late_minutes (existing rows default 0, not backfilled)")
             
+            if "duration_minutes" not in existing_columns:
+                conn.execute(text("ALTER TABLE attendance_records ADD COLUMN duration_minutes INTEGER"))
+                conn.commit()
+                print("[migration] Added missing column: attendance_records.duration_minutes")
+            if "duration_status" not in existing_columns:
+                conn.execute(text("ALTER TABLE attendance_records ADD COLUMN duration_status TEXT"))
+                conn.commit()
+                print("[migration] Added missing column: attendance_records.duration_status")
+
             # Create indexes if they don't exist
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_attendance_records_faculty_id ON attendance_records (faculty_id)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_attendance_records_timestamp ON attendance_records (timestamp)"))

@@ -180,6 +180,7 @@ class AttendanceOut(BaseModel):
     faculty_id: int
     faculty_name: Optional[str] = None
     department: Optional[str] = None
+    profile_photo: Optional[str] = None
     timestamp: datetime
     latitude: float
     longitude: float
@@ -189,6 +190,9 @@ class AttendanceOut(BaseModel):
     status: str
     record_type: str
     late_minutes: int = 0
+    is_late: bool = False
+    duration_minutes: Optional[int] = None
+    duration_status: Optional[str] = None
     flagged_suspicious: bool = False
     flag_reason: Optional[str] = None
 

@@ -67,6 +67,12 @@ class AttendanceRecord(Base):
     # slice it by semester/date range. Storing it per-record fixes both.
     late_minutes = Column(Integer, default=0, nullable=False)
 
+    # Duration tracking: set when a check-out pairs with this day's check-in.
+    # duration_minutes = total minutes between first check-in and last check-out.
+    # duration_status = "full_day" | "half_day" | "absent" | None (not yet computed).
+    duration_minutes = Column(Integer, nullable=True)
+    duration_status = Column(String, nullable=True)
+
     # Anti-spoofing: flagged (not blocked) if the implied travel speed since
     # this faculty's last recorded location was physically impossible.
     flagged_suspicious = Column(Boolean, default=False, nullable=False)
