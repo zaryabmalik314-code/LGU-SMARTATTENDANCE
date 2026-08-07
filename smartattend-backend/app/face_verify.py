@@ -298,8 +298,8 @@ def _signal_multi_laplacian(gray_crop: np.ndarray) -> float:
     if gray_crop.shape[0] < 32 or gray_crop.shape[1] < 32:
         return 0.0
     resized = cv2.resize(gray_crop, (128, 128)).astype(np.float32)
-    fine = float(cv2.Laplacian(resized, cv2.CV_64F, ksize=3).var())
-    coarse = float(cv2.Laplacian(resized, cv2.CV_64F, ksize=7).var())
+    fine = float(cv2.Laplacian(resized, cv2.CV_32F, ksize=3).var())
+    coarse = float(cv2.Laplacian(resized, cv2.CV_32F, ksize=7).var())
     if coarse == 0:
         return 0.0
     ratio = fine / coarse
@@ -366,7 +366,7 @@ def _check_liveness(all_embeddings: List[np.ndarray], all_face_crops: List[np.nd
             continue
         gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
         grays.append(gray)
-        textures.append(float(cv2.Laplacian(gray, cv2.CV_64F).var()))
+        textures.append(float(cv2.Laplacian(gray, cv2.CV_32F).var()))
     if textures:
         median_texture = float(np.median(textures))
         result["scores"]["texture"] = round(median_texture, 2)
