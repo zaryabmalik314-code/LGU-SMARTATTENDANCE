@@ -295,39 +295,25 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#1a1a2e;color:var(--g
 .sem-title{color:#fff;font-size:14px;font-weight:700}
 .sem-sub{color:rgba(255,255,255,.45);font-size:11px;margin-top:2px}
 .sem-badge{background:rgba(201,168,76,.18);border:1px solid rgba(201,168,76,.35);color:var(--gold2);font-size:10px;padding:4px 12px;border-radius:var(--rpill);font-weight:500}
-.sem-grid{display:flex;flex-direction:column;gap:10px;margin-bottom:14px}
-.sem-card{width:100%;min-width:0;background:var(--white);border:1px solid var(--g100);border-radius:var(--r14);padding:14px 16px;box-shadow:0 2px 8px rgba(11,31,75,.06);position:relative;overflow:hidden;text-align:left;display:flex;align-items:center;gap:14px}
-.sem-card::before{content:'';position:absolute;top:0;left:0;bottom:0;width:4px;border-radius:var(--r14) 0 0 var(--r14)}
-.sem-card.leaves::before{background:var(--amber)}
-.sem-card.earned::before{background:var(--green)}
-.sem-card.late::before{background:#7c3aed}
-.sem-visual{position:relative;flex-shrink:0;width:44px;height:44px;display:flex;align-items:center;justify-content:center}
-.sem-ico{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:15px;color:var(--navy);z-index:2;line-height:1}
-.sem-text{flex:1;min-width:0}
-.sem-n{font-size:20px;font-weight:700;line-height:1;color:var(--navy);overflow-wrap:break-word}
-.sem-of{font-size:11px;color:var(--g500);margin-top:3px;overflow-wrap:break-word}
-.sem-lbl{font-size:10px;font-weight:600;letter-spacing:.03em;color:var(--g500);margin-top:5px;text-transform:uppercase;overflow-wrap:break-word;line-height:1.3}
-.sem-ring-wrap{display:flex;justify-content:center;align-items:center}
-.sem-ring{width:44px;height:44px;transform:rotate(-90deg)}
-.ring-bg{fill:none;stroke:var(--g100);stroke-width:4}
-.ring-fill{fill:none;stroke-width:4;stroke-linecap:round;transition:stroke-dashoffset 1.2s cubic-bezier(.25,.8,.25,1)}
-.leaves .ring-fill{stroke:#92600a}
-.earned .ring-fill{stroke:var(--green)}
-.late .ring-fill{stroke:#7c3aed}
-
-.margin-bar-card{background:var(--white);border:1px solid var(--g100);border-radius:var(--r14);padding:15px 16px;margin-bottom:14px;box-shadow:0 2px 8px rgba(11,31,75,.06)}
-.margin-top-row{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px}
-.margin-title{font-size:13px;font-weight:600;color:var(--navy);display:flex;align-items:center;gap:6px}
-.margin-mins{font-size:24px;font-weight:700;color:#7c3aed;line-height:1}
-.margin-mins span{font-size:12px;font-weight:500;color:var(--g500)}
-.margin-track{background:var(--g100);border-radius:6px;height:10px;overflow:hidden;margin-bottom:6px}
-.margin-fill{height:10px;border-radius:6px;background:linear-gradient(90deg,#7c3aed,#a855f7);transition:width 1.2s ease}
-.margin-fill.warning{background:linear-gradient(90deg,var(--amber),#f59e0b)}
-.margin-fill.danger{background:linear-gradient(90deg,var(--red),#ef4444)}
-.margin-legend{display:flex;justify-content:space-between;font-size:10px;color:var(--g500)}
-.margin-used-row{display:flex;align-items:center;justify-content:space-between;background:var(--g50);border-radius:var(--r8);padding:8px 12px;margin-top:8px}
-.margin-used-lbl{font-size:11px;color:var(--g700)}
-.margin-used-val{font-size:12px;font-weight:700;color:#7c3aed}
+/* At-a-glance usage card — one consolidated card (replaces the old ring
+   cards + margin bar + duplicate breakdowns). Single-column progress rows,
+   the recommended mobile pattern for budget/usage metrics. */
+.kpi-card{background:var(--white);border:1px solid var(--g100);border-radius:16px;padding:2px 18px;margin-bottom:14px;box-shadow:0 4px 16px rgba(11,31,75,.05),0 1px 3px rgba(11,31,75,.04)}
+.kpi-row{padding:15px 0}
+.kpi-row + .kpi-row{border-top:1px solid var(--g100)}
+.kpi-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:10px}
+.kpi-lbl{font-size:11px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;color:var(--g500);display:flex;align-items:center;gap:6px}
+.kpi-lbl .i{width:13px;height:13px;color:var(--g300)}
+.kpi-val{font-size:16px;font-weight:700;color:var(--navy);font-variant-numeric:tabular-nums;white-space:nowrap}
+.kpi-of{font-size:11.5px;font-weight:500;color:var(--g500);margin-left:5px}
+.kpi-track{height:7px;border-radius:100px;background:var(--g100);overflow:hidden}
+.kpi-fill{height:100%;border-radius:100px;width:0;transition:width 1s cubic-bezier(.25,.8,.25,1)}
+.kpi-fill.leaves{background:var(--gold)}
+.kpi-fill.earned{background:var(--green)}
+.kpi-fill.late{background:var(--navy3)}
+.kpi-fill.over{background:var(--red)}
+.kpi-foot{font-size:11px;color:var(--g500);margin-top:9px}
+.kpi-foot.over{color:var(--red);font-weight:600}
 
 .earn-info{background:#e8f7f0;border-radius:var(--r8);padding:10px 12px;margin-bottom:14px;display:flex;align-items:center;gap:10px}
 .earn-ico{font-size:22px}
@@ -847,85 +833,40 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
       </div>
 
       <!-- Today's working hours strip — fetched from the active Time Window preset -->
-      <div id="todayScheduleStrip" style="background:var(--n850,#161b22);border:1px solid var(--n700,#30363d);border-radius:10px;padding:11px 14px;margin-bottom:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-        <svg style="width:15px;height:15px;flex-shrink:0;opacity:.6" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="10" r="8"/><path d="M10 6v4l2.5 2" stroke-linecap="round"/></svg>
-        <span id="todayScheduleText" style="font-size:12.5px;color:var(--g400,#8b949e)">Loading today's schedule…</span>
+      <div id="todayScheduleStrip" style="background:var(--white);border:1px solid var(--g100);border-radius:12px;padding:12px 14px;margin-bottom:14px;display:flex;align-items:center;gap:9px;flex-wrap:wrap;box-shadow:0 1px 3px rgba(11,31,75,.04)">
+        <svg style="width:15px;height:15px;flex-shrink:0;color:var(--gold3)" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="10" r="8"/><path d="M10 6v4l2.5 2" stroke-linecap="round"/></svg>
+        <span style="font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--g500)">Today</span>
+        <span id="todayScheduleText" style="font-size:12.5px;font-weight:600;color:var(--navy)">Loading schedule…</span>
       </div>
 
-      <!-- 3-card grid -->
-      <div class="sem-grid">
-        <!-- Casual Leaves -->
-        <div class="sem-card leaves">
-          <div class="sem-visual">
-            <div class="sem-ring-wrap">
-              <svg class="sem-ring" viewBox="0 0 44 44">
-                <circle class="ring-bg" cx="22" cy="22" r="18"/>
-                <circle class="ring-fill" id="leaveRing" cx="22" cy="22" r="18" stroke-dasharray="113" stroke-dashoffset="113"/>
-              </svg>
-            </div>
-            <div class="sem-ico"><svg class="i"><use href="#ic-calendar"/></svg></div>
+      <!-- At-a-glance summary — one consolidated usage card. Replaces the old
+           three ring cards + late-margin bar + the duplicate leave/late
+           breakdown cards. Values are clamped in animateSemRings() so an
+           over-limit balance shows an "over limit" state, never a negative. -->
+      <div class="kpi-card">
+        <div class="kpi-row">
+          <div class="kpi-head">
+            <span class="kpi-lbl"><svg class="i"><use href="#ic-calendar"/></svg> Casual leaves</span>
+            <span class="kpi-val"><span id="kpiLeaveUsed">3</span><span class="kpi-of" id="kpiLeaveOf">/ 20 days</span></span>
           </div>
-          <div class="sem-text">
-            <div class="sem-n" id="leaveUsed">3</div>
-            <div class="sem-of">of 20 used</div>
-            <div class="sem-lbl">Casual Leaves</div>
-          </div>
+          <div class="kpi-track"><div class="kpi-fill leaves" id="kpiLeaveFill"></div></div>
+          <div class="kpi-foot" id="kpiLeaveFoot">17 days remaining</div>
         </div>
-        <!-- Total Days -->
-        <div class="sem-card earned">
-          <div class="sem-visual">
-            <div class="sem-ring-wrap">
-              <svg class="sem-ring" viewBox="0 0 44 44">
-                <circle class="ring-bg" cx="22" cy="22" r="18"/>
-                <circle class="ring-fill" id="earnRing" cx="22" cy="22" r="18" stroke-dasharray="113" stroke-dashoffset="113"/>
-              </svg>
-            </div>
-            <div class="sem-ico"><svg class="i"><use href="#ic-calendar"/></svg></div>
+        <div class="kpi-row">
+          <div class="kpi-head">
+            <span class="kpi-lbl"><svg class="i"><use href="#ic-check-circle"/></svg> Days attended</span>
+            <span class="kpi-val"><span id="kpiEarnUsed">72</span><span class="kpi-of" id="kpiEarnOf">/ 365 days</span></span>
           </div>
-          <div class="sem-text">
-            <div class="sem-n" id="earnedDays">72</div>
-            <div class="sem-of">of 365 days</div>
-            <div class="sem-lbl">Days Attended</div>
+          <div class="kpi-track"><div class="kpi-fill earned" id="kpiEarnFill"></div></div>
+          <div class="kpi-foot" id="kpiEarnFoot">20% of the semester</div>
+        </div>
+        <div class="kpi-row">
+          <div class="kpi-head">
+            <span class="kpi-lbl"><svg class="i"><use href="#ic-clock"/></svg> Late arrival margin</span>
+            <span class="kpi-val"><span id="kpiLateUsed">143</span><span class="kpi-of" id="kpiLateOf">/ 480 min</span></span>
           </div>
-        </div>
-        <!-- Late Margin -->
-        <div class="sem-card late">
-          <div class="sem-visual">
-            <div class="sem-ring-wrap">
-              <svg class="sem-ring" viewBox="0 0 44 44">
-                <circle class="ring-bg" cx="22" cy="22" r="18"/>
-                <circle class="ring-fill" id="lateRing" cx="22" cy="22" r="18" stroke-dasharray="113" stroke-dashoffset="113"/>
-              </svg>
-            </div>
-            <div class="sem-ico"><svg class="i"><use href="#ic-clock"/></svg></div>
-          </div>
-          <div class="sem-text">
-            <div class="sem-n" id="lateUsedMins">143</div>
-            <div class="sem-of">of 480 min</div>
-            <div class="sem-lbl">Late Margin</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Late Margin Detail Bar -->
-      <div class="margin-bar-card">
-        <div class="margin-top-row">
-          <div class="margin-title"><svg class="i"><use href="#ic-clock"/></svg> Late Arrival Margin</div>
-          <div>
-            <div class="margin-mins" id="marginRemaining">337 <span>min left</span></div>
-          </div>
-        </div>
-        <div class="margin-track">
-          <div class="margin-fill" id="marginFill" style="width:0%"></div>
-        </div>
-        <div class="margin-legend">
-          <span>0 min used</span>
-          <span id="marginLegendUsed">143 min used</span>
-          <span>480 min total</span>
-        </div>
-        <div class="margin-used-row">
-          <span class="margin-used-lbl">Hours remaining this semester</span>
-          <span class="margin-used-val" id="marginHours">5 hrs 37 min</span>
+          <div class="kpi-track"><div class="kpi-fill late" id="kpiLateFill"></div></div>
+          <div class="kpi-foot" id="kpiLateFoot">337 min remaining</div>
         </div>
       </div>
 
@@ -940,25 +881,6 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
           <button type="button" class="hist-filter-chip" data-filter="month" onclick="setHistoryFilter('month')">This Month</button>
         </div>
         <div id="historyList"></div>
-      </div>
-
-      <!-- Leave breakdown -->
-      <div class="card" style="padding:16px">
-        <div class="card-title" style="margin-bottom:12px"><svg class="i"><use href="#ic-list"/></svg> Casual Leave Summary</div>
-        <div class="log-item"><span class="log-key">Entitlement</span><span class="log-val">20 days</span></div>
-        <div class="log-item"><span class="log-key">Leaves availed</span><span class="log-val" id="casualTakenLbl">3 days</span></div>
-        <div class="log-item"><span class="log-key">Balance remaining</span><span class="log-val pill pill-green" id="casualRemainLbl" style="font-size:12px">17 days</span></div>
-        <div class="log-item" style="margin-top:6px;padding-top:12px;border-top:1px solid var(--g100)"><span class="log-key">Days attended</span><span class="log-val" id="attendanceSoFar">72 days</span></div>
-        <div class="log-item"><span class="log-key">Total days</span><span class="log-val">365 days</span></div>
-      </div>
-
-      <!-- Late margin breakdown -->
-      <div class="card" style="padding:16px">
-        <div class="card-title" style="margin-bottom:12px"><svg class="i"><use href="#ic-clock"/></svg> Late Arrival Ledger</div>
-        <div class="log-item"><span class="log-key">Permissible late margin</span><span class="log-val">480 min (8 hrs)</span></div>
-        <div class="log-item"><span class="log-key">Margin consumed</span><span class="log-val" id="lateMinsUsed">143 min</span></div>
-        <div class="log-item"><span class="log-key">Margin remaining</span><span class="log-val pill" id="lateRemainPill" style="font-size:12px">337 min</span></div>
-        <div class="log-item"><span class="log-key">Balance in hours</span><span class="log-val" id="lateHrsLeft">5 hrs 37 min</span></div>
       </div>
 
       <!-- Request Leave Form -->
@@ -4041,30 +3963,32 @@ function renderHistoryRows(rows){
 var SEM_DATA={leaveUsed:3,leaveTotal:20,earnedDays:72,earnedTotal:365,lateMins:143,lateTotal:480};
 
 function animateSemRings(){
-  var CIRC=113;
-  var leaveP=SEM_DATA.leaveUsed/SEM_DATA.leaveTotal;
-  var earnP=SEM_DATA.earnedDays/SEM_DATA.earnedTotal;
-  var lateP=SEM_DATA.lateMins/SEM_DATA.lateTotal;
-  var leaveRing=document.getElementById('leaveRing'),earnRing=document.getElementById('earnRing'),lateRing=document.getElementById('lateRing');
-  if(leaveRing)leaveRing.style.strokeDashoffset=(CIRC*(1-leaveP)).toFixed(1);
-  if(earnRing)earnRing.style.strokeDashoffset=(CIRC*(1-earnP)).toFixed(1);
-  if(lateRing)lateRing.style.strokeDashoffset=(CIRC*(1-lateP)).toFixed(1);
-
-  var leaveUsedEl=document.getElementById('leaveUsed');if(leaveUsedEl)leaveUsedEl.textContent=SEM_DATA.leaveUsed;
-  var earnedDaysEl=document.getElementById('earnedDays');if(earnedDaysEl)earnedDaysEl.textContent=SEM_DATA.earnedDays;
-  var lateUsedMinsEl=document.getElementById('lateUsedMins');if(lateUsedMinsEl)lateUsedMinsEl.textContent=SEM_DATA.lateMins;
-
-  var remain=SEM_DATA.lateTotal-SEM_DATA.lateMins;
-  var mf=document.getElementById('marginFill');if(mf)mf.style.width=(lateP*100).toFixed(0)+'%';
-  var mr=document.getElementById('marginRemaining');if(mr)mr.innerHTML=remain+' <span>min left</span>';
-  var mlu=document.getElementById('marginLegendUsed');if(mlu)mlu.textContent=SEM_DATA.lateMins+' min used';
-  var mh=document.getElementById('marginHours');if(mh)mh.textContent=Math.floor(remain/60)+' hrs '+(remain%60)+' min';
-  var ctl=document.getElementById('casualTakenLbl');if(ctl)ctl.textContent=SEM_DATA.leaveUsed+' days';
-  var crl=document.getElementById('casualRemainLbl');if(crl)crl.textContent=(SEM_DATA.leaveTotal-SEM_DATA.leaveUsed)+' days';
-  var asf=document.getElementById('attendanceSoFar');if(asf)asf.textContent=SEM_DATA.earnedDays+' days';
-  var lmu=document.getElementById('lateMinsUsed');if(lmu)lmu.textContent=SEM_DATA.lateMins+' min';
-  var lrp=document.getElementById('lateRemainPill');if(lrp)lrp.textContent=remain+' min';
-  var lhl=document.getElementById('lateHrsLeft');if(lhl)lhl.textContent=Math.floor(remain/60)+' hrs '+(remain%60)+' min';
+  function num(v){ return (v==null||isNaN(v))?0:v; }
+  function clampPct(u,t){ return t>0?Math.max(0,Math.min(100,(u/t)*100)):0; }
+  function setText(id,v){ var e=document.getElementById(id); if(e) e.textContent=v; }
+  function setFill(id,u,t){ var e=document.getElementById(id); if(e){ e.style.width=clampPct(u,t).toFixed(0)+'%'; e.classList.toggle('over', u>t); } }
+  // A budget row (leaves, late margin): shows remaining, or an over-limit state
+  // instead of a negative number.
+  function setBudget(usedId,ofId,fillId,footId,used,total,unit){
+    used=num(used); total=num(total);
+    setText(usedId, used);
+    setText(ofId, '/ '+total+' '+unit);
+    setFill(fillId, used, total);
+    function u(n){ return (unit==='days' && Math.abs(n)===1) ? 'day' : unit; }
+    var foot=document.getElementById(footId);
+    if(foot){
+      if(used>total){ var over=used-total; foot.textContent='Over limit by '+over+' '+u(over); foot.classList.add('over'); }
+      else { var rem=total-used; foot.textContent=rem+' '+u(rem)+' remaining'; foot.classList.remove('over'); }
+    }
+  }
+  setBudget('kpiLeaveUsed','kpiLeaveOf','kpiLeaveFill','kpiLeaveFoot', SEM_DATA.leaveUsed, SEM_DATA.leaveTotal, 'days');
+  setBudget('kpiLateUsed','kpiLateOf','kpiLateFill','kpiLateFoot', SEM_DATA.lateMins, SEM_DATA.lateTotal, 'min');
+  // Attendance is progress, not a budget — show % of the semester, never "over".
+  var earned=num(SEM_DATA.earnedDays), earnedTotal=num(SEM_DATA.earnedTotal);
+  setText('kpiEarnUsed', earned);
+  setText('kpiEarnOf', '/ '+earnedTotal+' days');
+  setFill('kpiEarnFill', earned, earnedTotal);
+  setText('kpiEarnFoot', clampPct(earned,earnedTotal).toFixed(0)+'% of the semester');
 }
 
 function syncLeaveBalance(){
@@ -4093,13 +4017,12 @@ function syncLeaveBalance(){
     var strip = document.getElementById('todayScheduleText');
     if(strip && sched) {
       if(sched.is_day_off) {
-        strip.innerHTML = '<span style="color:var(--green,#3fb950)">Day Off</span>' +
-          (sched.preset_name ? ' &mdash; <span style="opacity:.6">' + sched.preset_name + '</span>' : '');
+        strip.innerHTML = '<span style="color:var(--green)">Day off</span>' +
+          (sched.preset_name ? ' <span style="color:var(--g500);font-weight:500">&middot; ' + sched.preset_name + '</span>' : '');
       } else {
         var graceText = sched.grace_minutes > 0
           ? ' &nbsp;·&nbsp; ' + sched.grace_minutes + ' min grace'
           : '';
-        strip.innerHTML = '<span style="color:var(--fg,#e6edf3)">' + sched.start_date + '</span>';
         // Convert HH:MM to 12hr
         function to12(t){
           if(!t) return '—';
@@ -4107,8 +4030,9 @@ function syncLeaveBalance(){
           var ampm=h>=12?'PM':'AM'; h=h%12||12;
           return h+':'+(m<10?'0':'')+m+' '+ampm;
         }
-        strip.innerHTML = to12(sched.start_time) + ' – ' + to12(sched.end_time) + graceText +
-          (sched.preset_name ? ' &nbsp;<span style="opacity:.45;font-size:11px">(' + sched.preset_name + ')</span>' : '');
+        strip.innerHTML = to12(sched.start_time) + ' – ' + to12(sched.end_time) +
+          (graceText ? '<span style="color:var(--g500);font-weight:500">' + graceText + '</span>' : '') +
+          (sched.preset_name ? ' <span style="color:var(--g500);font-weight:500;font-size:11px">(' + sched.preset_name + ')</span>' : '');
       }
     } else if(strip && !sched) {
       strip.textContent = 'No active time window set';
