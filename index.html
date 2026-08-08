@@ -3548,18 +3548,22 @@ function setVerifyBadges(state, scoreText){
   var badge=document.getElementById('faceVerifiedBadge');
   if(!conf||!badge)return;
   if(state==='pending'){
+    // One spinner only — the green "Verifying with server…" line. The second
+    // grey "Awaiting server verification…" badge was redundant, so hide it
+    // until there's an actual verdict to show.
     conf.innerHTML='<svg class="i"><use href="#ic-loader"/></svg> Verifying with server&hellip;';
     conf.style.color='';
-    badge.innerHTML='<svg class="i"><use href="#ic-loader"/></svg> Awaiting server verification&hellip;';
-    badge.style.background='linear-gradient(135deg,#6b7280,#4b5563)';
+    badge.style.display='none';
   } else if(state==='verified'){
     conf.innerHTML='<svg class="i"><use href="#ic-check"/></svg> Liveness &amp; identity verified';
     conf.style.color='';
+    badge.style.display='';
     badge.innerHTML='<svg class="i"><use href="#ic-lock"/></svg> Identity Verified &mdash; Biometric Auth'+(scoreText?(' &middot; '+scoreText):'');
     badge.style.background='linear-gradient(135deg,var(--navy),#1e4fc2)';
   } else {
     conf.innerHTML='<svg class="i"><use href="#ic-alert"/></svg> Not verified';
     conf.style.color='#c0392b';
+    badge.style.display='';
     badge.innerHTML='<svg class="i"><use href="#ic-alert"/></svg> Verification failed'+(scoreText?(' &middot; '+scoreText):'');
     badge.style.background='linear-gradient(135deg,#c0392b,#8e2a20)';
   }
@@ -3825,8 +3829,12 @@ function renderHistory(){
   });
 }
 
+var _histShowAll=false;
+function toggleHistShowAll(){ _histShowAll=!_histShowAll; applyHistoryFilterAndRender(); }
+
 function setHistoryFilter(mode){
   historyFilterState.mode=mode;
+  _histShowAll=false; // start each filter collapsed
   var row=document.getElementById('histFilterRow');
   if(row){
     row.querySelectorAll('.hist-filter-chip').forEach(function(c){
@@ -3873,7 +3881,9 @@ function renderHistoryRows(rows){
     if(!groups[key])groups[key]={date:d,items:[]};
     groups[key].items.push({r:r,d:d,isOut:(r.type==='check-out'||r.type==='exit')});
   });
-  var dayKeys=Object.keys(groups).sort(function(a,b){return groups[b].date-groups[a].date;}).slice(0,10);
+  var allDayKeys=Object.keys(groups).sort(function(a,b){return groups[b].date-groups[a].date;});
+  var HIST_CAP=4;
+  var dayKeys=_histShowAll?allDayKeys:allDayKeys.slice(0,HIST_CAP);
 
   if(!dayKeys.length){
     var msg2=historyFilterState.mode!=='all'?'No check-ins or check-outs in this period.':'No attendance records yet. Check in to get started.';
@@ -3953,6 +3963,10 @@ function renderHistoryRows(rows){
       '<div class="tl-card">'+itemsHtml+'</div>'+
     '</div>';
   });
+  if(allDayKeys.length>HIST_CAP){
+    html+='<button type="button" onclick="toggleHistShowAll()" style="width:100%;padding:9px;font-size:12px;font-weight:600;color:var(--navy);background:var(--g50);border:1px solid var(--g100);border-radius:8px;cursor:pointer;font-family:inherit;margin-top:2px;">'+
+      (_histShowAll?'Show less':('View all '+allDayKeys.length+' days'))+'</button>';
+  }
   list.innerHTML=html;
 }
 
