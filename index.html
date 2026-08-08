@@ -425,31 +425,36 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#1a1a2e;color:var(--g
 .skel-text .skel-line{height:10px}
 
 /* ===== NEW: RECORDS / HISTORY LIST — day-grouped in/out timeline ===== */
-.day-log{margin-bottom:16px}
+.day-log{margin-bottom:18px}
 .day-log:last-child{margin-bottom:0}
-.day-log-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px;padding:0 2px}
-.day-log-date{display:flex;align-items:baseline;gap:7px}
-.day-log-dow{font-size:12.5px;font-weight:700;color:var(--navy)}
-.day-log-dm{font-size:11px;color:var(--g500)}
-.day-log-badge{font-size:10px;font-weight:700;padding:3px 10px;border-radius:var(--rpill);letter-spacing:.02em;flex-shrink:0}
+.day-log-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;padding:0 4px}
+.day-log-date{display:flex;align-items:baseline;gap:8px}
+.day-log-dow{font-size:14px;font-weight:700;color:var(--navy);letter-spacing:-.01em}
+.day-log-dm{font-size:11.5px;color:var(--g500)}
+.day-log-badge{font-size:10.5px;font-weight:700;padding:4px 11px;border-radius:var(--rpill);letter-spacing:.01em;flex-shrink:0}
 .day-log-badge.done{background:var(--gbg);color:var(--green)}
-.day-log-badge.live{background:rgba(201,168,76,.18);color:var(--gold3);display:flex;align-items:center;gap:5px}
-.day-log-badge.live .dot{width:5px;height:5px;border-radius:50%;background:var(--gold3);animation:livePulse 1.4s infinite}
-.tl-card{background:var(--white);border:1px solid var(--g100);border-radius:var(--r14);padding:14px 14px 2px;box-shadow:0 2px 8px rgba(11,31,75,.05)}
-.tl-item{display:flex;gap:12px;position:relative;padding-bottom:16px}
-.tl-item:last-child{padding-bottom:12px}
-.tl-item:not(:last-child)::before{content:'';position:absolute;left:15px;top:32px;bottom:-2px;width:2px;background:var(--g100)}
-.tl-marker{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px;z-index:1}
+.day-log-badge.live{background:rgba(201,168,76,.16);color:var(--gold3);display:flex;align-items:center;gap:5px}
+.day-log-badge.live .dot{width:6px;height:6px;border-radius:50%;background:var(--gold);box-shadow:0 0 0 3px rgba(201,168,76,.18);animation:livePulse 1.4s infinite}
+.tl-card{background:var(--white);border:1px solid var(--g100);border-radius:16px;padding:16px 16px 4px;box-shadow:0 4px 16px rgba(11,31,75,.06),0 1px 3px rgba(11,31,75,.04)}
+.tl-item{display:flex;gap:13px;position:relative;padding-bottom:18px}
+.tl-item:last-child{padding-bottom:14px}
+.tl-item:not(:last-child)::before{content:'';position:absolute;left:17px;top:38px;bottom:-4px;width:2px;background:linear-gradient(var(--g100),var(--g100) 65%,transparent)}
+.tl-marker{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:15px;z-index:1;box-shadow:0 0 0 4px var(--white)}
 .tl-marker.in{background:var(--gbg);color:var(--green)}
-.tl-marker.out{background:#e8f0fc;color:#1a3a8a}
-.tl-marker.pending{background:var(--g50);color:var(--g300);border:2px dashed var(--g300)}
-.tl-body{flex:1;min-width:0;padding-top:4px}
+.tl-marker.out{background:#e9f0fc;color:var(--navy3)}
+.tl-marker.pending{background:var(--g50);color:var(--g300);border:2px dashed var(--g300);box-shadow:0 0 0 4px var(--white)}
+.tl-body{flex:1;min-width:0;padding-top:5px}
 .tl-row{display:flex;align-items:center;justify-content:space-between;gap:8px}
-.tl-label{font-size:12.5px;font-weight:600;color:var(--navy)}
-.tl-time{font-size:12.5px;font-weight:700;color:var(--navy);flex-shrink:0}
-.tl-late{font-size:10.5px;font-weight:600;color:#e55;background:rgba(238,85,85,.1);padding:1px 7px;border-radius:8px;margin-left:auto;margin-right:6px;white-space:nowrap}
-.tl-meta{font-size:10.5px;color:var(--g500);margin-top:2px;overflow-wrap:break-word}
-.tl-meta.pending-txt{color:var(--gold3);font-weight:500}
+.tl-label{font-size:13.5px;font-weight:600;color:var(--navy)}
+.tl-time{font-size:13.5px;font-weight:700;color:var(--navy);flex-shrink:0;font-variant-numeric:tabular-nums}
+.tl-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
+.tl-chip{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:var(--rpill);white-space:nowrap;line-height:1.3}
+.tl-chip svg{width:11px;height:11px;stroke-width:2.4}
+.tl-chip.present{background:var(--gbg);color:var(--green)}
+.tl-chip.dist{background:var(--g50);color:var(--g500)}
+.tl-chip.dur{background:#eaf0fb;color:var(--navy3)}
+.tl-chip.late{background:var(--abg);color:var(--amber)}
+.tl-chip.pending{background:rgba(201,168,76,.14);color:var(--gold3)}
 .empty-state{text-align:center;padding:36px 20px;color:var(--g500)}
 .empty-state .ico{font-size:36px;margin-bottom:10px;opacity:.5}
 .empty-state .txt{font-size:12px}
@@ -3953,7 +3958,11 @@ function renderHistoryRows(rows){
   var html='';
   dayKeys.forEach(function(key){
     var g=groups[key];
-    var items=g.items.slice().sort(function(a,b){return b.d-a.d;}); // newest first within the day
+    // Oldest-first within the day so the pairing below sees check-in before
+    // check-out (a newest-first sort orphaned every entry, so days wrongly read
+    // "Still checked in" and never showed a worked-duration). Chronological
+    // top-to-bottom also reads naturally as a daily timeline.
+    var items=g.items.slice().sort(function(a,b){return a.d-b.d;});
 
     // Pair sequential check-in/check-out entries into sessions
     var sessions=[],open=null;
@@ -3984,28 +3993,32 @@ function renderHistoryRows(rows){
     sessions.forEach(function(s){
       if(s.inItem){
         var inTime=s.inItem.d.toLocaleTimeString('en-PK',{hour:'2-digit',minute:'2-digit'});
-        var inMeta=s.inItem.r.status?s.inItem.r.status:(s.inItem.r.dist?s.inItem.r.dist+' from boundary':'');
         var lateMins=s.inItem.r.late_minutes||0;
-        var lateTag=lateMins>0?'<span class="tl-late">+'+lateMins+' min late</span>':'';
+        var inChips='<span class="tl-chip present"><svg class="i"><use href="#ic-check"/></svg>Present</span>';
+        if(lateMins>0) inChips+='<span class="tl-chip late"><svg class="i"><use href="#ic-clock"/></svg>'+lateMins+' min late</span>';
+        if(s.inItem.r.dist) inChips+='<span class="tl-chip dist"><svg class="i"><use href="#ic-pin"/></svg>'+s.inItem.r.dist+'</span>';
         itemsHtml+='<div class="tl-item">'+
           '<div class="tl-marker in"><svg class="i"><use href="#ic-calendar"/></svg></div>'+
-          '<div class="tl-body"><div class="tl-row"><span class="tl-label">Check-in</span>'+lateTag+'<span class="tl-time">'+inTime+'</span></div>'+
-          (inMeta?'<div class="tl-meta">'+inMeta+'</div>':'')+
+          '<div class="tl-body"><div class="tl-row"><span class="tl-label">Check-in</span><span class="tl-time">'+inTime+'</span></div>'+
+          '<div class="tl-chips">'+inChips+'</div>'+
           '</div></div>';
       }
       if(s.outItem){
         var outTime=s.outItem.d.toLocaleTimeString('en-PK',{hour:'2-digit',minute:'2-digit'});
-        var outMeta=s.inItem?('Worked '+fmtDuration(s.outItem.d-s.inItem.d)):(s.outItem.r.dist?s.outItem.r.dist+' from boundary':'');
+        var outChips='';
+        if(s.inItem) outChips+='<span class="tl-chip dur"><svg class="i"><use href="#ic-clock"/></svg>Worked '+fmtDuration(s.outItem.d-s.inItem.d)+'</span>';
+        if(s.outItem.r.dist) outChips+='<span class="tl-chip dist"><svg class="i"><use href="#ic-pin"/></svg>'+s.outItem.r.dist+'</span>';
         itemsHtml+='<div class="tl-item">'+
           '<div class="tl-marker out"><svg class="i"><use href="#ic-logout"/></svg></div>'+
           '<div class="tl-body"><div class="tl-row"><span class="tl-label">Check-out</span><span class="tl-time">'+outTime+'</span></div>'+
-          (outMeta?'<div class="tl-meta">'+outMeta+'</div>':'')+
+          (outChips?'<div class="tl-chips">'+outChips+'</div>':'')+
           '</div></div>';
       }else if(s.inItem){
         itemsHtml+='<div class="tl-item">'+
           '<div class="tl-marker pending"><svg class="i"><use href="#ic-clock"/></svg></div>'+
           '<div class="tl-body"><div class="tl-row"><span class="tl-label">Check-out</span></div>'+
-          '<div class="tl-meta pending-txt">Still checked in</div></div></div>';
+          '<div class="tl-chips"><span class="tl-chip pending">Still checked in</span></div>'+
+          '</div></div>';
       }
     });
 
