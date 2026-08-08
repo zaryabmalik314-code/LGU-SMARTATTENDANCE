@@ -7,28 +7,23 @@
 <link rel="icon" href="logo.png">
 <meta charset="UTF-8">
 <script>
-/* Runs before any other script. Tears down a service worker left over from an
-   earlier build: a resident worker keeps serving its own cache and survives
-   updates to sw.js, which left the app blank until storage was cleared by hand.
-   Deliberately NOT inside DOMContentLoaded and not below the app code - this is
-   the recovery path, so it must not be reachable only if everything else parses
-   and runs without throwing. */
+/* Runs before any other script. Tears down any stray service worker from an
+   earlier build (e.g. the retired sw.js) so it can't keep serving its own
+   cache. push-sw.js is the ONE worker we keep — it now owns both caching
+   (stale-while-revalidate, self-healing) and Web Push. Deliberately NOT inside
+   DOMContentLoaded and not below the app code: this is the recovery path, so it
+   must run even if everything else throws.
+   NOTE: we no longer blanket-delete Cache Storage here — caching is now
+   intentional and push-sw.js's activate() prunes every cache except its
+   current version, so old stale caches are still cleaned up safely. */
 (function(){
   try{
     if('serviceWorker' in navigator){
-      /* Unregister ONLY the retired caching worker (sw.js). The push worker
-         (push-sw.js) must survive — it's what delivers notifications while the
-         app is closed. */
       navigator.serviceWorker.getRegistrations().then(function(rs){
         rs.forEach(function(r){
           var url=(r.active&&r.active.scriptURL)||(r.installing&&r.installing.scriptURL)||(r.waiting&&r.waiting.scriptURL)||'';
           if(url.indexOf('push-sw.js')===-1){ r.unregister(); }
         });
-      }).catch(function(){});
-    }
-    if(window.caches&&caches.keys){
-      caches.keys().then(function(ks){
-        ks.forEach(function(k){caches.delete(k);});
       }).catch(function(){});
     }
   }catch(e){}
@@ -4269,7 +4264,17 @@ document.addEventListener('DOMContentLoaded', function(){
     hideIntroSplash();
   }
 
-  // No service worker is registered. See the teardown snippet in <head>.
+  // Register the shared worker (push-sw.js) on every launch, not just when the
+  // user enables notifications. It owns app-shell caching now, so this is what
+  // makes cold starts instant and removes the WebAPK splash white flash. It's
+  // registered AFTER the first paint on purpose — no effect on this launch's
+  // render, it just primes the cache for the next one. Silent: registering a
+  // worker never prompts for notification permission.
+  if('serviceWorker' in navigator){
+    window.addEventListener('load', function(){
+      navigator.serviceWorker.register('push-sw.js').catch(function(){});
+    });
+  }
 });
 </script>
 </body>

@@ -6,18 +6,19 @@
 <link rel="icon" href="logo.png">
 <meta charset="UTF-8">
 <script>
-/* Removes any leftover service worker - see the note in index.html. Repeated on
-   every page so whichever one the user lands on first heals the device. */
+/* Removes any STRAY service worker (e.g. the retired sw.js) but keeps
+   push-sw.js — it now owns app-shell caching + push and its scope covers this
+   page too, so unregistering it here would kill caching every time a user hit
+   signup. Matches the head logic in index.html. No blanket cache-delete:
+   push-sw.js's activate() prunes stale caches by version. */
 (function(){
   try{
     if('serviceWorker' in navigator){
       navigator.serviceWorker.getRegistrations().then(function(rs){
-        rs.forEach(function(r){r.unregister();});
-      }).catch(function(){});
-    }
-    if(window.caches&&caches.keys){
-      caches.keys().then(function(ks){
-        ks.forEach(function(k){caches.delete(k);});
+        rs.forEach(function(r){
+          var url=(r.active&&r.active.scriptURL)||(r.installing&&r.installing.scriptURL)||(r.waiting&&r.waiting.scriptURL)||'';
+          if(url.indexOf('push-sw.js')===-1){ r.unregister(); }
+        });
       }).catch(function(){});
     }
   }catch(e){}
