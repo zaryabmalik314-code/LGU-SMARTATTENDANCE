@@ -159,12 +159,13 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#1a1a2e;color:var(--g
 
 /* FACE - MODERN BIOMETRIC SCANNER */
 .face-val{font-size:14px;color:var(--g500);text-align:center;min-height:20px}
-.face-result{background:var(--gbg);border-radius:var(--r14);padding:14px;display:none;margin-top:12px}
-.match-row{display:flex;align-items:center;gap:12px}
-.match-avatar{width:44px;height:44px;border-radius:50%;background:var(--gold);font-size:13px;font-weight:700;color:var(--navy);display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.match-name{font-size:14px;font-weight:600;color:var(--navy)}
-.match-dept{font-size:12px;color:var(--g500)}
-.conf-badge{font-size:11px;background:#fff;border:1px solid var(--green);color:var(--green);padding:3px 10px;border-radius:var(--rpill);margin-top:4px;display:inline-block}
+.face-result{background:var(--white);border:1px solid var(--g100);border-radius:16px;padding:14px 16px;display:none;margin-top:12px;box-shadow:0 4px 16px rgba(11,31,75,.06),0 1px 3px rgba(11,31,75,.04)}
+.match-row{display:flex;align-items:center;gap:13px}
+.match-avatar{width:46px;height:46px;border-radius:50%;background:var(--gold);font-size:14px;font-weight:700;color:var(--navy);display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 0 0 3px rgba(201,168,76,.18)}
+.match-name{font-size:15px;font-weight:600;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.match-dept{font-size:12px;color:var(--g500);margin-top:1px}
+.conf-badge{font-size:11px;font-weight:600;background:var(--gbg);border:none;color:var(--green);padding:4px 11px;border-radius:var(--rpill);margin-top:7px;display:inline-flex;align-items:center;gap:5px;line-height:1.3}
+.conf-badge .i{width:12px;height:12px}
 .scan-viewport{width:100%;background:#050a14;position:relative;overflow:hidden;height:380px;display:flex;align-items:center;justify-content:center}
 .scan-viewport video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);display:none;z-index:1}
 .scan-viewport canvas{position:absolute;inset:0;width:100%;height:100%;transform:scaleX(-1);z-index:4;pointer-events:none}
@@ -208,7 +209,8 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#1a1a2e;color:var(--g
 .bphase.active{background:#e8f4ff;color:#1260b3;border-color:#a8d0f5}
 .bphase.done{background:var(--gbg);color:var(--green);border-color:#a8e6cc}
 .bphase .tick{display:none}.bphase.done .tick{display:inline}
-.face-verified-badge{display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,var(--navy),#1e4fc2);color:#fff;font-size:11px;font-weight:600;padding:6px 14px;border-radius:var(--rpill);letter-spacing:.04em;box-shadow:0 2px 8px rgba(11,31,75,.25)}
+.face-verified-badge{display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,var(--navy),#1e4fc2);color:#fff;font-size:11px;font-weight:600;padding:7px 14px;border-radius:var(--rpill);letter-spacing:.03em;box-shadow:0 2px 8px rgba(11,31,75,.25);margin-top:11px}
+.face-verified-badge .i{width:13px;height:13px}
 @keyframes scanDown{0%{top:18%}100%{top:78%}}
 /* compat aliases for old IDs */
 #bioScanner{width:100%;position:relative;overflow:hidden}
