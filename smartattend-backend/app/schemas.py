@@ -21,6 +21,7 @@ class CheckInRequest(BaseModel):
     wifi_ssid: Optional[str] = None
     face_images: List[str]  # base64 candidate frames (from ~5s video, client-filtered for blur); backend picks the best one and embeds it
     captured_at: Optional[datetime] = None  # for offline-queued check-ins — see main.py validation
+    device_fingerprint: Optional[str] = None  # one-account-one-device enforcement (see _enforce_device_binding)
 
     @field_validator("face_images")
     @classmethod
@@ -168,6 +169,7 @@ class CheckOutRequest(BaseModel):
     wifi_ssid: Optional[str] = None
     face_images: List[str]  # base64 candidate frames, same as check-in
     captured_at: Optional[datetime] = None  # for offline-queued check-outs
+    device_fingerprint: Optional[str] = None  # one-account-one-device enforcement (see _enforce_device_binding)
 
     @field_validator("face_images")
     @classmethod

@@ -2414,7 +2414,8 @@ function onExitScanComplete(now,faceImages){
     faculty_id: fac.facultyId,
     gps_readings: exitGeoReadings.length ? exitGeoReadings : (geoReadings.length ? geoReadings : []),
     wifi_ssid: null,
-    face_images: faceImages
+    face_images: faceImages,
+    device_fingerprint: getDeviceFingerprint()
   }).then(function(resp){
     hideScanVerifying('xBioScanner');
     console.log('[check-out] response:', resp);
@@ -3585,7 +3586,8 @@ function onCheckinScanComplete(faceImages){
     // due to standard browser sandboxing and platform security limitations. This is a known
     // platform limitation, not a bug.
     wifi_ssid: null,
-    face_images: faceImages
+    face_images: faceImages,
+    device_fingerprint: getDeviceFingerprint()
   };
 
   var btn=document.getElementById('faceBtn');

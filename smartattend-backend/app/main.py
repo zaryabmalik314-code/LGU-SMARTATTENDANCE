@@ -1701,8 +1701,67 @@ def _face_reason_detail(face_result):
     return reason, None
 
 
+def _client_ip(request):
+    """Best-effort client IP, honouring the proxy's X-Forwarded-For (Railway)."""
+    forwarded_for = request.headers.get("x-forwarded-for") if request else None
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    return request.client.host if request and request.client else None
+
+
+def _enforce_device_binding(db, faculty, fp, client_ip):
+    """
+    One-account-one-device, enforced where it matters: check-in / check-out.
+
+    Login already binds the first device, but the attendance actions carried no
+    device info, so a second device could still mark attendance. This closes
+    that hole using the SAME model as login:
+      - no device bound yet     -> bind this one (first device wins),
+      - fingerprint matches      -> allow,
+      - fingerprint differs      -> block, and file a DeviceSwitchRequest (deduped)
+                                    so the admin can approve moving to the new
+                                    device from the existing "Device Switches" panel.
+
+    A missing fingerprint (older client, or an offline-queued record) skips the
+    check rather than hard-failing, so it can never lock out a legitimate teacher
+    on an app version that predates this field.
+    Returns None if allowed; raises HTTPException(403) if blocked.
+    """
+    if not fp:
+        return
+    if not faculty.last_device_fingerprint:
+        faculty.last_device_fingerprint = fp
+        db.commit()
+        return
+    if fp == faculty.last_device_fingerprint:
+        return
+
+    existing = db.query(models.DeviceSwitchRequest).filter(
+        models.DeviceSwitchRequest.faculty_id == faculty.id,
+        models.DeviceSwitchRequest.new_fingerprint == fp,
+        models.DeviceSwitchRequest.status == "pending",
+    ).first()
+    if not existing:
+        db.add(models.DeviceSwitchRequest(
+            faculty_id=faculty.id, new_ip=client_ip, new_fingerprint=fp
+        ))
+        db.commit()
+        manager.broadcast_threadsafe({
+            "event": "device_switch_request",
+            "data": {"faculty_id": faculty.id, "faculty_name": faculty.name},
+        })
+    raise HTTPException(
+        status_code=403,
+        detail=(
+            "This device isn't registered to your account. A switch request has "
+            "been sent to the admin — once it's approved you can mark attendance "
+            "from here."
+        ),
+    )
+
+
 @app.post("/api/attendance/check-in", response_model=schemas.CheckInResponse)
-def check_in(payload: schemas.CheckInRequest, db: Session = Depends(get_db)):
+def check_in(payload: schemas.CheckInRequest, request: Request, db: Session = Depends(get_db)):
     faculty = db.query(models.Faculty).filter(models.Faculty.id == payload.faculty_id).first()
     if not faculty:
         raise HTTPException(status_code=404, detail="Faculty not found")
@@ -1716,6 +1775,8 @@ def check_in(payload: schemas.CheckInRequest, db: Session = Depends(get_db)):
     if faculty.face_locked_until and faculty.face_locked_until > now_utc:
         remaining = int((faculty.face_locked_until - now_utc).total_seconds() / 60) + 1
         raise HTTPException(status_code=403, detail=f"Account temporarily locked — too many failed face scans. Try again in {remaining} min.")
+
+    _enforce_device_binding(db, faculty, payload.device_fingerprint, _client_ip(request))
 
     # 1. Pick best GPS reading from the batch sent by frontend
     if not payload.gps_readings:
@@ -2164,7 +2225,7 @@ def get_late_comers(
 
 
 @app.post("/api/attendance/check-out", response_model=schemas.CheckInResponse)
-def check_out(payload: schemas.CheckOutRequest, db: Session = Depends(get_db)):
+def check_out(payload: schemas.CheckOutRequest, request: Request, db: Session = Depends(get_db)):
     """
     Marks the teacher's exit from campus. Same GPS + face verification as
     check-in, but does NOT log the teacher out of the app and does NOT
@@ -2183,6 +2244,8 @@ def check_out(payload: schemas.CheckOutRequest, db: Session = Depends(get_db)):
     if faculty.face_locked_until and faculty.face_locked_until > now_utc:
         remaining = int((faculty.face_locked_until - now_utc).total_seconds() / 60) + 1
         raise HTTPException(status_code=403, detail=f"Account temporarily locked — too many failed face scans. Try again in {remaining} min.")
+
+    _enforce_device_binding(db, faculty, payload.device_fingerprint, _client_ip(request))
 
     if not payload.gps_readings:
         raise HTTPException(status_code=400, detail="At least one GPS reading is required")
