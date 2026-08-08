@@ -929,15 +929,17 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
         </div>
       </div>
 
-      <!-- Push notifications -->
-      <div class="card" style="padding:16px" id="notifCard">
-        <div class="card-title" style="margin-bottom:8px"><svg class="i"><use href="#ic-bell"/></svg> Notifications</div>
-        <div style="font-size:12px; color:var(--g500); margin-bottom:12px;" id="notifDesc">
-          Get alerts on this device when your leave is approved or rejected, and a reminder if you forget to check out.
+      <!-- Attendance History — moved to the top of Records: this is the primary
+           thing faculty open this tab to see, so it must not sit below the leave
+           list (which can grow unbounded). -->
+      <div class="card" style="padding:16px">
+        <div class="card-title" style="margin-bottom:14px"><span class="ico"><svg class="i"><use href="#ic-clipboard"/></svg></span>Check-In / Check-Out Log</div>
+        <div class="hist-filter-row" id="histFilterRow">
+          <button type="button" class="hist-filter-chip active" data-filter="all" onclick="setHistoryFilter('all')">All</button>
+          <button type="button" class="hist-filter-chip" data-filter="week" onclick="setHistoryFilter('week')">This Week</button>
+          <button type="button" class="hist-filter-chip" data-filter="month" onclick="setHistoryFilter('month')">This Month</button>
         </div>
-        <button type="button" id="notifToggleBtn" class="btn-primary" style="padding:10px; font-size:13px; font-weight:600; border-radius:8px; justify-content:center; width:100%;" onclick="toggleFacultyNotifications()">
-          Enable notifications
-        </button>
+        <div id="historyList"></div>
       </div>
 
       <!-- Leave breakdown -->
@@ -998,16 +1000,6 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
       </div>
 
 
-      <!-- Attendance History -->
-      <div class="card" style="padding:16px">
-        <div class="card-title" style="margin-bottom:14px"><span class="ico"><svg class="i"><use href="#ic-clipboard"/></svg></span>Check-In / Check-Out Log</div>
-        <div class="hist-filter-row" id="histFilterRow">
-          <button type="button" class="hist-filter-chip active" data-filter="all" onclick="setHistoryFilter('all')">All</button>
-          <button type="button" class="hist-filter-chip" data-filter="week" onclick="setHistoryFilter('week')">This Week</button>
-          <button type="button" class="hist-filter-chip" data-filter="month" onclick="setHistoryFilter('month')">This Month</button>
-        </div>
-        <div id="historyList"></div>
-      </div>
 
     </div>
 
@@ -1223,6 +1215,17 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
           <div class="log-item"><span class="log-key">Department</span><span class="log-val" id="pdDept2">&mdash;</span></div>
           <div class="log-item"><span class="log-key">Teacher ID</span><span class="log-val" id="pdTeacherId2">&mdash;</span></div>
           <div class="log-item"><span class="log-key">Status</span><span class="pill pill-green" style="font-size:11px">Approved</span></div>
+        </div>
+        <div class="card" style="padding:14px 16px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+            <div style="min-width:0">
+              <div style="font-size:13px;font-weight:600;color:var(--navy);display:flex;align-items:center;gap:6px"><svg class="i"><use href="#ic-bell"/></svg> Push notifications</div>
+              <div style="font-size:11px;color:var(--g500);margin-top:3px;line-height:1.5" id="notifDesc">Leave decisions &amp; check-out reminders on this device.</div>
+            </div>
+          </div>
+          <button type="button" id="notifToggleBtn" class="btn-outline" style="margin-top:12px;padding:9px;font-size:12.5px;font-weight:600;border-radius:8px;justify-content:center;width:100%" onclick="toggleFacultyNotifications()">
+            Enable notifications
+          </button>
         </div>
         <button class="btn-outline" onclick="openReenrollModal()"><span class="btn-ico"><svg class="i"><use href="#ic-camera"/></svg></span>Re-enroll Face</button>
         <button class="logout-btn" onclick="doLogout()"><span><svg class="i"><use href="#ic-logout"/></svg></span>Log Out</button>
@@ -3249,6 +3252,7 @@ function openProfile(){
   document.getElementById('pdDept2').textContent=fac.department||'—';
   document.getElementById('pdTeacherId2').textContent=fac.teacherId||'—';
   applyAvatarPhoto();
+  if(typeof refreshFacultyNotifState==='function') refreshFacultyNotifState();
   document.getElementById('profileOverlay').classList.add('open');
   document.getElementById('profileDrawer').classList.add('open');
 }
@@ -4149,44 +4153,49 @@ function syncLeaveRequests() {
     });
 }
 
+var _leaveShowAll = false, _lastLeaveRequests = [];
+function toggleLeaveShowAll(){ _leaveShowAll = !_leaveShowAll; renderLeaveRequests(_lastLeaveRequests); }
 function renderLeaveRequests(requests) {
   var container = document.getElementById('leaveRequestsList');
   if (!container) return;
-  if (!requests || requests.length === 0) {
-    container.innerHTML = '<div style="font-size:11px; color:var(--g400); text-align:center; padding:10px 0;">No leave requests submitted yet.</div>';
+  // Newest first so the capped view shows the most recent requests.
+  requests = (requests || []).slice().sort(function(a, b){
+    return new Date(b.created_at || b.start_date) - new Date(a.created_at || a.start_date);
+  });
+  _lastLeaveRequests = requests;
+  if (requests.length === 0) {
+    container.innerHTML = '<div style="font-size:11.5px; color:var(--g500); text-align:center; padding:14px 0;">No leave requests yet.</div>';
     return;
   }
-  
+
+  // Cap the list — an unbounded list used to push the rest of the tab off-screen.
+  var CAP = 3;
+  var showing = _leaveShowAll ? requests : requests.slice(0, CAP);
   var html = '';
-  requests.forEach(function(r) {
-    var startD = new Date(r.start_date);
-    var endD = new Date(r.end_date);
-    var dateRange = startD.toLocaleDateString('en-PK', {day:'numeric', month:'short', year:'numeric'}) + ' - ' +
-                    endD.toLocaleDateString('en-PK', {day:'numeric', month:'short', year:'numeric'});
-    
-    var statusText = r.status.toUpperCase();
-    var pillStyle = 'font-size:10px; padding:3px 8px; border-radius:10px; font-weight:600; text-transform:uppercase;';
-    if (r.status === 'approved') {
-      pillStyle += 'background:#dcfce7; color:#15803d;';
-    } else if (r.status === 'rejected') {
-      pillStyle += 'background:#fee2e2; color:#b91c1c;';
-    } else {
-      pillStyle += 'background:#fef3c7; color:#d97706;';
-    }
-    
-    html += '<div class="log-item" style="flex-direction:column; align-items:stretch; gap:6px; padding:10px; border:1px solid var(--g100); border-radius:8px; background:var(--bg); margin-bottom:8px;">' +
-              '<div style="display:flex; justify-content:space-between; align-items:center;">' +
-                '<span style="font-weight:700; font-size:12px; color:var(--navy);">' + dateRange + '</span>' +
-                '<span style="' + pillStyle + '">' + statusText + '</span>' +
+  showing.forEach(function(r) {
+    var startD = new Date(r.start_date), endD = new Date(r.end_date);
+    var opt = {day:'numeric', month:'short', year:'numeric'};
+    var dateRange = startD.toLocaleDateString('en-PK', opt);
+    if (endD.getTime() !== startD.getTime()) dateRange += ' – ' + endD.toLocaleDateString('en-PK', opt);
+    var st = (r.status || 'pending').toLowerCase();
+    var pill = 'display:inline-flex;align-items:center;font-size:10px;padding:3px 9px;border-radius:100px;font-weight:700;letter-spacing:.02em;flex-shrink:0;';
+    if (st === 'approved') pill += 'background:var(--gbg);color:var(--green);';
+    else if (st === 'rejected') pill += 'background:var(--rbg);color:var(--red);';
+    else pill += 'background:var(--abg);color:var(--amber);';
+    html += '<div style="border:1px solid var(--g100);border-radius:12px;background:var(--white);padding:12px 13px;box-shadow:0 1px 3px rgba(11,31,75,.04);">' +
+              '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">' +
+                '<span style="font-weight:700;font-size:12.5px;color:var(--navy);">' + dateRange + '</span>' +
+                '<span style="' + pill + '">' + st.toUpperCase() + '</span>' +
               '</div>' +
-              '<div style="font-size:12px; color:var(--g600); margin-top:2px; word-break:break-word;">' +
-                '<strong>Reason:</strong> ' + escapeHtml(r.reason) +
-              '</div>' +
-              (r.decision_note ? '<div style="font-size:12px; color:#b91c1c; margin-top:2px; word-break:break-word;">' +
-                '<strong>Note:</strong> ' + escapeHtml(r.decision_note) +
-              '</div>' : '') +
+              '<div style="font-size:12px;color:var(--g700);margin-top:5px;word-break:break-word;line-height:1.5;">' + escapeHtml(r.reason || '') + '</div>' +
+              (r.decision_note ? '<div style="font-size:11.5px;color:' + (st === 'rejected' ? 'var(--red)' : 'var(--g500)') + ';margin-top:5px;word-break:break-word;line-height:1.5;"><strong>Note:</strong> ' + escapeHtml(r.decision_note) + '</div>' : '') +
             '</div>';
   });
+  if (requests.length > CAP) {
+    html += '<button type="button" onclick="toggleLeaveShowAll()" style="padding:9px;font-size:12px;font-weight:600;color:var(--navy);background:var(--g50);border:1px solid var(--g100);border-radius:8px;cursor:pointer;font-family:inherit;">' +
+              (_leaveShowAll ? 'Show less' : ('View all ' + requests.length + ' requests')) +
+            '</button>';
+  }
   container.innerHTML = html;
 }
 
