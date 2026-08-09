@@ -1760,6 +1760,72 @@ def _enforce_device_binding(db, faculty, fp, client_ip):
     )
 
 
+def _pkt_day_bounds_utc():
+    """UTC start/end of the current PKT calendar day (same convention used elsewhere)."""
+    local_now = datetime.utcnow() + timedelta(hours=PKT_OFFSET_HOURS)
+    local_day_start = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+    day_start_utc = local_day_start - timedelta(hours=PKT_OFFSET_HOURS)
+    return day_start_utc, day_start_utc + timedelta(days=1)
+
+
+def _enforce_once_per_day(db, faculty_id, record_type):
+    """
+    One successful check-in and one successful check-out per faculty per PKT day.
+    Only 'present' records count, so a rejected attempt (face/location/spoof) can
+    still be retried. Raises HTTPException(409) on a duplicate.
+    """
+    start_utc, end_utc = _pkt_day_bounds_utc()
+    exists = db.query(models.AttendanceRecord).filter(
+        models.AttendanceRecord.faculty_id == faculty_id,
+        models.AttendanceRecord.record_type == record_type,
+        models.AttendanceRecord.status == "present",
+        models.AttendanceRecord.timestamp >= start_utc,
+        models.AttendanceRecord.timestamp < end_utc,
+    ).first()
+    if exists:
+        word = "checked in" if record_type == "check_in" else "checked out"
+        raise HTTPException(status_code=409, detail=f"You've already {word} today. Only one {record_type.replace('_',' ')} is allowed per day.")
+
+
+def _fmt_ampm(h, m):
+    return f"{h % 12 or 12}:{m:02d} {'AM' if h < 12 else 'PM'}"
+
+
+def _enforce_time_window(db, record_type):
+    """
+    Restrict attendance to the active working-hours window (PKT). Fail-open: if
+    no preset is configured or the config can't be parsed, enforcement is
+    skipped so a misconfiguration never locks everyone out.
+      - Non-working day (weekday marked "off", or a holiday): block both.
+      - check-in: allowed until the day's end time (+ grace); early is fine.
+      - check-out: allowed from the day's start time onward; leaving late is fine.
+    """
+    window = get_active_time_window(db)
+    if not window:
+        return
+    local_now = datetime.utcnow() + timedelta(hours=PKT_OFFSET_HOURS)
+    resolved = resolve_expected_start(local_now, db)
+    if resolved is None:
+        raise HTTPException(status_code=403, detail="Today is a non-working day — attendance is disabled.")
+    start_h, start_m, grace = resolved
+    overrides = _parse_overrides(window)
+    day_cfg = overrides.get(local_now.strftime("%A").lower(), {})
+    end_str = day_cfg.get("end") or window.end_time
+    try:
+        end_h, end_m = (int(p) for p in end_str.split(":"))
+    except (ValueError, AttributeError):
+        return  # end time unreadable — don't enforce
+    now_min = local_now.hour * 60 + local_now.minute
+    start_min = start_h * 60 + start_m
+    end_min = end_h * 60 + end_m
+    if record_type == "check_in":
+        if now_min > end_min + (grace or 0):
+            raise HTTPException(status_code=403, detail=f"Check-in is closed for today. Working hours end at {_fmt_ampm(end_h, end_m)}.")
+    else:  # check_out
+        if now_min < start_min:
+            raise HTTPException(status_code=403, detail=f"Check-out opens at {_fmt_ampm(start_h, start_m)}.")
+
+
 @app.post("/api/attendance/check-in", response_model=schemas.CheckInResponse)
 def check_in(payload: schemas.CheckInRequest, request: Request, db: Session = Depends(get_db)):
     faculty = db.query(models.Faculty).filter(models.Faculty.id == payload.faculty_id).first()
@@ -1777,6 +1843,8 @@ def check_in(payload: schemas.CheckInRequest, request: Request, db: Session = De
         raise HTTPException(status_code=403, detail=f"Account temporarily locked — too many failed face scans. Try again in {remaining} min.")
 
     _enforce_device_binding(db, faculty, payload.device_fingerprint, _client_ip(request))
+    _enforce_time_window(db, "check_in")
+    _enforce_once_per_day(db, faculty.id, "check_in")
 
     # 1. Pick best GPS reading from the batch sent by frontend
     if not payload.gps_readings:
@@ -2246,6 +2314,8 @@ def check_out(payload: schemas.CheckOutRequest, request: Request, db: Session = 
         raise HTTPException(status_code=403, detail=f"Account temporarily locked — too many failed face scans. Try again in {remaining} min.")
 
     _enforce_device_binding(db, faculty, payload.device_fingerprint, _client_ip(request))
+    _enforce_time_window(db, "check_out")
+    _enforce_once_per_day(db, faculty.id, "check_out")
 
     if not payload.gps_readings:
         raise HTTPException(status_code=400, detail="At least one GPS reading is required")

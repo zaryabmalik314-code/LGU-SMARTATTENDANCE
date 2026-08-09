@@ -32,21 +32,13 @@ CAMPUS_BOUNDARY: List[Tuple[float, float]] = [
     (31.463745, 74.441712),
 ]
 
-# Home geofence — 50m octagon around Zaryab's house (31.490882, 74.407991).
-# Remove or swap this before production rollout to real faculty.
-HOME_BOUNDARY: List[Tuple[float, float]] = [
-    (31.494475, 74.407991),
-    (31.493423, 74.410971),
-    (31.490882, 74.412205),
-    (31.488341, 74.410971),
-    (31.487289, 74.407991),
-    (31.488341, 74.405011),
-    (31.490882, 74.403777),
-    (31.493423, 74.405011),
-]
+# Home geofence (dev/test only — a 50m octagon around Zaryab's house) has been
+# REMOVED for the production rollout. Only the real campus boundary is allowed.
+# If you ever need to test from another location again, add a boundary here and
+# include it in ALLOWED_BOUNDARIES below — never ship that to real faculty.
 
 # All allowed zones — point must be inside at least one.
-ALLOWED_BOUNDARIES = [CAMPUS_BOUNDARY, HOME_BOUNDARY]
+ALLOWED_BOUNDARIES = [CAMPUS_BOUNDARY]
 
 MAX_ACCEPTABLE_ACCURACY_M = 100.0  # reject readings noisier than this
 BOUNDARY_BUFFER_M = 50.0  # treat points within this distance of edge as "inside" too
