@@ -1159,46 +1159,6 @@ def admin_reset_device(
     return {"status": "ok", "message": f"Device binding cleared for {faculty.name}"}
 
 
-@app.post("/api/admin/factory-reset-faculty")
-def factory_reset_faculty(
-    x_reset_token: Optional[str] = Header(None),
-    db: Session = Depends(get_db),
-):
-    """
-    ONE-TIME production prep. Deletes all faculty + their operational data
-    (attendance, leave, salary, spoof, device-switch, snapshots, faculty push
-    subs) while KEEPING admin/HOD accounts and config (time windows, semesters,
-    holidays). Guarded by the FACTORY_RESET_TOKEN env var — completely inert
-    unless that var is set AND the caller passes a matching X-Reset-Token header.
-    Remove this endpoint (and the env var) right after use.
-    """
-    expected = os.getenv("FACTORY_RESET_TOKEN")
-    if not expected or x_reset_token != expected:
-        raise HTTPException(status_code=403, detail="Not authorized")
-
-    counts = {}
-
-    def wipe(model, label, flt=None):
-        q = db.query(model)
-        if flt is not None:
-            q = q.filter(flt)
-        counts[label] = q.delete(synchronize_session=False)
-
-    # Children first, then the faculty rows themselves.
-    wipe(models.AttendanceRecord, "attendance_records")
-    wipe(models.LeaveBalance, "leave_balances")
-    wipe(models.SalaryRecord, "salary_records")
-    wipe(models.LeaveRequest, "leave_requests")
-    wipe(models.DeviceSwitchRequest, "device_switch_requests")
-    wipe(models.SpoofAttempt, "spoof_attempts")
-    wipe(models.SemesterSnapshot, "semester_snapshots")
-    wipe(models.PushSubscription, "faculty_push_subscriptions",
-         models.PushSubscription.subscriber_type == "faculty")
-    wipe(models.Faculty, "faculty")
-    db.commit()
-    return {"status": "reset_complete", "kept": ["admins", "hods", "time_windows", "semesters", "holidays"], "deleted": counts}
-
-
 ADJUSTABLE_BALANCE_FIELDS = {
     "casual_leave_used",
     "casual_leave_total",
