@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en" style="background:#0a1628">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0a1628">
+<title>Install SmartAttend — LGU Faculty</title>
+<link rel="icon" href="icon-192x192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  :root{--navy:#0a1628;--navy2:#12244d;--card:#132a52;--gold:#c9a84c;--gold2:#f0d080;--line:rgba(255,255,255,.1);--muted:rgba(255,255,255,.55);--muted2:rgba(255,255,255,.38)}
+  body{font-family:'DM Sans',system-ui,sans-serif;background:var(--navy);color:#fff;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:32px 20px 40px}
+  .wrap{width:100%;max-width:440px}
+  .brand{display:flex;flex-direction:column;align-items:center;text-align:center;margin-bottom:26px}
+  .logo{width:84px;height:84px;border-radius:22px;background:#fff;padding:8px;object-fit:contain;box-shadow:0 8px 30px rgba(0,0,0,.35);margin-bottom:16px}
+  h1{font-size:24px;font-weight:700;letter-spacing:-.01em}
+  .sub{color:var(--muted);font-size:13.5px;margin-top:5px}
+  .platform-note{display:inline-block;margin-top:14px;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--gold2);background:rgba(201,168,76,.14);border:1px solid rgba(201,168,76,.3);padding:5px 13px;border-radius:100px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px 20px;margin-bottom:16px;box-shadow:0 6px 24px rgba(0,0,0,.22)}
+  .card.dim{opacity:.62}
+  .card-head{display:flex;align-items:center;gap:11px;margin-bottom:14px}
+  .card-ico{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:rgba(255,255,255,.08)}
+  .card-ico svg{width:20px;height:20px;fill:none;stroke:var(--gold2);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+  .card-title{font-size:16px;font-weight:700}
+  .card-tag{font-size:11.5px;color:var(--muted);margin-top:1px}
+  .btn{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;padding:15px;border-radius:12px;font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;border:none;text-decoration:none;transition:transform .1s ease,filter .15s ease}
+  .btn:active{transform:scale(.98)}
+  .btn-gold{background:linear-gradient(135deg,var(--gold2),var(--gold));color:#3a2e08}
+  .btn-gold:hover{filter:brightness(1.04)}
+  .btn svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .btn-outline{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.22)}
+  .btn-outline:hover{background:rgba(255,255,255,.06)}
+  ol{list-style:none;counter-reset:s;margin-top:6px}
+  ol li{counter-increment:s;position:relative;padding:9px 0 9px 34px;font-size:13.5px;color:rgba(255,255,255,.82);line-height:1.5;border-top:1px solid var(--line)}
+  ol li:first-child{border-top:none}
+  ol li::before{content:counter(s);position:absolute;left:0;top:8px;width:23px;height:23px;border-radius:50%;background:rgba(201,168,76,.16);color:var(--gold2);font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center}
+  ol li b{color:#fff;font-weight:600}
+  .share-ico{display:inline-flex;vertical-align:-3px;width:15px;height:15px;stroke:var(--gold2);fill:none;stroke-width:1.8}
+  .foot{text-align:center;color:var(--muted2);font-size:11px;line-height:1.7;margin-top:10px}
+  .foot a{color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">
+    <img class="logo" src="icon-192x192.png" alt="SmartAttend logo">
+    <h1>SmartAttend</h1>
+    <div class="sub">LGU Faculty Attendance · Biometric check-in</div>
+    <div class="platform-note" id="platformNote">Choose your device</div>
+  </div>
+
+  <!-- Android -->
+  <div class="card" id="androidCard">
+    <div class="card-head">
+      <div class="card-ico"><svg viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="3"/><line x1="10" y1="18" x2="14" y2="18"/></svg></div>
+      <div><div class="card-title">Android</div><div class="card-tag">Install the app (.apk)</div></div>
+    </div>
+    <a class="btn btn-gold" href="SmartAttend.apk" download>
+      <svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M5 21h14"/></svg>
+      Download SmartAttend.apk
+    </a>
+    <ol>
+      <li>Tap <b>Download</b> above, then open the downloaded file.</li>
+      <li>If prompted, allow <b>“Install from this source”</b> (Settings appears automatically).</li>
+      <li>Tap <b>Install</b>, then open <b>SmartAttend</b> from your home screen.</li>
+    </ol>
+  </div>
+
+  <!-- iOS -->
+  <div class="card" id="iosCard">
+    <div class="card-head">
+      <div class="card-ico"><svg viewBox="0 0 24 24"><path d="M12 20.5c-3-4-6-6.5-6-10a6 6 0 0 1 12 0c0 3.5-3 6-6 10z"/><circle cx="12" cy="10.5" r="2.2"/></svg></div>
+      <div><div class="card-title">iPhone / iPad</div><div class="card-tag">Add to Home Screen (Safari)</div></div>
+    </div>
+    <a class="btn btn-gold" href="index.html">
+      <svg viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
+      Open in Safari
+    </a>
+    <ol>
+      <li>Open this page in <b>Safari</b> (not Chrome), then tap <b>Open in Safari</b>.</li>
+      <li>Tap the <b>Share</b> icon <svg class="share-ico" viewBox="0 0 24 24"><path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg> at the bottom.</li>
+      <li>Choose <b>Add to Home Screen</b>, then tap <b>Add</b>.</li>
+      <li>Open <b>SmartAttend</b> from your home screen for notifications &amp; full-screen.</li>
+    </ol>
+  </div>
+
+  <!-- Fallback -->
+  <a class="btn btn-outline" href="index.html" style="margin-bottom:16px">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3.6 9h16.8M3.6 15h16.8M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>
+    Just open the web app
+  </a>
+
+  <div class="foot">
+    Lahore Garrison University · Faculty Portal<br>
+    Trouble installing? Contact your admin.
+  </div>
+</div>
+
+<script>
+  (function(){
+    var ua = navigator.userAgent || '';
+    var isIOS = /iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && 'ontouchend' in document);
+    var isAndroid = /Android/.test(ua);
+    var note = document.getElementById('platformNote');
+    var android = document.getElementById('androidCard');
+    var ios = document.getElementById('iosCard');
+    if (isAndroid) {
+      note.textContent = 'Detected: Android';
+      ios.classList.add('dim');
+      android.parentNode.insertBefore(android, android.parentNode.firstChild.nextSibling);
+    } else if (isIOS) {
+      note.textContent = 'Detected: iPhone / iPad';
+      android.classList.add('dim');
+    } else {
+      note.textContent = 'Desktop — pick your phone below';
+    }
+  })();
+</script>
+</body>
+</html>

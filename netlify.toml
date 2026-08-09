@@ -1,0 +1,20 @@
+# Netlify config for lgusmartattendance.netlify.app
+# The repo root is the site root, so /index.html, /manifest.json, /push-sw.js,
+# /SmartAttend.apk and /.well-known/assetlinks.json are all served at the domain root.
+[build]
+  publish = "."
+
+# Digital Asset Links MUST be served as application/json or the Android TWA
+# won't verify (and the app would show a URL bar).
+[[headers]]
+  for = "/.well-known/assetlinks.json"
+  [headers.values]
+    Content-Type = "application/json"
+    Access-Control-Allow-Origin = "*"
+
+# Serve the APK as a proper Android package download.
+[[headers]]
+  for = "/SmartAttend.apk"
+  [headers.values]
+    Content-Type = "application/vnd.android.package-archive"
+    Content-Disposition = "attachment; filename=\"SmartAttend.apk\""

@@ -22,7 +22,7 @@ logger = logging.getLogger("smartattend.push")
 
 _executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="push")
 
-_ICON = "https://zaryabmalik314-code.github.io/LGU-SMARTATTENDANCE/icon-192x192.png"
+_ICON = "https://lgusmartattendance.netlify.app/icon-192x192.png"
 
 
 def _vapid():
