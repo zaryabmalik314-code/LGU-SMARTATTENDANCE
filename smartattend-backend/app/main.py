@@ -1042,7 +1042,12 @@ def hod_decide_leave_request(
 
     if payload.status == "approved":
         balance = get_or_create_leave_balance(db, req.faculty_id)
-        days = (req.end_date.date() - req.start_date.date()).days + 1
+        # Count days by PKT-local calendar date. Timestamps are stored in UTC,
+        # and the app sends the start at local 00:00 (which is the PREVIOUS day
+        # in UTC), so diffing raw .date() overcounted a same-day leave as 2.
+        _ls = (req.start_date + timedelta(hours=PKT_OFFSET_HOURS)).date()
+        _le = (req.end_date + timedelta(hours=PKT_OFFSET_HOURS)).date()
+        days = (_le - _ls).days + 1
         balance.casual_leave_used = min(balance.casual_leave_total, balance.casual_leave_used + max(days, 1))
 
     db.commit()
@@ -1088,7 +1093,12 @@ def admin_decide_leave_request(
 
     if payload.status == "approved":
         balance = get_or_create_leave_balance(db, req.faculty_id)
-        days = (req.end_date.date() - req.start_date.date()).days + 1
+        # Count days by PKT-local calendar date. Timestamps are stored in UTC,
+        # and the app sends the start at local 00:00 (which is the PREVIOUS day
+        # in UTC), so diffing raw .date() overcounted a same-day leave as 2.
+        _ls = (req.start_date + timedelta(hours=PKT_OFFSET_HOURS)).date()
+        _le = (req.end_date + timedelta(hours=PKT_OFFSET_HOURS)).date()
+        days = (_le - _ls).days + 1
         balance.casual_leave_used = min(balance.casual_leave_total, balance.casual_leave_used + max(days, 1))
 
     db.commit()
@@ -1818,12 +1828,18 @@ def _enforce_time_window(db, record_type):
     now_min = local_now.hour * 60 + local_now.minute
     start_min = start_h * 60 + start_m
     end_min = end_h * 60 + end_m
+    win = f"{_fmt_ampm(start_h, start_m)}–{_fmt_ampm(end_h, end_m)}"
     if record_type == "check_in":
-        if now_min > end_min + (grace or 0):
-            raise HTTPException(status_code=403, detail=f"Check-in is closed for today. Working hours end at {_fmt_ampm(end_h, end_m)}.")
-    else:  # check_out
+        # Check-in only inside the working-hours window (open at start, close at
+        # end + grace). Blocks both before-start (e.g. 2 AM) and after-close.
         if now_min < start_min:
-            raise HTTPException(status_code=403, detail=f"Check-out opens at {_fmt_ampm(start_h, start_m)}.")
+            raise HTTPException(status_code=403, detail=f"Check-in opens at {_fmt_ampm(start_h, start_m)}. Today's hours: {win}.")
+        if now_min > end_min + (grace or 0):
+            raise HTTPException(status_code=403, detail=f"Check-in is closed for today. Today's hours: {win}.")
+    else:  # check_out
+        # Check-out opens at start; leaving after the end time is allowed.
+        if now_min < start_min:
+            raise HTTPException(status_code=403, detail=f"Check-out opens at {_fmt_ampm(start_h, start_m)}. Today's hours: {win}.")
 
 
 @app.post("/api/attendance/check-in", response_model=schemas.CheckInResponse)

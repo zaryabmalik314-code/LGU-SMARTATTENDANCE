@@ -857,10 +857,9 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
         <div class="kpi-row">
           <div class="kpi-head">
             <span class="kpi-lbl"><svg class="i"><use href="#ic-check-circle"/></svg> Days attended</span>
-            <span class="kpi-val"><span id="kpiEarnUsed">72</span><span class="kpi-of" id="kpiEarnOf">/ 365 days</span></span>
+            <span class="kpi-val"><span id="kpiEarnUsed">0</span><span class="kpi-of">days present</span></span>
           </div>
-          <div class="kpi-track"><div class="kpi-fill earned" id="kpiEarnFill"></div></div>
-          <div class="kpi-foot" id="kpiEarnFoot">20% of the semester</div>
+          <div class="kpi-foot" id="kpiEarnFoot">Days you've checked in this semester</div>
         </div>
         <div class="kpi-row">
           <div class="kpi-head">
@@ -1280,16 +1279,13 @@ var HOME_POLYGON = [
 ];
 
 function isAllowedLocation(lat, lng) {
-  return pointInPolygon(lat, lng, GEO_POLYGON) ||
-         pointInPolygon(lat, lng, HOME_POLYGON);
+  // Campus only. The dev/test home zone was removed for the production rollout,
+  // matching the backend (geofence.py ALLOWED_BOUNDARIES = [CAMPUS_BOUNDARY]).
+  return pointInPolygon(lat, lng, GEO_POLYGON);
 }
 
 function nearestZoneLabel(lat, lng) {
-  var dCampus = haversineMetres(lat, lng, GEO_LAT, GEO_LNG);
-  var dHome = haversineMetres(lat, lng, 31.490882, 74.407991);
-  if(pointInPolygon(lat, lng, HOME_POLYGON) || dHome < dCampus)
-    return {dist: Math.round(dHome), label: 'home zone'};
-  return {dist: Math.round(dCampus), label: 'centre'};
+  return {dist: Math.round(haversineMetres(lat, lng, GEO_LAT, GEO_LNG)), label: 'centre'};
 }
 
 // Renders a styled warn/error alert row into a face-scan status element,
@@ -2391,7 +2387,10 @@ function onExitScanComplete(now,faceImages){
   }).catch(function(e){
     hideScanVerifying('xBioScanner');
     console.warn('check-out API call failed:',e);
-    showToast(e && e.message ? e.message : 'Check-out failed — could not reach the server.');
+    var xmsg=(e&&e.message)||'';
+    if(/failed to fetch|networkerror|load failed|timeout|network request failed/i.test(xmsg))
+      xmsg='Couldn\'t reach the server — check your internet connection and try again.';
+    showToast(xmsg || 'Check-out failed — could not reach the server.');
     xFaceRan=false;
     if(btn){btn.disabled=false;btn.innerHTML='<svg class="i"><use href="#ic-camera"/></svg> Retry';btn.style.display='flex';}
   });
@@ -3221,6 +3220,7 @@ function enterMainApp(){
   _safe('tick', tick);
   _safe('syncLeaveBalance', syncLeaveBalance);
   _safe('syncLeaveRequests', syncLeaveRequests);
+  _safe('refreshTodaySchedule', refreshTodaySchedule);
 }
 
 function mainTab(n){
@@ -3399,10 +3399,39 @@ function tickExitClock(){
    ============================================================ */
 var faceRan=false;
 
+/* ---- Time-window gate (client side): the camera/location only work inside the
+   active working-hours window, so a 2 AM or after-hours tap never opens the
+   camera. The backend enforces the same rule; this just fails fast with a clear
+   reason. ---- */
+var _todaySched=null;
+function refreshTodaySchedule(){
+  return apiRequest('/api/time-windows/today','GET').then(function(s){
+    _todaySched=s; if(typeof paintCheckinButton==='function') paintCheckinButton(); return s;
+  }).catch(function(){});
+}
+function _to12h(t){ if(!t) return '—'; var p=t.split(':'),h=+p[0],m=+p[1],ap=h>=12?'PM':'AM'; h=h%12||12; return h+':'+(m<10?'0':'')+m+' '+ap; }
+function _nowMinLocal(){ var d=new Date(); return d.getHours()*60+d.getMinutes(); }
+// null = check-in allowed now; otherwise a human-readable reason it's closed.
+function checkinClosedReason(){
+  var s=_todaySched;
+  if(!s) return null;                 // unknown -> let the backend decide (fail-open)
+  if(s.is_day_off) return 'Today is a non-working day — check-in is disabled.';
+  if(!s.start_time || !s.end_time) return null;
+  var sp=s.start_time.split(':'), ep=s.end_time.split(':');
+  var start=(+sp[0])*60+(+sp[1]), end=(+ep[0])*60+(+ep[1]), grace=s.grace_minutes||0;
+  var now=_nowMinLocal(), win=_to12h(s.start_time)+'–'+_to12h(s.end_time);
+  if(now<start) return 'Check-in opens at '+_to12h(s.start_time)+'. Today: '+win+'.';
+  if(now>end+grace) return 'Check-in is closed for today. Hours: '+win+'.';
+  return null;
+}
+
 console.log('%c[BUILD] home-geofence-400m + guided-face-capture','color:#0d7a52;font-weight:bold');
 function openScanFace(){
   if(attendanceMarked){showToast('Already checked in today.');return;}
-  if(!geoSettled||!geoInsideCampus){showToast('Waiting for location confirmation…');return;}
+  var closed=checkinClosedReason();
+  if(closed){showToast(closed);return;}
+  if(!geoSettled){showToast('Waiting for location confirmation…');return;}
+  if(!geoInsideCampus){showToast('You must be at campus to check in.');return;}
   document.getElementById('checkinIdle').style.display='none';
   document.getElementById('checkinFaceCard').style.display='block';
 }
@@ -3536,7 +3565,10 @@ function onCheckinScanComplete(faceImages){
     // never succeeded. Pass the real error through instead so the UI shows what
     // actually happened.
     console.warn('check-in API call failed:', e);
-    finishCheckin(now, dist, null, (e && e.message) || 'Could not reach the server.');
+    var cmsg=(e&&e.message)||'';
+    if(/failed to fetch|networkerror|load failed|timeout|network request failed/i.test(cmsg))
+      cmsg='Couldn\'t reach the server — check your internet connection and try again.';
+    finishCheckin(now, dist, null, cmsg || 'Could not reach the server.');
   });
 }
 
@@ -3703,8 +3735,20 @@ function paintCheckinButton(){
     btn.disabled=true;
     btn.innerHTML='<span class="btn-ico"><svg class="i"><use href="#ic-check"/></svg></span>Already Checked In Today';
   } else {
-    btn.innerHTML='<span class="btn-ico"><svg class="i"><use href="#ic-camera"/></svg></span>Scan Face to Check In';
-    btn.disabled=!geoInsideCampus;
+    var closed=checkinClosedReason();
+    if(closed){
+      btn.disabled=true;
+      var lbl = closed.indexOf('non-working')>-1 ? 'Closed — day off'
+              : (closed.indexOf('opens')>-1 && _todaySched ? 'Check-in opens '+_to12h(_todaySched.start_time)
+              : 'Check-in closed for today');
+      btn.innerHTML='<span class="btn-ico"><svg class="i"><use href="#ic-clock"/></svg></span>'+lbl;
+    } else if(!geoInsideCampus){
+      btn.disabled=true;
+      btn.innerHTML='<span class="btn-ico"><svg class="i"><use href="#ic-pin"/></svg></span>Move to campus to check in';
+    } else {
+      btn.disabled=false;
+      btn.innerHTML='<span class="btn-ico"><svg class="i"><use href="#ic-camera"/></svg></span>Scan Face to Check In';
+    }
   }
 }
 
@@ -3999,12 +4043,11 @@ function animateSemRings(){
   }
   setBudget('kpiLeaveUsed','kpiLeaveOf','kpiLeaveFill','kpiLeaveFoot', SEM_DATA.leaveUsed, SEM_DATA.leaveTotal, 'days');
   setBudget('kpiLateUsed','kpiLateOf','kpiLateFill','kpiLateFoot', SEM_DATA.lateMins, SEM_DATA.lateTotal, 'min');
-  // Attendance is progress, not a budget — show % of the semester, never "over".
-  var earned=num(SEM_DATA.earnedDays), earnedTotal=num(SEM_DATA.earnedTotal);
+  // Days attended is just a running count of days shown up — there is no fixed
+  // number of days a faculty "must" attend, so no denominator or percentage.
+  var earned=num(SEM_DATA.earnedDays);
   setText('kpiEarnUsed', earned);
-  setText('kpiEarnOf', '/ '+earnedTotal+' days');
-  setFill('kpiEarnFill', earned, earnedTotal);
-  setText('kpiEarnFoot', clampPct(earned,earnedTotal).toFixed(0)+'% of the semester');
+  setText('kpiEarnFoot', (earned===1?'1 day':earned+' days')+' checked in this semester');
 }
 
 function syncLeaveBalance(){
