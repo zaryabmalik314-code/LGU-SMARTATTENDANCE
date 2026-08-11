@@ -2538,6 +2538,7 @@ var API_BASE_URL = (window.location.hostname === 'localhost' || window.location.
 var LS_FACULTY   = 'sa_faculty';       // cached faculty profile object
 var LS_STATUS    = 'sa_status';        // 'pending' | 'approved'
 var LS_SESSION   = 'sa_session';       // truthy once logged in (one-time login)
+var LS_TOKEN     = 'sa_faculty_token'; // Bearer token from backend session
 var LS_HISTORY   = 'sa_history';       // cached attendance history (mock/local fallback)
 var LS_CHECKIN   = 'sa_active_checkin';// today's active check-in (for Exit tab gating)
 var LS_PHOTO     = 'sa_profile_photo'; // cached copy of the synced profile photo, for instant paint
@@ -2691,11 +2692,18 @@ function setActiveCheckin(obj){
 
 // ---- Generic API helper (best-effort: falls back gracefully if backend unreachable) ----
 function apiRequest(path, method, body){
+  var headers = {'Content-Type':'application/json'};
+  var token = localStorage.getItem(LS_TOKEN);
+  if(token) headers['Authorization'] = 'Bearer ' + token;
   return fetch(API_BASE_URL + path, {
     method: method || 'GET',
-    headers: {'Content-Type':'application/json'},
+    headers: headers,
     body: body ? JSON.stringify(body) : undefined
   }).then(function(res){
+    if(res.status === 401 && token){
+      localStorage.removeItem(LS_TOKEN);
+      localStorage.removeItem(LS_SESSION);
+    }
     return res.json().catch(function(){return {};}).then(function(data){
       if(!res.ok){ var err=new Error(data.detail||'Request failed'); err.data=data; err.status=res.status; throw err; }
       return data;
@@ -3084,6 +3092,9 @@ function doLogin(){
   apiRequest('/api/auth/login','POST',{teacher_id:teacherId,pin:pin,device_fingerprint:getDeviceFingerprint()}).then(function(resp){
     var status=resp&&resp.status;
     if(status==='approved'){
+      if(resp.access_token){
+        localStorage.setItem(LS_TOKEN, resp.access_token);
+      }
       if(resp.faculty){
         setFaculty({
           name:resp.faculty.name,
@@ -3092,11 +3103,6 @@ function doLogin(){
           teacherId:resp.faculty.teacher_id||teacherId,
           facultyId:resp.faculty.id||resp.faculty.faculty_id||null
         });
-        // Use the backend's copy of the photo (source of truth) rather than
-        // whatever's cached locally, so a photo set on another device shows
-        // up here immediately too. Always overwrite — including clearing it
-        // when this account has no photo — so a previous account's cached
-        // photo can never leak onto this one on a shared device.
         setPhoto(resp.faculty.profile_photo || null);
       }
       setStatus('approved');
@@ -3138,12 +3144,14 @@ function doLogin(){
 }
 
 function doLogout(){
+  apiRequest('/api/auth/logout','POST').catch(function(){});
   setLoggedIn(false);
   setPhoto(null);
   localStorage.removeItem(LS_FACULTY);
   localStorage.removeItem(LS_STATUS);
   localStorage.removeItem(LS_HISTORY);
   localStorage.removeItem(LS_CHECKIN);
+  localStorage.removeItem(LS_TOKEN);
   closeProfile();
   stopBioCamera();
   stopExitCamera();

@@ -148,6 +148,16 @@ class AdminSession(Base):
     expires_at = Column(DateTime, nullable=False)
 
 
+class FacultySession(Base):
+    """Same opaque-token pattern as AdminSession, for faculty authentication."""
+    __tablename__ = "faculty_sessions"
+
+    token = Column(String, primary_key=True, index=True)
+    faculty_id = Column(Integer, ForeignKey("faculty.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=False)
+
+
 class LeaveRequest(Base):
     __tablename__ = "leave_requests"
 

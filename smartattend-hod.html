@@ -604,6 +604,11 @@ function initials(name) {
   return (parts[0][0] + (parts.length > 1 ? parts[parts.length-1][0] : '')).toUpperCase();
 }
 
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
 function skelRows(cols, count) {
   var html = '';
   for (var i = 0; i < (count || 4); i++) {
@@ -651,6 +656,7 @@ document.getElementById('login-form').addEventListener('submit', async function(
 });
 
 document.getElementById('logout-btn').addEventListener('click', function() {
+  api('/api/hod/logout', { method: 'POST' }).catch(function(){});
   if (ws) { ws.onclose = null; ws.close(); ws = null; }
   clearTimeout(wsReconnectTimer);
   authToken = null; hodInfo = null;
@@ -792,14 +798,14 @@ function renderFacultyTable() {
   var statusLabels = {present:'Present', absent:'Absent', waiting:'Not Started', leave:'On Leave'};
   tbody.innerHTML = active.map(function(f) {
     var st = facultyStatus(f);
-    var safeName = (f.name||'').replace(/'/g,"\\'");
+    var safeName = escapeHtml((f.name||'').replace(/'/g,"\\'"));
     return '<tr>' +
       '<td>' + (f.profile_photo
         ? '<img src="' + f.profile_photo + '" alt="" style="width:32px;height:32px;border-radius:50%;object-fit:cover">'
         : '<span class="avatar">' + initials(f.name) + '</span>') + '</td>' +
-      '<td><span class="faculty-link" onclick="openPersonalAnalytics(' + f.id + ',\'' + safeName + '\')">' + (f.name || '—') + '</span></td>' +
-      '<td style="font-family:var(--font-mono);color:var(--text-2)">' + (f.teacher_id || '—') + '</td>' +
-      '<td style="color:var(--text-3)">' + (f.email || '—') + '</td>' +
+      '<td><span class="faculty-link" onclick="openPersonalAnalytics(' + f.id + ',\'' + safeName + '\')">' + escapeHtml(f.name || '—') + '</span></td>' +
+      '<td style="font-family:var(--font-mono);color:var(--text-2)">' + escapeHtml(f.teacher_id || '—') + '</td>' +
+      '<td style="color:var(--text-3)">' + escapeHtml(f.email || '—') + '</td>' +
       '<td><span class="pill pill-' + st + '"><span class="pill-dot"></span>' + statusLabels[st] + '</span></td>' +
       '</tr>';
   }).join('');
@@ -1242,12 +1248,12 @@ function renderLeaveRequests() {
         rows.map(function(r) {
           var pillClass = r.status === 'approved' ? 'approved' : r.status === 'rejected' ? 'rejected' : 'pending';
           return '<tr>' +
-            '<td style="font-weight:500">' + (r.faculty_name || r.faculty_id) + '</td>' +
+            '<td style="font-weight:500">' + escapeHtml(r.faculty_name || r.faculty_id) + '</td>' +
             '<td style="color:var(--text-2);font-family:var(--font-mono);font-size:12.5px">' + (r.start_date ? r.start_date.split('T')[0] : '—') + '</td>' +
             '<td style="color:var(--text-2);font-family:var(--font-mono);font-size:12.5px">' + (r.end_date ? r.end_date.split('T')[0] : '—') + '</td>' +
-            '<td style="max-width:200px;word-break:break-word;color:var(--text-2)">' + (r.reason || '—') + '</td>' +
-            '<td><span class="pill pill-' + pillClass + '"><span class="pill-dot"></span>' + r.status + '</span></td>' +
-            '<td style="max-width:180px;word-break:break-word;color:var(--text-3);font-size:12.5px">' + (r.decision_note || '—') + '</td>' +
+            '<td style="max-width:200px;word-break:break-word;color:var(--text-2)">' + escapeHtml(r.reason || '—') + '</td>' +
+            '<td><span class="pill pill-' + pillClass + '"><span class="pill-dot"></span>' + escapeHtml(r.status) + '</span></td>' +
+            '<td style="max-width:180px;word-break:break-word;color:var(--text-3);font-size:12.5px">' + escapeHtml(r.decision_note || '—') + '</td>' +
             '<td style="white-space:nowrap">' +
               (r.status === 'pending'
                 ? '<button class="btn-approve" onclick="decideLeave(' + r.id + ',\'approved\',this)">Approve</button><button class="btn-reject" onclick="openRejectModal(' + r.id + ',this)">Reject</button>'

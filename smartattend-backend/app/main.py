@@ -112,7 +112,7 @@ ALLOWED_ORIGINS = [
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_origin_regex=r"https://.*\.netlify\.app",
+    allow_origin_regex=r"https://lgusmartattendance\.netlify\.app",
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -189,6 +189,7 @@ def check_movement_against_last_record(db: Session, faculty_id: int, new_lat: fl
 # 30 days by default so admins/HODs aren't forced to log in again every day.
 # Override with the env var if you want shorter-lived sessions.
 ADMIN_SESSION_TTL_HOURS = int(os.getenv("ADMIN_SESSION_TTL_HOURS", "720"))
+FACULTY_SESSION_TTL_HOURS = int(os.getenv("FACULTY_SESSION_TTL_HOURS", "720"))
 
 # Late-arrival tracking — fixed daily start time for everyone (Pakistan local time).
 # Server timestamps are stored in UTC, so we convert before comparing.
@@ -361,6 +362,31 @@ def validate_admin_token(token: str, db: Session) -> Optional[models.Admin]:
     if not session or session.expires_at < datetime.utcnow():
         return None
     return db.query(models.Admin).filter(models.Admin.id == session.admin_id).first()
+
+
+def validate_faculty_token(token: str, db: Session) -> Optional[models.Faculty]:
+    session = db.query(models.FacultySession).filter(models.FacultySession.token == token).first()
+    if not session or session.expires_at < datetime.utcnow():
+        return None
+    return db.query(models.Faculty).filter(models.Faculty.id == session.faculty_id).first()
+
+
+def get_current_faculty(authorization: Optional[str] = Header(None), db: Session = Depends(get_db)) -> models.Faculty:
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or malformed Authorization header")
+    token = authorization.removeprefix("Bearer ").strip()
+    faculty = validate_faculty_token(token, db)
+    if not faculty:
+        raise HTTPException(status_code=401, detail="Invalid or expired faculty session")
+    return faculty
+
+
+def _extract_faculty_token(authorization: Optional[str], db: Session) -> Optional[models.Faculty]:
+    """Try to extract a valid faculty from the Authorization header, or return None."""
+    if not authorization or not authorization.startswith("Bearer "):
+        return None
+    token = authorization.removeprefix("Bearer ").strip()
+    return validate_faculty_token(token, db)
 
 
 @app.websocket("/ws/admin")
@@ -638,9 +664,13 @@ def login(payload: schemas.LoginRequest, request: Request, db: Session = Depends
         faculty.last_device_fingerprint = fp
     if client_ip and not faculty.last_device_ip:
         faculty.last_device_ip = client_ip
+
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.utcnow() + timedelta(hours=FACULTY_SESSION_TTL_HOURS)
+    db.add(models.FacultySession(token=token, faculty_id=faculty.id, expires_at=expires_at))
     db.commit()
 
-    return schemas.LoginResponse(status="approved", faculty=faculty)
+    return schemas.LoginResponse(status="approved", faculty=faculty, access_token=token)
 
 
 @app.post("/api/auth/re-enroll-face", response_model=schemas.ReEnrollFaceResponse)
@@ -759,18 +789,23 @@ def upload_photo(payload: schemas.UploadPhotoRequest, db: Session = Depends(get_
     return schemas.UploadPhotoResponse(status="ok", faculty=faculty)
 
 
+ADMIN_BOOTSTRAP_SECRET = os.getenv("ADMIN_BOOTSTRAP_SECRET", "")
+
+
 @app.post("/api/admin/bootstrap", response_model=schemas.AdminLoginResponse)
-def bootstrap_admin(payload: schemas.AdminBootstrapRequest, db: Session = Depends(get_db)):
+def bootstrap_admin(payload: schemas.AdminBootstrapRequest, request: Request, db: Session = Depends(get_db)):
     """
     Creates the FIRST admin account. Only works if no admin exists yet.
-    The dashboard has no signup UI, so run this once yourself via curl/Postman:
-      curl -X POST <backend-url>/api/admin/bootstrap -H "Content-Type: application/json" \
-        -d '{"email":"you@example.com","password":"yourpassword","name":"Your Name"}'
-    Then log in normally through the dashboard.
+    Set ADMIN_BOOTSTRAP_SECRET env var and pass it as X-Bootstrap-Secret header.
     """
     existing_count = db.query(models.Admin).count()
     if existing_count > 0:
         raise HTTPException(status_code=400, detail="An admin already exists — use the dashboard login instead")
+
+    if ADMIN_BOOTSTRAP_SECRET:
+        provided = request.headers.get("x-bootstrap-secret", "")
+        if provided != ADMIN_BOOTSTRAP_SECRET:
+            raise HTTPException(status_code=403, detail="Invalid bootstrap secret")
 
     admin = models.Admin(
         email=payload.email,
@@ -1845,10 +1880,10 @@ def _enforce_time_window(db, record_type):
 
 
 @app.post("/api/attendance/check-in", response_model=schemas.CheckInResponse)
-def check_in(payload: schemas.CheckInRequest, request: Request, db: Session = Depends(get_db)):
-    faculty = db.query(models.Faculty).filter(models.Faculty.id == payload.faculty_id).first()
-    if not faculty:
-        raise HTTPException(status_code=404, detail="Faculty not found")
+def check_in(payload: schemas.CheckInRequest, request: Request, db: Session = Depends(get_db), auth_faculty: models.Faculty = Depends(get_current_faculty)):
+    if auth_faculty.id != payload.faculty_id:
+        raise HTTPException(status_code=403, detail="Token does not match faculty_id")
+    faculty = auth_faculty
 
     if faculty.approval_status != "approved":
         raise HTTPException(status_code=403, detail=f"Faculty is not approved (status: {faculty.approval_status})")
@@ -1989,14 +2024,9 @@ def list_attendance(
     db: Session = Depends(get_db),
     authorization: Optional[str] = Header(None),
 ):
-    # The faculty app has no session-token system anywhere (check-in itself
-    # only trusts a faculty_id in the body) - so a single-faculty_id query
-    # stays open here too, to not break that flow. What changed: an HOD
-    # bearer token, if presented, is now actually validated and scoped to
-    # that HOD's department, instead of silently ignored. Bulk (no
-    # faculty_id) queries still require either admin or HOD.
     admin = None
     hod = None
+    auth_fac = None
     if authorization and authorization.startswith("Bearer "):
         token = authorization.removeprefix("Bearer ").strip()
         admin = validate_admin_token(token, db)
@@ -2004,9 +2034,16 @@ def list_attendance(
             hod_session = db.query(models.HODSession).filter(models.HODSession.token == token).first()
             if hod_session and hod_session.expires_at > datetime.utcnow():
                 hod = db.query(models.HOD).filter(models.HOD.id == hod_session.hod_id).first()
+        if not admin and not hod:
+            auth_fac = validate_faculty_token(token, db)
 
-    if faculty_id is None and not admin and not hod:
-        raise HTTPException(status_code=401, detail="Missing or malformed Authorization header for bulk query")
+    if not admin and not hod and not auth_fac:
+        raise HTTPException(status_code=401, detail="Valid authorization required")
+
+    if auth_fac:
+        if faculty_id is not None and faculty_id != auth_fac.id:
+            raise HTTPException(status_code=403, detail="You can only view your own attendance")
+        faculty_id = auth_fac.id
 
     q = db.query(models.AttendanceRecord)
     if faculty_id:
@@ -2311,15 +2348,15 @@ def get_late_comers(
 
 
 @app.post("/api/attendance/check-out", response_model=schemas.CheckInResponse)
-def check_out(payload: schemas.CheckOutRequest, request: Request, db: Session = Depends(get_db)):
+def check_out(payload: schemas.CheckOutRequest, request: Request, db: Session = Depends(get_db), auth_faculty: models.Faculty = Depends(get_current_faculty)):
     """
     Marks the teacher's exit from campus. Same GPS + face verification as
     check-in, but does NOT log the teacher out of the app and does NOT
     affect leave/attendance counters — it's just an exit timestamp record.
     """
-    faculty = db.query(models.Faculty).filter(models.Faculty.id == payload.faculty_id).first()
-    if not faculty:
-        raise HTTPException(status_code=404, detail="Faculty not found")
+    if auth_faculty.id != payload.faculty_id:
+        raise HTTPException(status_code=403, detail="Token does not match faculty_id")
+    faculty = auth_faculty
 
     if faculty.approval_status != "approved":
         raise HTTPException(status_code=403, detail=f"Faculty is not approved (status: {faculty.approval_status})")
@@ -2505,7 +2542,13 @@ def spoof_attempt_count(
 
 
 @app.get("/api/leave-balance", response_model=schemas.LeaveBalanceOut)
-def get_leave_balance(faculty_id: int, db: Session = Depends(get_db)):
+def get_leave_balance(faculty_id: int, db: Session = Depends(get_db), authorization: Optional[str] = Header(None)):
+    admin, hod = _resolve_admin_or_hod(authorization, db)
+    auth_fac = _extract_faculty_token(authorization, db) if not admin and not hod else None
+    if not admin and not hod and not auth_fac:
+        raise HTTPException(status_code=401, detail="Valid authorization required")
+    if auth_fac and auth_fac.id != faculty_id:
+        raise HTTPException(status_code=403, detail="You can only view your own leave balance")
     faculty = db.query(models.Faculty).filter(models.Faculty.id == faculty_id).first()
     if not faculty:
         raise HTTPException(status_code=404, detail="Faculty not found")
@@ -2528,12 +2571,13 @@ def get_leave_balance(faculty_id: int, db: Session = Depends(get_db)):
 
 
 @app.get("/api/salary", response_model=List[schemas.SalaryOut])
-def get_salary_records(faculty_id: int, db: Session = Depends(get_db)):
-    """
-    Placeholder — no payroll system wired up yet. Returns whatever rows
-    exist in salary_records for this faculty (admin dashboard would need
-    to create these; nothing auto-generates them yet).
-    """
+def get_salary_records(faculty_id: int, db: Session = Depends(get_db), authorization: Optional[str] = Header(None)):
+    admin, hod = _resolve_admin_or_hod(authorization, db)
+    auth_fac = _extract_faculty_token(authorization, db) if not admin and not hod else None
+    if not admin and not hod and not auth_fac:
+        raise HTTPException(status_code=401, detail="Valid authorization required")
+    if auth_fac and auth_fac.id != faculty_id:
+        raise HTTPException(status_code=403, detail="You can only view your own salary records")
     faculty = db.query(models.Faculty).filter(models.Faculty.id == faculty_id).first()
     if not faculty:
         raise HTTPException(status_code=404, detail="Faculty not found")
@@ -2558,10 +2602,10 @@ def get_salary_records(faculty_id: int, db: Session = Depends(get_db)):
 
 
 @app.post("/api/leave-request", response_model=schemas.LeaveRequestOut)
-def create_leave_request(payload: schemas.LeaveRequestCreate, db: Session = Depends(get_db)):
-    faculty = db.query(models.Faculty).filter(models.Faculty.id == payload.faculty_id).first()
-    if not faculty:
-        raise HTTPException(status_code=404, detail="Faculty not found")
+def create_leave_request(payload: schemas.LeaveRequestCreate, db: Session = Depends(get_db), auth_faculty: models.Faculty = Depends(get_current_faculty)):
+    if auth_faculty.id != payload.faculty_id:
+        raise HTTPException(status_code=403, detail="Token does not match faculty_id")
+    faculty = auth_faculty
 
     if payload.start_date > payload.end_date:
         raise HTTPException(status_code=400, detail="Start date must be before or equal to end date")
@@ -2591,7 +2635,13 @@ def create_leave_request(payload: schemas.LeaveRequestCreate, db: Session = Depe
 
 
 @app.get("/api/leave-requests", response_model=List[schemas.LeaveRequestOut])
-def get_faculty_leave_requests(faculty_id: int, db: Session = Depends(get_db)):
+def get_faculty_leave_requests(faculty_id: int, db: Session = Depends(get_db), authorization: Optional[str] = Header(None)):
+    admin, hod = _resolve_admin_or_hod(authorization, db)
+    auth_fac = _extract_faculty_token(authorization, db) if not admin and not hod else None
+    if not admin and not hod and not auth_fac:
+        raise HTTPException(status_code=401, detail="Valid authorization required")
+    if auth_fac and auth_fac.id != faculty_id:
+        raise HTTPException(status_code=403, detail="You can only view your own leave requests")
     faculty = db.query(models.Faculty).filter(models.Faculty.id == faculty_id).first()
     if not faculty:
         raise HTTPException(status_code=404, detail="Faculty not found")
@@ -2675,11 +2725,29 @@ def push_subscribe(
 
 
 @app.post("/api/push/unsubscribe")
-def push_unsubscribe(payload: schemas.PushUnsubscribeRequest, db: Session = Depends(get_db)):
-    db.query(models.PushSubscription).filter(
+def push_unsubscribe(payload: schemas.PushUnsubscribeRequest, db: Session = Depends(get_db), authorization: Optional[str] = Header(None)):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Authorization required")
+    token = authorization.removeprefix("Bearer ").strip()
+    admin = validate_admin_token(token, db)
+    hod = None
+    auth_fac = None
+    if not admin:
+        hod_session = db.query(models.HODSession).filter(models.HODSession.token == token).first()
+        if hod_session and hod_session.expires_at > datetime.utcnow():
+            hod = db.query(models.HOD).filter(models.HOD.id == hod_session.hod_id).first()
+    if not admin and not hod:
+        auth_fac = validate_faculty_token(token, db)
+    if not admin and not hod and not auth_fac:
+        raise HTTPException(status_code=401, detail="Valid authorization required")
+    sub = db.query(models.PushSubscription).filter(
         models.PushSubscription.endpoint == payload.endpoint
-    ).delete(synchronize_session=False)
-    db.commit()
+    ).first()
+    if sub:
+        if auth_fac and (sub.subscriber_type != "faculty" or sub.subscriber_id != auth_fac.id):
+            raise HTTPException(status_code=403, detail="You can only unsubscribe your own push endpoints")
+        db.delete(sub)
+        db.commit()
     return {"status": "unsubscribed"}
 
 
@@ -2708,4 +2776,31 @@ def trigger_checkout_reminders(
 ):
     """Admin-only manual trigger for the daily checkout-reminder job (for testing)."""
     run_checkout_reminders()
+    return {"status": "ok"}
+
+
+@app.post("/api/admin/logout")
+def admin_logout(db: Session = Depends(get_db), authorization: Optional[str] = Header(None)):
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.removeprefix("Bearer ").strip()
+        db.query(models.AdminSession).filter(models.AdminSession.token == token).delete(synchronize_session=False)
+        db.commit()
+    return {"status": "ok"}
+
+
+@app.post("/api/hod/logout")
+def hod_logout(db: Session = Depends(get_db), authorization: Optional[str] = Header(None)):
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.removeprefix("Bearer ").strip()
+        db.query(models.HODSession).filter(models.HODSession.token == token).delete(synchronize_session=False)
+        db.commit()
+    return {"status": "ok"}
+
+
+@app.post("/api/auth/logout")
+def faculty_logout(db: Session = Depends(get_db), authorization: Optional[str] = Header(None)):
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.removeprefix("Bearer ").strip()
+        db.query(models.FacultySession).filter(models.FacultySession.token == token).delete(synchronize_session=False)
+        db.commit()
     return {"status": "ok"}

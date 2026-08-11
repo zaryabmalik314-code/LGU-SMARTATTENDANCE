@@ -1308,6 +1308,11 @@ function initials(name) {
   return name.trim().split(/\s+/).slice(0,2).map(w => w[0]?.toUpperCase() || '').join('');
 }
 
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
 /* ---- Web Push (admin spoof alerts) ---- */
 const LS_ADMIN_NOTIF = 'sa_admin_notif';
 function pushSupported() { return ('serviceWorker' in navigator) && ('PushManager' in window) && ('Notification' in window); }
@@ -1437,6 +1442,7 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
 });
 
 document.getElementById('logout-btn').addEventListener('click', () => {
+  api('/api/admin/logout', { method: 'POST' }).catch(() => {});
   authToken = null; adminInfo = null;
   disconnectWebSocket();
   localStorage.removeItem('sa_admin_token');
@@ -1716,14 +1722,14 @@ function renderApprovalCard(f) {
     <div class="approval-top">
       <div class="avatar scan-line">${initials(f.name)}</div>
       <div>
-        <div class="approval-name">${f.name || 'Unnamed faculty'}</div>
-        <div class="approval-id">${f.teacher_id || id}</div>
+        <div class="approval-name">${escapeHtml(f.name) || 'Unnamed faculty'}</div>
+        <div class="approval-id">${escapeHtml(f.teacher_id || id)}</div>
       </div>
     </div>
     ${facesHtml}
     <div class="approval-meta">
-      <span>Email</span> ${f.email || '—'}<br>
-      <span>Department</span> ${f.department || '—'}
+      <span>Email</span> ${escapeHtml(f.email) || '—'}<br>
+      <span>Department</span> ${escapeHtml(f.department) || '—'}
     </div>
     <div class="approval-actions">
       <button class="btn-approve" onclick="decide('${id}','approved',this)">Approve</button>
@@ -1784,9 +1790,9 @@ async function openFacultyDetail(id) {
   overlay.classList.add('active');
   content.innerHTML = `
     <div class="detail-header">
-      <div class="detail-avatar scan-line">${f.profile_photo ? `<img src="${f.profile_photo}" alt="${f.name || 'Faculty member'}">` : initials(f.name)}</div>
-      <div class="detail-name">${f.name || 'Faculty member'}</div>
-      <div class="detail-sub">${f.teacher_id || id} · ${f.department || '—'}</div>
+      <div class="detail-avatar scan-line">${f.profile_photo ? `<img src="${f.profile_photo}" alt="${escapeHtml(f.name) || 'Faculty member'}">` : initials(f.name)}</div>
+      <div class="detail-name">${escapeHtml(f.name) || 'Faculty member'}</div>
+      <div class="detail-sub">${escapeHtml(f.teacher_id || id)} · ${escapeHtml(f.department) || '—'}</div>
     </div>
     <div class="detail-section">
       <div class="detail-section-title">Leave Balance</div>
@@ -1951,7 +1957,7 @@ function renderAttendanceTable() {
     const durTime = durMin != null ? (Math.floor(durMin/60) + 'h ' + (durMin%60) + 'm') : '';
     return `
     <tr${r.flagged_suspicious ? ' class="row-flagged"' : ''}>
-      <td class="cell-name">${r.faculty_name || r.name || r.faculty_id || '—'}</td>
+      <td class="cell-name">${escapeHtml(r.faculty_name || r.name || r.faculty_id) || '—'}</td>
       <td>${getRecordDepartment(r) || '—'}</td>
       <td><span class="status-pill status-${r.record_type === 'check_in' ? 'checkin' : 'checkout'}">${r.record_type === 'check_in' ? 'Check-in' : 'Check-out'}</span></td>
       <td class="mono">${fmtDate(r.timestamp)}</td>
@@ -2025,7 +2031,7 @@ function renderFlaggedTable() {
       : s === 'rejected_location' ? 'Location violation'
       : r.flagged_suspicious ? (r.flag_reason || 'Suspicious') : s;
     return `<tr class="row-flagged">
-      <td class="cell-name">${r.faculty_name || r.name || r.faculty_id || '—'}</td>
+      <td class="cell-name">${escapeHtml(r.faculty_name || r.name || r.faculty_id) || '—'}</td>
       <td>${getRecordDepartment(r) || '—'}</td>
       <td><span class="status-pill status-${r.record_type === 'check_in' ? 'checkin' : 'checkout'}">${r.record_type === 'check_in' ? 'Check-in' : 'Check-out'}</span></td>
       <td class="mono">${fmtDate(r.timestamp)}</td>
@@ -2108,8 +2114,8 @@ function renderSpoofTable() {
     let scores = '';
     try { const s = JSON.parse(r.spoof_scores || '{}'); scores = Object.entries(s).map(([k,v]) => k.replace(/_/g,' ')+': '+v).join(', '); } catch(e) {}
     return `<tr class="${r.resolved ? '' : 'row-flagged'}">
-      <td class="cell-name">${r.profile_photo ? '<img src="'+r.profile_photo+'" class="avatar" style="width:28px;height:28px;border-radius:50%;margin-right:6px;vertical-align:middle;">' : '<span class="avatar-circle">'+(r.faculty_name||'?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2)+'</span>'}${r.faculty_name || '—'}</td>
-      <td>${r.department || '—'}</td>
+      <td class="cell-name">${r.profile_photo ? '<img src="'+r.profile_photo+'" class="avatar" style="width:28px;height:28px;border-radius:50%;margin-right:6px;vertical-align:middle;">' : '<span class="avatar-circle">'+escapeHtml((r.faculty_name||'?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2))+'</span>'}${escapeHtml(r.faculty_name) || '—'}</td>
+      <td>${escapeHtml(r.department) || '—'}</td>
       <td><span class="flag-badge" style="background:${r.attempt_type==='screen_display'?'#9b59b6':'#e74c3c'}22;color:${r.attempt_type==='screen_display'?'#9b59b6':'#e74c3c'};">⚠ ${typeLabel}</span></td>
       <td class="mono">${fmtDate(r.created_at)}</td>
       <td>${hasImg ? '<button class="btn btn-ghost btn-sm" onclick="showSpoofEvidence('+r.id+')">View</button>' : '—'}</td>
@@ -3674,16 +3680,16 @@ function renderFacultyTable() {
   const id = f => f.id ?? f.teacher_id ?? f.faculty_id;
   const isActive = f => f.is_active !== false;
   tbody.innerHTML = rows.map(f => `<tr>
-    <td class="cell-name" onclick="openFacultyPersonalAnalytics('${id(f)}','${(f.name||'').replace(/'/g,"\\'")}' )" style="cursor:pointer;color:var(--gold-300);display:flex;align-items:center;gap:8px">
+    <td class="cell-name" onclick="openFacultyPersonalAnalytics('${id(f)}','${escapeHtml((f.name||'').replace(/'/g,"\\'"))}' )" style="cursor:pointer;color:var(--gold-300);display:flex;align-items:center;gap:8px">
       ${f.profile_photo
         ? `<img src="${f.profile_photo}" alt="" style="width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0">`
         : `<span style="width:28px;height:28px;border-radius:50%;background:var(--navy-700);display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex-shrink:0;color:var(--slate-300)">${initials(f.name)}</span>`}
-      ${f.name || '—'}
+      ${escapeHtml(f.name) || '—'}
     </td>
-    <td class="mono">${f.teacher_id || '—'}</td>
-    <td>${f.department || '—'}</td>
-    <td>${f.email || '—'}</td>
-    <td><span class="status-pill status-${f.approval_status || 'pending'}">${f.approval_status || 'pending'}</span></td>
+    <td class="mono">${escapeHtml(f.teacher_id) || '—'}</td>
+    <td>${escapeHtml(f.department) || '—'}</td>
+    <td>${escapeHtml(f.email) || '—'}</td>
+    <td><span class="status-pill status-${f.approval_status || 'pending'}">${escapeHtml(f.approval_status) || 'pending'}</span></td>
     <td style="white-space:nowrap">
       <button class="btn-ghost" style="font-size:11px;padding:3px 8px;margin-right:4px"
         onclick="markManualAttendance('${id(f)}','check_in')">Mark In</button>
@@ -3691,9 +3697,9 @@ function renderFacultyTable() {
         onclick="markManualAttendance('${id(f)}','check_out')">Mark Out</button>
       ${isActive(f)
         ? `<button class="btn-reject" style="font-size:11px;padding:3px 8px"
-            onclick="removeFacultyPrompt('${id(f)}','${(f.name||'').replace(/'/g,"\\'")}')">Remove</button>`
+            onclick="removeFacultyPrompt('${id(f)}','${escapeHtml((f.name||'').replace(/'/g,"\\'"))}')">Remove</button>`
         : `<button class="btn-approve" style="font-size:11px;padding:3px 8px"
-            onclick="reactivateFacultyPrompt('${id(f)}','${(f.name||'').replace(/'/g,"\\'")}')">Reactivate</button>`}
+            onclick="reactivateFacultyPrompt('${id(f)}','${escapeHtml((f.name||'').replace(/'/g,"\\'"))}')">Reactivate</button>`}
     </td>
   </tr>`).join('');
 }

@@ -19,6 +19,13 @@
 /manifest.json
   Cache-Control: no-cache
 
+# Security headers — all pages
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=(self), camera=(self), microphone=()
+
 # Icons are content-stable and renamed when they change.
 /*.png
   Cache-Control: public, max-age=604800

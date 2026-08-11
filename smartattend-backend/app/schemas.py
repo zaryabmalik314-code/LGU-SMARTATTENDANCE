@@ -117,6 +117,7 @@ class LoginRequest(BaseModel):
 class LoginResponse(BaseModel):
     status: str  # "approved" | "pending" | "rejected" | "deactivated" | "device_switch_pending" | "invalid_credentials"
     faculty: Optional[FacultyOut] = None
+    access_token: Optional[str] = None
 
 
 class ReEnrollFaceRequest(BaseModel):
@@ -255,6 +256,13 @@ class AdminBootstrapRequest(BaseModel):
     password: str
     name: Optional[str] = None
 
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, v):
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters")
+        return v
+
 
 class AdminLoginRequest(BaseModel):
     email: str
@@ -344,6 +352,13 @@ class HODCreateRequest(BaseModel):
     password: str
     department: str
     name: Optional[str] = None
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, v):
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters")
+        return v
 
 
 class HODUpdateRequest(BaseModel):
