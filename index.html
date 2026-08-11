@@ -3262,14 +3262,30 @@ function _clearGeoWatchdog(){
 }
 
 // A laptop/desktop has no GPS chip and usually no dependable front camera for
-// liveness, so check-in genuinely can't work there. Detect it up front and say
-// so plainly, instead of letting the location watch time out into a generic
-// "No location fix" error that looks like something is broken.
+// liveness, so check-in genuinely can't work there. Show a clear message
+// instead of letting the location watch time out into a generic error.
+//
+// This is DELIBERATELY conservative: a false positive here wrongly locks a real
+// teacher out of check-in, which is far worse than a PC user waiting for the GPS
+// timeout. So we only call it a desktop when EVERY mobile/tablet signal is
+// absent. Any single mobile hint — touch, a coarse (finger) pointer, a narrow
+// screen, or a mobile user-agent — means "allow, this is a phone/tablet".
 function isDesktopDevice(){
   var ua=navigator.userAgent||'';
-  var mobileUA=/Android|iPhone|iPad|iPod|Windows Phone|Mobile|Silk|Kindle/i.test(ua);
-  var hasTouch=(navigator.maxTouchPoints||0)>0 || 'ontouchstart' in window;
-  return !mobileUA && !hasTouch;
+  // Any hint of a phone/tablet in the UA → not a desktop.
+  if(/Android|iPhone|iPad|iPod|Windows Phone|Mobile|Silk|Kindle|Tablet|Mobi/i.test(ua)) return false;
+  // Touch capability (includes iPadOS, which reports as a Mac but has touch).
+  if((navigator.maxTouchPoints||0)>0 || 'ontouchstart' in window) return false;
+  // A coarse pointer means a finger/stylus, i.e. a touch device.
+  if(window.matchMedia){
+    try{
+      if(window.matchMedia('(pointer: coarse)').matches) return false;
+      if(window.matchMedia('(any-pointer: coarse)').matches) return false;
+    }catch(e){}
+  }
+  // Phones are narrow even in landscape; anything this small is not a PC.
+  try{ if(Math.min(screen.width||9999, screen.height||9999) <= 820) return false; }catch(e){}
+  return true;
 }
 
 function startGeoWatch(){
