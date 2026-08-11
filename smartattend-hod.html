@@ -24,6 +24,10 @@
 <title>SmartAttend — HOD Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <style>
 :root{
   --bg:#050810;--card:#0c1121;--card-border:#161f36;--card-hover:#111a30;
@@ -319,6 +323,29 @@ tbody tr:hover td{background:rgba(22,31,54,.4)}
   .stat-grid{grid-template-columns:repeat(2,1fr);gap:10px}
   .search-input{min-width:0;flex:1}
 }
+
+/* ── Analytics charts (mirrors the admin dashboard, themed to HOD palette) ── */
+.analytics-stack{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;margin-top:20px}
+.chart-card{
+  background:var(--card);border:1px solid var(--card-border);border-radius:var(--radius);
+  padding:18px 20px;transition:border-color .2s;
+}
+.chart-card:hover{border-color:var(--text-4)}
+.chart-card-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:4px;flex-wrap:wrap}
+.chart-card-title{font-family:var(--font-display);font-size:15px;font-weight:600;color:var(--white)}
+.chart-card-sub{font-size:11px;color:var(--text-3);margin-bottom:10px;line-height:1.4}
+.chart-stats{display:flex;gap:16px;margin-bottom:10px;flex-wrap:wrap}
+.chart-stat{font-size:12px;color:var(--text-2)}
+.chart-stat b{color:var(--white);font-family:var(--font-mono);font-weight:600}
+.chart-wrap{position:relative;width:100%;height:260px}
+.chart-wrap.donut{height:220px;max-width:320px;margin:0 auto}
+.chart-empty{padding:40px 0;text-align:center;color:var(--text-3);font-size:13px}
+.date-input{
+  background:var(--surface);border:1px solid var(--surface-border);
+  border-radius:var(--radius-sm);padding:9px 12px;color:var(--white);
+  font-size:13px;outline:none;
+}
+.date-input:focus{border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-dim)}
 </style>
 </head>
 <body>
@@ -418,19 +445,56 @@ tbody tr:hover td{background:rgba(22,31,54,.4)}
         <div class="page-header">
           <div>
             <div class="page-title">Department Analytics</div>
-            <div class="page-desc">Late-arrival totals across your department this semester</div>
+            <div class="page-desc">Attendance trends across your department</div>
           </div>
-          <button class="btn-ghost" onclick="loadDeptAnalytics()">
+          <button class="btn-ghost" onclick="loadAnalytics()">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M1.5 8a6.5 6.5 0 1113 0 6.5 6.5 0 01-13 0z"/><path d="M8 4v4l2.5 1.5" stroke-linecap="round"/></svg>
             Refresh
           </button>
         </div>
-        <div class="stat-grid">
-          <div class="stat-card amber"><div class="stat-label">Total Late Minutes</div><div class="stat-value" id="dept-late-total" style="color:var(--amber)">0</div></div>
-          <div class="stat-card blue"><div class="stat-label">Faculty with Lateness</div><div class="stat-value" id="dept-late-count">0</div></div>
-          <div class="stat-card gold"><div class="stat-label">Avg Late Min / Faculty</div><div class="stat-value" id="dept-late-avg">0</div></div>
-        </div>
+
         <div class="toolbar">
+          <input autocomplete="off" type="date" class="date-input" id="an-date-from" title="From date">
+          <input autocomplete="off" type="date" class="date-input" id="an-date-to" title="To date">
+          <button class="btn-ghost" onclick="loadAnalytics()">Apply</button>
+          <button class="btn-ghost" onclick="document.getElementById('an-date-from').value='';document.getElementById('an-date-to').value='';loadAnalytics();">Reset</button>
+          <button class="btn-ghost" id="sum-excel-btn" onclick="exportSummary('excel')" title="Per-faculty summary (present/late/absent/leave/%)">Export summary (Excel)</button>
+          <button class="btn-ghost" id="sum-pdf-btn" onclick="exportSummary('pdf')">Export summary (PDF)</button>
+        </div>
+
+        <div class="stat-grid">
+          <div class="stat-card gold"><div class="stat-label">Avg Attendance</div><div class="stat-value" id="sum-avg">—</div></div>
+          <div class="stat-card blue"><div class="stat-label">Faculty</div><div class="stat-value" id="sum-faculty">—</div></div>
+          <div class="stat-card green"><div class="stat-label">Present Days</div><div class="stat-value" id="sum-present">—</div></div>
+          <div class="stat-card amber"><div class="stat-label">Late Incidents</div><div class="stat-value" id="sum-late" style="color:var(--amber)">—</div></div>
+          <div class="stat-card red"><div class="stat-label">Absent Days</div><div class="stat-value" id="sum-absent" style="color:var(--red)">—</div></div>
+        </div>
+
+        <div class="analytics-stack">
+          <div class="chart-card">
+            <div class="chart-card-head"><div class="chart-card-title">Overall Attendance %</div></div>
+            <div class="chart-card-sub">Check-ins by outcome, over the selected range (defaults to last 90 days)</div>
+            <div id="chart-overall-stats" class="chart-stats"></div>
+            <div class="chart-wrap donut" id="wrap-chart-overall"><canvas id="chart-overall"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-card-head"><div class="chart-card-title">Late Arrivals — Last 30 Days</div></div>
+            <div class="chart-card-sub">Present check-ins with late minutes &gt; 0 (per the active Time Window), per day</div>
+            <div class="chart-wrap"><canvas id="chart-late"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-card-head"><div class="chart-card-title">Attendance % by Faculty</div></div>
+            <div class="chart-card-sub">Present check-ins ÷ total check-in attempts, per faculty member</div>
+            <div class="chart-wrap" id="wrap-chart-faculty"><canvas id="chart-faculty"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-card-head"><div class="chart-card-title">Monthly Attendance Trend</div></div>
+            <div class="chart-card-sub">Overall attendance % by month</div>
+            <div class="chart-wrap" id="wrap-chart-monthly"><canvas id="chart-monthly"></canvas></div>
+          </div>
+        </div>
+
+        <div class="toolbar" style="margin-top:24px">
           <input autocomplete="off" type="search" class="search-input" id="dept-analytics-search" placeholder="Search by name or teacher ID..." oninput="renderDeptAnalytics()">
         </div>
         <div class="table-wrap">
@@ -656,7 +720,7 @@ document.querySelectorAll('.nav-item[data-view]').forEach(function(btn) {
     if (target) target.classList.add('active');
     if (btn.dataset.view === 'leaves') loadLeaveRequests();
     if (btn.dataset.view === 'attendance') loadFaculty();
-    if (btn.dataset.view === 'analytics') loadDeptAnalytics();
+    if (btn.dataset.view === 'analytics') loadAnalytics();
   });
 });
 
@@ -745,30 +809,298 @@ function renderFacultyTable() {
    DEPARTMENT ANALYTICS
    ========================================================================= */
 var deptAnalyticsCache = [];
+var attendanceCache = [];        // every attendance record for this HOD's department
+var analyticsCharts = {};        // canvasId -> Chart instance
 
-async function loadDeptAnalytics() {
+var CHART_COLORS = {
+  gold: '#d4af6a', goldSoft: 'rgba(212,175,106,0.55)',
+  green: '#34d399', red: '#f87171', amber: '#fbbf24',
+  slate: '#8b93a7', grid: 'rgba(255,255,255,0.06)', border: '#0c1121'
+};
+
+function parseTs(ts) {
+  if (!ts) return null;
+  var d = new Date(ts);
+  return isNaN(d.getTime()) ? null : d;
+}
+// Pakistan is UTC+5, no DST — shift then read UTC parts to get PK wall-clock.
+function toPKShifted(ts) { var d = parseTs(ts); return d ? new Date(d.getTime() + 5 * 3600 * 1000) : null; }
+function pkDayKey(pkDate) { return pkDate.toISOString().slice(0, 10); }
+function pkMonthKey(pkDate) { return pkDate.toISOString().slice(0, 7); }
+function destroyChart(id) { if (analyticsCharts[id]) { analyticsCharts[id].destroy(); delete analyticsCharts[id]; } }
+function resetChartCanvas(wrapId, canvasId) {
+  var wrap = document.getElementById(wrapId);
+  wrap.innerHTML = '<canvas id="' + canvasId + '"></canvas>';
+  return document.getElementById(canvasId);
+}
+
+// Loads the department's faculty + all its attendance in two calls (both are
+// already department-scoped server-side by the HOD token), then renders the
+// summary stats, charts, and the per-faculty table.
+async function loadAnalytics() {
   var tbody = document.getElementById('dept-analytics-tbody');
-  tbody.innerHTML = skelRows(7, 4);
+  if (tbody) tbody.innerHTML = skelRows(7, 4);
   try {
-    var active = facultyCache.filter(function(f){ return f.is_active !== false && f.approval_status === 'approved'; });
-    if (!active.length) {
-      facultyCache = await api('/api/hod/faculty');
-    }
-    var faculty = facultyCache.filter(function(f){ return f.is_active !== false && f.approval_status === 'approved'; });
-
-    var perFaculty = await Promise.all(faculty.map(async function(f) {
-      var records = [];
-      try { records = await api('/api/attendance?faculty_id=' + f.id); } catch (e) { records = []; }
-      var checkIns = records.filter(function(r){ return r.record_type === 'check_in'; });
-      var lateDays = checkIns.filter(function(r){ return (r.late_minutes || 0) > 0; }).length;
-      var totalLateMin = checkIns.reduce(function(acc, r){ return acc + (r.late_minutes || 0); }, 0);
-      return { id: f.id, name: f.name, teacher_id: f.teacher_id, profile_photo: f.profile_photo, checkIns: checkIns.length, lateDays: lateDays, totalLateMin: totalLateMin, deductionDays: Math.floor(totalLateMin / 480) };
-    }));
-
-    deptAnalyticsCache = perFaculty;
+    var results = await Promise.all([
+      api('/api/hod/faculty'),
+      api('/api/attendance')
+    ]);
+    facultyCache = results[0] || [];
+    attendanceCache = results[1] || [];
+    buildDeptAnalyticsCache();
+    renderAnalyticsCharts();
     renderDeptAnalytics();
+    loadAnalyticsSummary();
   } catch (err) {
-    tbody.innerHTML = '<tr><td colspan="7" class="loading-row">Couldn\'t load — ' + err.message + '</td></tr>';
+    if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="loading-row">Couldn\'t load — ' + err.message + '</td></tr>';
+  }
+}
+// Kept as an alias so any older callers still work.
+function loadDeptAnalytics() { return loadAnalytics(); }
+
+// Per-faculty rollup (all-time) built from the single attendance pull instead
+// of one request per teacher.
+function buildDeptAnalyticsCache() {
+  var faculty = facultyCache.filter(function(f){ return f.is_active !== false && f.approval_status === 'approved'; });
+  var byFac = {};
+  attendanceCache.forEach(function(r){
+    if (r.record_type !== 'check_in') return;
+    var acc = byFac[r.faculty_id] || (byFac[r.faculty_id] = { checkIns: 0, lateDays: 0, totalLateMin: 0 });
+    acc.checkIns++;
+    if ((r.late_minutes || 0) > 0) { acc.lateDays++; acc.totalLateMin += r.late_minutes; }
+  });
+  deptAnalyticsCache = faculty.map(function(f){
+    var a = byFac[f.id] || { checkIns: 0, lateDays: 0, totalLateMin: 0 };
+    return { id: f.id, name: f.name, teacher_id: f.teacher_id, profile_photo: f.profile_photo,
+             checkIns: a.checkIns, lateDays: a.lateDays, totalLateMin: a.totalLateMin,
+             deductionDays: Math.floor(a.totalLateMin / 480) };
+  });
+}
+
+/* --- Date-range filtered records for the charts (defaults to last 90 days) --- */
+function getAnalyticsRecords() {
+  var from = document.getElementById('an-date-from') ? document.getElementById('an-date-from').value : '';
+  var to = document.getElementById('an-date-to') ? document.getElementById('an-date-to').value : '';
+  var recs = attendanceCache;
+  if (from || to) {
+    recs = recs.filter(function(r){
+      if (!r.timestamp) return false;
+      var ts = new Date(r.timestamp);
+      if (from && ts < new Date(from)) return false;
+      if (to && ts > new Date(to + 'T23:59:59')) return false;
+      return true;
+    });
+  } else {
+    var cutoff = Date.now() - 90 * 24 * 3600 * 1000;
+    recs = recs.filter(function(r){ return r.timestamp && new Date(r.timestamp).getTime() >= cutoff; });
+  }
+  return recs;
+}
+
+function renderAnalyticsCharts() {
+  if (typeof Chart === 'undefined') {
+    document.querySelectorAll('.chart-wrap').forEach(function(el){ el.innerHTML = '<div class="chart-empty">Chart.js failed to load — check your connection.</div>'; });
+    return;
+  }
+  if (!attendanceCache.length) {
+    document.querySelectorAll('.chart-wrap').forEach(function(el){ el.innerHTML = '<div class="chart-empty">No attendance data yet.</div>'; });
+    return;
+  }
+  var records = getAnalyticsRecords();
+  renderOverallChart(records);
+  renderLateArrivalsChart();
+  renderFacultyChart(records);
+  renderMonthlyChart(records);
+}
+
+/* --- 1. Overall attendance % (donut) --- */
+function renderOverallChart(records) {
+  var checkIns = records.filter(function(r){ return r.record_type === 'check_in'; });
+  var present = 0, rejLocation = 0, rejFace = 0, other = 0;
+  checkIns.forEach(function(r){
+    var s = r.status || '';
+    if (s === 'present') present++;
+    else if (s === 'rejected_location') rejLocation++;
+    else if (s === 'rejected_face') rejFace++;
+    else other++;
+  });
+  var total = checkIns.length;
+  var pct = total ? Math.round((present / total) * 100) : 0;
+  var statsEl = document.getElementById('chart-overall-stats');
+  statsEl.innerHTML = total
+    ? '<span class="chart-stat"><b>' + pct + '%</b> present</span>' +
+      '<span class="chart-stat"><b>' + total + '</b> check-ins</span>' +
+      '<span class="chart-stat"><b>' + present + '</b> present</span>' +
+      '<span class="chart-stat"><b>' + rejLocation + '</b> rejected (location)</span>' +
+      '<span class="chart-stat"><b>' + rejFace + '</b> rejected (face)</span>'
+    : '';
+  destroyChart('chart-overall');
+  var canvas = resetChartCanvas('wrap-chart-overall', 'chart-overall');
+  if (!total) { document.getElementById('wrap-chart-overall').innerHTML = '<div class="chart-empty">No check-ins in this range.</div>'; return; }
+  var labels = ['Present'], data = [present], colors = [CHART_COLORS.green];
+  if (rejLocation) { labels.push('Rejected — location'); data.push(rejLocation); colors.push(CHART_COLORS.amber); }
+  if (rejFace) { labels.push('Rejected — face'); data.push(rejFace); colors.push(CHART_COLORS.red); }
+  if (other) { labels.push('Other'); data.push(other); colors.push(CHART_COLORS.slate); }
+  analyticsCharts['chart-overall'] = new Chart(canvas, {
+    type: 'doughnut',
+    data: { labels: labels, datasets: [{ data: data, backgroundColor: colors, borderColor: CHART_COLORS.border, borderWidth: 2 }] },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom', labels: { color: CHART_COLORS.slate, boxWidth: 12, padding: 14, font: { size: 11.5 } } } } }
+  });
+}
+
+/* --- 2. Late arrivals trend, last 30 days --- */
+function renderLateArrivalsChart() {
+  var byDay = {};
+  var cutoff = Date.now() - 30 * 24 * 3600 * 1000;
+  for (var i = 29; i >= 0; i--) { var d = new Date(Date.now() - i * 24 * 3600 * 1000); byDay[d.toISOString().slice(0, 10)] = 0; }
+  attendanceCache.forEach(function(r){
+    if (r.record_type !== 'check_in' || r.status !== 'present' || !r.timestamp) return;
+    var rawMs = new Date(r.timestamp).getTime();
+    if (isNaN(rawMs) || rawMs < cutoff) return;
+    var pk = toPKShifted(r.timestamp); if (!pk) return;
+    var key = pkDayKey(pk);
+    if ((r.late_minutes || 0) > 0 && key in byDay) byDay[key]++;
+  });
+  var labels = Object.keys(byDay).sort();
+  var data = labels.map(function(k){ return byDay[k]; });
+  var canvas = document.getElementById('chart-late');
+  destroyChart('chart-late');
+  analyticsCharts['chart-late'] = new Chart(canvas, {
+    type: 'bar',
+    data: { labels: labels.map(function(l){ return l.slice(5); }),
+      datasets: [{ label: 'Late check-ins', data: data, backgroundColor: CHART_COLORS.goldSoft, borderRadius: 3, maxBarThickness: 22 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: CHART_COLORS.slate, maxRotation: 60, minRotation: 60, font: { size: 10 } }, grid: { display: false } },
+        y: { beginAtZero: true, ticks: { color: CHART_COLORS.slate, precision: 0 }, grid: { color: CHART_COLORS.grid } }
+      } }
+  });
+}
+
+/* --- 3. Attendance % by faculty (horizontal bar) --- */
+function renderFacultyChart(records) {
+  var checkIns = records.filter(function(r){ return r.record_type === 'check_in'; });
+  var byFac = {}; // name -> { present, total }
+  checkIns.forEach(function(r){
+    var name = r.faculty_name || ('#' + r.faculty_id);
+    if (!byFac[name]) byFac[name] = { present: 0, total: 0 };
+    byFac[name].total++;
+    if (r.status === 'present') byFac[name].present++;
+  });
+  var names = Object.keys(byFac).sort(function(a, b){ return byFac[b].total - byFac[a].total; });
+  var canvas = resetChartCanvas('wrap-chart-faculty', 'chart-faculty');
+  destroyChart('chart-faculty');
+  if (!names.length) { document.getElementById('wrap-chart-faculty').innerHTML = '<div class="chart-empty">No check-ins in this range.</div>'; return; }
+  var pcts = names.map(function(n){ return Math.round((byFac[n].present / byFac[n].total) * 100); });
+  analyticsCharts['chart-faculty'] = new Chart(canvas, {
+    type: 'bar',
+    data: { labels: names, datasets: [{ label: 'Attendance %', data: pcts, backgroundColor: CHART_COLORS.gold, borderRadius: 4, maxBarThickness: 26 }] },
+    options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+      plugins: { legend: { display: false },
+        tooltip: { callbacks: { label: function(ctx){ var n = names[ctx.dataIndex]; return ctx.parsed.x + '% (' + byFac[n].present + '/' + byFac[n].total + ')'; } } } },
+      scales: {
+        x: { beginAtZero: true, max: 100, ticks: { color: CHART_COLORS.slate, callback: function(v){ return v + '%'; } }, grid: { color: CHART_COLORS.grid } },
+        y: { ticks: { color: CHART_COLORS.slate, font: { size: 11.5 } }, grid: { display: false } }
+      } }
+  });
+}
+
+/* --- 4. Monthly trend (line) --- */
+function renderMonthlyChart(records) {
+  var checkIns = records.filter(function(r){ return r.record_type === 'check_in'; });
+  var byMonth = {};
+  checkIns.forEach(function(r){
+    if (!r.timestamp) return;
+    var pk = toPKShifted(r.timestamp); if (!pk) return;
+    var key = pkMonthKey(pk);
+    if (!byMonth[key]) byMonth[key] = { present: 0, total: 0 };
+    byMonth[key].total++;
+    if (r.status === 'present') byMonth[key].present++;
+  });
+  var months = Object.keys(byMonth).sort();
+  var canvas = resetChartCanvas('wrap-chart-monthly', 'chart-monthly');
+  destroyChart('chart-monthly');
+  if (!months.length) { document.getElementById('wrap-chart-monthly').innerHTML = '<div class="chart-empty">No check-ins in this range.</div>'; return; }
+  var pcts = months.map(function(m){ return Math.round((byMonth[m].present / byMonth[m].total) * 100); });
+  analyticsCharts['chart-monthly'] = new Chart(canvas, {
+    type: 'line',
+    data: { labels: months, datasets: [{ label: 'Attendance %', data: pcts,
+      borderColor: CHART_COLORS.gold, backgroundColor: 'rgba(212,175,106,0.15)', fill: true, tension: 0.3, pointBackgroundColor: CHART_COLORS.gold, pointRadius: 4 }] },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false },
+        tooltip: { callbacks: { label: function(ctx){ var m = months[ctx.dataIndex]; return ctx.parsed.y + '% (' + byMonth[m].present + '/' + byMonth[m].total + ')'; } } } },
+      scales: {
+        x: { ticks: { color: CHART_COLORS.slate }, grid: { display: false } },
+        y: { beginAtZero: true, max: 100, ticks: { color: CHART_COLORS.slate, callback: function(v){ return v + '%'; } }, grid: { color: CHART_COLORS.grid } }
+      } }
+  });
+}
+
+/* --- Backend summary rollup (stat cards + export), HOD-scoped server-side --- */
+var _summaryRows = [];
+var _summaryRange = null;
+function summaryQuery() {
+  var from = document.getElementById('an-date-from') ? document.getElementById('an-date-from').value : '';
+  var to = document.getElementById('an-date-to') ? document.getElementById('an-date-to').value : '';
+  var params = [];
+  if (from) params.push('from=' + encodeURIComponent(from));
+  if (to) params.push('to=' + encodeURIComponent(to));
+  return params.length ? '?' + params.join('&') : '';
+}
+async function loadAnalyticsSummary() {
+  try {
+    var data = await api('/api/analytics/summary' + summaryQuery());
+    _summaryRows = data.faculty || [];
+    _summaryRange = data.range || null;
+    var o = data.overall || {};
+    var set = function(id, v){ var el = document.getElementById(id); if (el) el.textContent = v; };
+    set('sum-avg', (o.avg_attendance_pct != null ? o.avg_attendance_pct : 0) + '%');
+    set('sum-faculty', o.faculty_count || 0);
+    set('sum-present', o.total_present_days || 0);
+    set('sum-late', o.total_late_incidents || 0);
+    set('sum-absent', o.total_absent_days || 0);
+  } catch (e) { console.warn('summary load failed', e); }
+}
+function getSummaryExportData() {
+  return _summaryRows.map(function(r){
+    return {
+      'Faculty Name': r.name || r.faculty_id, 'Teacher ID': r.teacher_id || '—', 'Department': r.department || '—',
+      'Working Days': r.working_days, 'Present': r.days_present, 'Late': r.days_late,
+      'Total Late (min)': r.total_late_minutes, 'Leave Used': r.leave_used, 'Absent': r.days_absent,
+      'Attendance %': r.attendance_pct + '%'
+    };
+  });
+}
+function summaryFilenameBase() { var r = _summaryRange; return r ? ('attendance_summary_' + r.from + '_to_' + r.to) : 'attendance_summary'; }
+function exportSummary(format) {
+  if (!_summaryRows.length) { alert('No summary data to export yet — open Analytics first.'); return; }
+  var data = getSummaryExportData();
+  var base = summaryFilenameBase();
+  if (format === 'excel') {
+    try {
+      if (typeof XLSX === 'undefined') throw new Error('Excel library failed to load');
+      var ws = XLSX.utils.json_to_sheet(data);
+      ws['!cols'] = Object.keys(data[0]).map(function(k){ return { wch: Math.max(k.length, 14) }; });
+      var wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Summary');
+      XLSX.writeFile(wb, base + '.xlsx');
+    } catch (err) { console.error(err); alert('Excel export failed: ' + err.message); }
+  } else {
+    try {
+      if (typeof window.jspdf === 'undefined') throw new Error('PDF library failed to load');
+      var jsPDF = window.jspdf.jsPDF;
+      var doc = new jsPDF({ orientation: 'landscape' });
+      if (typeof doc.autoTable !== 'function') throw new Error('PDF table plugin failed to load');
+      doc.setFontSize(14); doc.text('SmartAttend — Department Attendance Summary', 14, 15);
+      doc.setFontSize(9); doc.setTextColor(100);
+      var rangeTxt = _summaryRange ? (_summaryRange.from + ' to ' + _summaryRange.to) : '';
+      doc.text(rangeTxt + '   ·   Generated ' + new Date().toLocaleString(), 14, 21);
+      var columns = Object.keys(data[0]);
+      doc.autoTable({ head: [columns], body: data.map(function(row){ return columns.map(function(c){ return row[c]; }); }),
+        startY: 26, styles: { fontSize: 8, cellPadding: 2 }, headStyles: { fillColor: [30, 41, 59] } });
+      doc.save(base + '.pdf');
+    } catch (err) { console.error(err); alert('PDF export failed: ' + err.message); }
   }
 }
 
@@ -779,12 +1111,6 @@ function renderDeptAnalytics() {
   if (q) {
     rows = rows.filter(function(r){ return (r.name || '').toLowerCase().includes(q) || (r.teacher_id || '').toLowerCase().includes(q); });
   }
-
-  var totalLate = deptAnalyticsCache.reduce(function(acc, r){ return acc + r.totalLateMin; }, 0);
-  var lateCount = deptAnalyticsCache.filter(function(r){ return r.totalLateMin > 0; }).length;
-  document.getElementById('dept-late-total').textContent = totalLate;
-  document.getElementById('dept-late-count').textContent = lateCount;
-  document.getElementById('dept-late-avg').textContent = deptAnalyticsCache.length ? Math.round(totalLate / deptAnalyticsCache.length) : 0;
 
   if (!rows.length) {
     tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><div class="empty-title">' + (q ? 'No matches' : 'No faculty yet') + '</div></div></td></tr>';
