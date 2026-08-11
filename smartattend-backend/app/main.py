@@ -186,7 +186,9 @@ def check_movement_against_last_record(db: Session, faculty_id: int, new_lat: fl
     )
 
 
-ADMIN_SESSION_TTL_HOURS = 24
+# 30 days by default so admins/HODs aren't forced to log in again every day.
+# Override with the env var if you want shorter-lived sessions.
+ADMIN_SESSION_TTL_HOURS = int(os.getenv("ADMIN_SESSION_TTL_HOURS", "720"))
 
 # Late-arrival tracking — fixed daily start time for everyone (Pakistan local time).
 # Server timestamps are stored in UTC, so we convert before comparing.
@@ -807,7 +809,7 @@ def admin_login(payload: schemas.AdminLoginRequest, db: Session = Depends(get_db
     )
 
 
-HOD_SESSION_TTL_HOURS = 24
+HOD_SESSION_TTL_HOURS = int(os.getenv("HOD_SESSION_TTL_HOURS", "720"))  # 30 days, see ADMIN_SESSION_TTL_HOURS
 
 
 def get_current_hod(authorization: Optional[str] = Header(None), db: Session = Depends(get_db)) -> models.HOD:

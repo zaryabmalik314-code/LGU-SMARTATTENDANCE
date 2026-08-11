@@ -2205,9 +2205,13 @@ function stopExitCamera(){
 var exitGpsSettled=false, exitInsideCampus=false;
 function startExitGeoWatch(){
   exitGeoReadings=[];exitGpsSettled=false;exitInsideCampus=false;
-  setExitGateChip('locating','Checking your location&hellip;');
   var btn=document.getElementById('xScanFaceGateBtn');
   if(btn)btn.disabled=true;
+  if(isDesktopDevice()){
+    setExitGateChip('denied','Check-out works only on your registered phone. Open SmartAttend on your mobile — a PC has no GPS or reliable camera for verification.');
+    return;
+  }
+  setExitGateChip('locating','Checking your location&hellip;');
   if(exitGeoWatchId!==null && navigator.geolocation){navigator.geolocation.clearWatch(exitGeoWatchId);exitGeoWatchId=null;}
   if(!navigator.geolocation){
     setExitGateChip('denied','GPS not supported on this device');
@@ -3257,9 +3261,26 @@ function _clearGeoWatchdog(){
   if(geoWatchdog){clearTimeout(geoWatchdog);geoWatchdog=null;}
 }
 
+// A laptop/desktop has no GPS chip and usually no dependable front camera for
+// liveness, so check-in genuinely can't work there. Detect it up front and say
+// so plainly, instead of letting the location watch time out into a generic
+// "No location fix" error that looks like something is broken.
+function isDesktopDevice(){
+  var ua=navigator.userAgent||'';
+  var mobileUA=/Android|iPhone|iPad|iPod|Windows Phone|Mobile|Silk|Kindle/i.test(ua);
+  var hasTouch=(navigator.maxTouchPoints||0)>0 || 'ontouchstart' in window;
+  return !mobileUA && !hasTouch;
+}
+
 function startGeoWatch(){
   geoReadings=[];geoSettled=false;
   _clearGeoWatchdog();
+  if(isDesktopDevice()){
+    setGeoChip('denied','Check-in works only on your registered phone. Open SmartAttend on your mobile — a PC has no GPS or reliable camera for verification.');
+    var _sb=document.getElementById('scanFaceBtn');
+    if(_sb)_sb.disabled=true;
+    return;
+  }
   setGeoChip('locating','Checking your location…');
   if(!navigator.geolocation){
     setGeoChip('denied','GPS not supported on this device');

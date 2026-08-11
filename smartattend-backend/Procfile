@@ -1,1 +1,8 @@
-web: uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers ${WEB_CONCURRENCY:-4}
+# IMPORTANT: keep this at a single worker.
+# Live dashboard updates use an in-memory WebSocket manager (app/ws_manager.py),
+# which only broadcasts to connections held by the SAME process. Running multiple
+# workers means a check-in handled by one worker never reaches a dashboard
+# connected to another worker — the "Live" badge shows connected but events
+# silently never arrive, forcing a manual refresh. Do NOT raise this above 1
+# unless you also move broadcasts to a shared broker (e.g. Redis pub/sub).
+web: uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1
