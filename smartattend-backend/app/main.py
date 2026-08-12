@@ -3,12 +3,15 @@ from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, func
+from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 import asyncio
 import json
 import secrets
 import os
+import threading
+import time
 
 from . import models, schemas
 from .database import engine, get_db, run_simple_migrations, SessionLocal
@@ -20,6 +23,41 @@ from . import push
 
 models.Base.metadata.create_all(bind=engine)
 run_simple_migrations()
+
+
+class RateLimiter:
+    """Simple in-memory per-IP rate limiter (single-worker safe)."""
+
+    def __init__(self, max_hits: int = 30, window_seconds: int = 60):
+        self._max = max_hits
+        self._window = window_seconds
+        self._hits: dict[str, list[float]] = defaultdict(list)
+        self._lock = threading.Lock()
+
+    def check(self, key: str):
+        now = time.monotonic()
+        with self._lock:
+            bucket = self._hits[key]
+            cutoff = now - self._window
+            self._hits[key] = bucket = [t for t in bucket if t > cutoff]
+            if len(bucket) >= self._max:
+                raise HTTPException(status_code=429, detail="Too many requests — please slow down")
+            bucket.append(now)
+
+
+_public_limiter = RateLimiter(max_hits=30, window_seconds=60)
+_enroll_limiter = RateLimiter(max_hits=5, window_seconds=300)
+
+
+def rate_limit_public(request: Request):
+    ip = request.client.host if request.client else "unknown"
+    _public_limiter.check(ip)
+
+
+def rate_limit_enroll(request: Request):
+    ip = request.client.host if request.client else "unknown"
+    _enroll_limiter.check(ip)
+
 
 app = FastAPI(title="SmartAttend API")
 
@@ -465,7 +503,7 @@ async def faculty_status_websocket(websocket: WebSocket, teacher_id: str):
 
 
 @app.get("/api/faculty/check-status/{teacher_id}")
-def check_faculty_status(teacher_id: str, db: Session = Depends(get_db)):
+def check_faculty_status(teacher_id: str, db: Session = Depends(get_db), _rl=Depends(rate_limit_public)):
     """Public endpoint — returns only the approval status (no sensitive data)."""
     faculty = db.query(models.Faculty).filter(models.Faculty.teacher_id == teacher_id).first()
     if not faculty:
@@ -482,7 +520,7 @@ def root():
 
 
 @app.post("/api/faculty/enroll", response_model=schemas.FacultyOut)
-def enroll_faculty(payload: schemas.FacultyEnrollRequest, db: Session = Depends(get_db)):
+def enroll_faculty(payload: schemas.FacultyEnrollRequest, db: Session = Depends(get_db), _rl=Depends(rate_limit_enroll)):
     if not payload.email.lower().endswith("@lgu.edu.pk"):
         raise HTTPException(status_code=400, detail="Only @lgu.edu.pk email addresses are allowed")
 
@@ -562,6 +600,20 @@ def approve_faculty(
         "status": faculty.approval_status,
         "review_note": faculty.review_note,
     })
+    if payload.approval_status == "approved":
+        push.push_to_subscribers(
+            db, "faculty", faculty.id,
+            "Account Approved",
+            f"Welcome, {faculty.name}! Your SmartAttend account is now active — log in to start marking attendance.",
+            url="./index.html", tag=f"approval-{faculty.id}",
+        )
+    elif payload.approval_status == "rejected":
+        push.push_to_subscribers(
+            db, "faculty", faculty.id,
+            "Enrollment Update",
+            payload.note or "Your enrollment request was not approved. Open the app for details.",
+            url="./signup.html", tag=f"approval-{faculty.id}",
+        )
     return faculty
 
 
@@ -661,7 +713,7 @@ def mark_manual_attendance(
 
 
 @app.post("/api/auth/login", response_model=schemas.LoginResponse)
-def login(payload: schemas.LoginRequest, request: Request, db: Session = Depends(get_db)):
+def login(payload: schemas.LoginRequest, request: Request, db: Session = Depends(get_db), _rl=Depends(rate_limit_public)):
     faculty = db.query(models.Faculty).filter(models.Faculty.teacher_id == payload.teacher_id).first()
     if not faculty or not verify_pin(payload.pin, faculty.pin_hash):
         return schemas.LoginResponse(status="invalid_credentials", faculty=None)
@@ -2719,9 +2771,11 @@ def push_subscribe(
     """
     stype = payload.subscriber_type
     if stype == "faculty":
-        if not payload.faculty_id:
-            raise HTTPException(status_code=400, detail="faculty_id is required for faculty subscriptions")
-        faculty = db.query(models.Faculty).filter(models.Faculty.id == payload.faculty_id).first()
+        faculty = None
+        if payload.faculty_id:
+            faculty = db.query(models.Faculty).filter(models.Faculty.id == payload.faculty_id).first()
+        elif payload.teacher_id:
+            faculty = db.query(models.Faculty).filter(models.Faculty.teacher_id == payload.teacher_id).first()
         if not faculty:
             raise HTTPException(status_code=404, detail="Faculty not found")
         subscriber_id = faculty.id

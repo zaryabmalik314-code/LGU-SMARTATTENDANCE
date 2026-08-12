@@ -593,7 +593,8 @@ class PushSubscribeRequest(BaseModel):
     endpoint: str
     keys: PushKeys
     subscriber_type: str  # "faculty" | "admin" | "hod"
-    faculty_id: Optional[int] = None  # required when subscriber_type == "faculty"
+    faculty_id: Optional[int] = None
+    teacher_id: Optional[str] = None  # alternative to faculty_id for pending faculty
     user_agent: Optional[str] = None
 
 

@@ -1238,6 +1238,7 @@ function renderPendNote(note, isRejected){
 // ---- Live WebSocket for approval status ----
 var _statusWS=null;
 var _wsRetryTimer=null;
+var _wsRetryDelay=5000;
 
 function connectStatusWS(teacherId){
   if(_statusWS){try{_statusWS.close();}catch(e){}_statusWS=null;}
@@ -1251,6 +1252,7 @@ function connectStatusWS(teacherId){
     _statusWS=ws;
 
     ws.onopen=function(){
+      _wsRetryDelay=5000;
       var dot=document.getElementById('pendLiveDot');
       var txt=document.getElementById('pendLiveText');
       if(dot)dot.style.background='#4ade80';
@@ -1268,15 +1270,17 @@ function connectStatusWS(teacherId){
       var dot=document.getElementById('pendLiveDot');
       var txt=document.getElementById('pendLiveText');
       if(dot)dot.style.background='#fbbf24';
-      if(txt)txt.textContent='Reconnecting…';
-      _wsRetryTimer=setTimeout(function(){connectStatusWS(teacherId);},5000);
+      if(txt)txt.textContent='Reconnecting in '+Math.round(_wsRetryDelay/1000)+'s…';
+      _wsRetryTimer=setTimeout(function(){connectStatusWS(teacherId);},_wsRetryDelay);
+      _wsRetryDelay=Math.min(_wsRetryDelay*2, 60000);
     };
 
     ws.onerror=function(){
       try{ws.close();}catch(e){}
     };
   }catch(e){
-    _wsRetryTimer=setTimeout(function(){connectStatusWS(teacherId);},5000);
+    _wsRetryTimer=setTimeout(function(){connectStatusWS(teacherId);},_wsRetryDelay);
+    _wsRetryDelay=Math.min(_wsRetryDelay*2, 60000);
   }
 }
 
@@ -1371,10 +1375,16 @@ function enablePendNotifications(){
             if(!sub)return;
             var fac=getFaculty();
             var tid=(fac&&fac.teacherId)||'';
+            var subJson=sub.toJSON();
             return fetch(API_BASE_URL+'/api/push/subscribe',{
               method:'POST',
               headers:{'Content-Type':'application/json'},
-              body:JSON.stringify({teacher_id:tid,subscription:sub.toJSON()})
+              body:JSON.stringify({
+                endpoint:subJson.endpoint,
+                keys:{p256dh:subJson.keys.p256dh,auth:subJson.keys.auth},
+                subscriber_type:'faculty',
+                teacher_id:tid
+              })
             });
           });
         }).catch(function(){});
