@@ -73,14 +73,42 @@ async def on_startup():
     _start_checkout_reminder_scheduler()
 
 
+_checkout_reminder_sent_today = False
+
+
 def run_checkout_reminders():
     """
-    Daily job: notify faculty who checked in today (PKT) but never checked out.
-    Opens its own DB session — it runs on the scheduler thread, not a request.
+    Runs every 5 minutes. Reads the active TimeWindow end_time, adds 15
+    minutes, and sends a push reminder to faculty who checked in but haven't
+    checked out — but only once per day, and only after end_time + 15 min.
     """
+    global _checkout_reminder_sent_today
     db = SessionLocal()
     try:
         local_now = datetime.utcnow() + timedelta(hours=PKT_OFFSET_HOURS)
+
+        # Reset the daily flag at midnight
+        if local_now.hour == 0 and local_now.minute < 5:
+            _checkout_reminder_sent_today = False
+            return
+        if _checkout_reminder_sent_today:
+            return
+
+        window = get_active_time_window(db)
+        end_time_str = window.end_time if window else "16:00"
+        weekday = local_now.strftime("%A").lower()
+        day_cfg = _parse_overrides(window).get(weekday, {}) if window else {}
+        if day_cfg.get("off"):
+            return
+        end_time_str = day_cfg.get("end") or end_time_str
+        try:
+            eh, em = (int(p) for p in end_time_str.split(":"))
+        except (ValueError, AttributeError):
+            eh, em = 16, 0
+        reminder_time = local_now.replace(hour=eh, minute=em, second=0, microsecond=0) + timedelta(minutes=15)
+        if local_now < reminder_time:
+            return
+
         local_day_start = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
         day_start_utc = local_day_start - timedelta(hours=PKT_OFFSET_HOURS)
 
@@ -106,7 +134,8 @@ def run_checkout_reminders():
                 url="./index.html",
                 tag="checkout-reminder",
             )
-        print(f"[checkout-reminder] {len(pending)} faculty reminded to check out")
+        _checkout_reminder_sent_today = True
+        print(f"[checkout-reminder] {len(pending)} faculty reminded to check out (trigger: {end_time_str} + 15min)")
     except Exception as e:
         print(f"[checkout-reminder] job failed: {e}")
     finally:
@@ -114,26 +143,25 @@ def run_checkout_reminders():
 
 
 def _start_checkout_reminder_scheduler():
-    """Single in-process daily scheduler. Guarded against double-start."""
+    """Single in-process scheduler. Checks every 5 min, fires once daily after end_time + 15 min."""
     global _scheduler
     if _scheduler is not None:
         return
     try:
         from apscheduler.schedulers.background import BackgroundScheduler
-        from apscheduler.triggers.cron import CronTrigger
+        from apscheduler.triggers.interval import IntervalTrigger
     except Exception as e:
         print(f"[checkout-reminder] APScheduler unavailable, scheduler disabled: {e}")
         return
-    hour = int(os.getenv("CHECKOUT_REMINDER_UTC_HOUR", "12"))  # 12:00 UTC = 17:00 PKT
     _scheduler = BackgroundScheduler(timezone="UTC")
     _scheduler.add_job(
         run_checkout_reminders,
-        CronTrigger(hour=hour, minute=0),
+        IntervalTrigger(minutes=5),
         id="checkout_reminders",
         replace_existing=True,
     )
     _scheduler.start()
-    print(f"[checkout-reminder] scheduler started — daily at {hour:02d}:00 UTC")
+    print("[checkout-reminder] scheduler started — checking every 5 min for end_time + 15min")
 
 
 # Locked to actual known frontend origins — GitHub Pages (teacher app +
@@ -2642,6 +2670,19 @@ def get_leave_balance(faculty_id: int, db: Session = Depends(get_db), authorizat
 
     b = get_or_create_leave_balance(db, faculty_id)
 
+    elapsed = 0
+    active_sem = db.query(models.Semester).filter(models.Semester.is_active == True).first()  # noqa: E712
+    if active_sem:
+        try:
+            from datetime import date as _date
+            sem_start = _date.fromisoformat(active_sem.start_date)
+            today = (datetime.utcnow() + timedelta(hours=PKT_OFFSET_HOURS)).date()
+            end = min(today, _date.fromisoformat(active_sem.end_date))
+            if sem_start <= end:
+                elapsed = _working_days_in_range(db, faculty.department, sem_start, end)
+        except Exception:
+            pass
+
     return schemas.LeaveBalanceOut(
         faculty_id=b.faculty_id,
         semester_label=b.semester_label,
@@ -2651,6 +2692,7 @@ def get_leave_balance(faculty_id: int, db: Session = Depends(get_db), authorizat
         working_days_total=b.working_days_total,
         working_days_attended=b.working_days_attended,
         working_days_remaining=max(0, b.working_days_total - b.working_days_attended),
+        working_days_elapsed=elapsed,
         late_margin_total=b.late_margin_total_minutes,
         late_margin_used=b.late_margin_used_minutes,
         late_margin_remaining=max(0, b.late_margin_total_minutes - b.late_margin_used_minutes),

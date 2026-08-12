@@ -225,6 +225,7 @@ class LeaveBalanceOut(BaseModel):
     working_days_total: int
     working_days_attended: int
     working_days_remaining: int
+    working_days_elapsed: int = 0
     late_margin_total: int
     late_margin_used: int
     late_margin_remaining: int

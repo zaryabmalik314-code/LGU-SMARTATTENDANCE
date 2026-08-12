@@ -876,6 +876,13 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
         </div>
         <div class="kpi-row">
           <div class="kpi-head">
+            <span class="kpi-lbl"><svg class="i"><use href="#ic-x-circle"/></svg> Days absent</span>
+            <span class="kpi-val"><span id="kpiAbsentUsed">0</span><span class="kpi-of" id="kpiAbsentOf">days</span></span>
+          </div>
+          <div class="kpi-foot" id="kpiAbsentFoot">Working days missed this semester</div>
+        </div>
+        <div class="kpi-row">
+          <div class="kpi-head">
             <span class="kpi-lbl"><svg class="i"><use href="#ic-clock"/></svg> Late arrival margin</span>
             <span class="kpi-val"><span id="kpiLateUsed">143</span><span class="kpi-of" id="kpiLateOf">/ 480 min</span></span>
           </div>
@@ -4233,7 +4240,7 @@ function renderHistoryRows(rows){
 // endpoint exists yet for leave balances. Flagged in the chat response.
 // NOTE: leave balance / off-days / late-margin figures below are cached/fallback data —
 // wired to real API endpoint with syncLeaveBalance()
-var SEM_DATA={leaveUsed:3,leaveTotal:20,earnedDays:72,earnedTotal:365,lateMins:143,lateTotal:480};
+var SEM_DATA={leaveUsed:3,leaveTotal:20,earnedDays:72,earnedTotal:365,elapsedDays:0,lateMins:143,lateTotal:480};
 
 function animateSemRings(){
   function num(v){ return (v==null||isNaN(v))?0:v; }
@@ -4256,11 +4263,13 @@ function animateSemRings(){
   }
   setBudget('kpiLeaveUsed','kpiLeaveOf','kpiLeaveFill','kpiLeaveFoot', SEM_DATA.leaveUsed, SEM_DATA.leaveTotal, 'days');
   setBudget('kpiLateUsed','kpiLateOf','kpiLateFill','kpiLateFoot', SEM_DATA.lateMins, SEM_DATA.lateTotal, 'min');
-  // Days attended is just a running count of days shown up — there is no fixed
-  // number of days a faculty "must" attend, so no denominator or percentage.
   var earned=num(SEM_DATA.earnedDays);
   setText('kpiEarnUsed', earned);
   setText('kpiEarnFoot', (earned===1?'1 day':earned+' days')+' checked in this semester');
+  var absentDays=Math.max(0, num(SEM_DATA.elapsedDays) - earned - num(SEM_DATA.leaveUsed));
+  setText('kpiAbsentUsed', absentDays);
+  setText('kpiAbsentOf', absentDays===1?'day':'days');
+  setText('kpiAbsentFoot', absentDays+' working '+(absentDays===1?'day':'days')+' missed this semester');
 }
 
 function syncLeaveBalance(){
@@ -4319,6 +4328,7 @@ function syncLeaveBalance(){
           leaveTotal: data.casual_leave_total,
           earnedDays: data.working_days_attended,
           earnedTotal: data.working_days_total,
+          elapsedDays: data.working_days_elapsed || 0,
           lateMins: data.late_margin_used,
           lateTotal: data.late_margin_total
         };
