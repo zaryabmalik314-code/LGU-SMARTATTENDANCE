@@ -483,6 +483,9 @@ def root():
 
 @app.post("/api/faculty/enroll", response_model=schemas.FacultyOut)
 def enroll_faculty(payload: schemas.FacultyEnrollRequest, db: Session = Depends(get_db)):
+    if not payload.email.lower().endswith("@lgu.edu.pk"):
+        raise HTTPException(status_code=400, detail="Only @lgu.edu.pk email addresses are allowed")
+
     existing = db.query(models.Faculty).filter(
         (models.Faculty.email == payload.email) | (models.Faculty.teacher_id == payload.teacher_id)
     ).first()

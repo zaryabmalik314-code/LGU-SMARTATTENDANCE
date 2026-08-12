@@ -194,7 +194,7 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
         </div>
         <div class="field-group">
           <label class="field-label">Email</label>
-          <input type="email" class="field-input" id="suEmail" placeholder="name@university.edu.pk" autocomplete="email">
+          <input type="email" class="field-input" id="suEmail" placeholder="name@lgu.edu.pk" autocomplete="email">
         </div>
         <div class="field-group">
           <label class="field-label">Department</label>
@@ -1107,8 +1107,8 @@ function signupGoFace(){
   if(!/^\d{4}$/.test(pin)){
     err.textContent='PIN must be exactly 4 digits.';err.style.display='block';return;
   }
-  if(!/^\S+@\S+\.\S+$/.test(email)){
-    err.textContent='Please enter a valid email address.';err.style.display='block';return;
+  if(!/^[^\s@]+@lgu\.edu\.pk$/i.test(email)){
+    err.textContent='Only @lgu.edu.pk email addresses are allowed.';err.style.display='block';return;
   }
   err.style.display='none';
   signupDraft={name:name,teacherId:teacherId,email:email,department:dept,pin:pin};
