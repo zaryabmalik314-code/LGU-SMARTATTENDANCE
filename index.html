@@ -3560,8 +3560,8 @@ function _startGeoWatch(){
       stopGeoWatch();
       if(inside){
         setGeoChip('ready','On campus · '+dist+'m from '+zInfo.label);
-        var btn=document.getElementById('scanFaceBtn');
-        if(btn && !attendanceMarked){btn.disabled=false;openScanFace();runFace();}
+        paintCheckinButton();
+        if(!attendanceMarked && !checkinClosedReason()){openScanFace();runFace();}
       } else {
         setGeoChip('denied','Outside allowed zone · '+dist+'m from '+zInfo.label);
       }
@@ -3626,15 +3626,20 @@ var faceRan=false;
 var _todaySched=null;
 function refreshTodaySchedule(){
   return apiRequest('/api/time-windows/today','GET').then(function(s){
-    _todaySched=s; if(typeof paintCheckinButton==='function') paintCheckinButton(); return s;
-  }).catch(function(){});
+    _todaySched=s;
+    if(typeof paintCheckinButton==='function') paintCheckinButton();
+    if(geoSettled && geoInsideCampus && !attendanceMarked && !checkinClosedReason() && !faceRan){
+      openScanFace(); runFace();
+    }
+    return s;
+  }).catch(function(){ _todaySched=_todaySched||{start_time:'08:00',end_time:'16:00',grace_minutes:10}; paintCheckinButton(); });
 }
 function _to12h(t){ if(!t) return '—'; var p=t.split(':'),h=+p[0],m=+p[1],ap=h>=12?'PM':'AM'; h=h%12||12; return h+':'+(m<10?'0':'')+m+' '+ap; }
 function _nowMinLocal(){ var d=new Date(); return d.getHours()*60+d.getMinutes(); }
 // null = check-in allowed now; otherwise a human-readable reason it's closed.
 function checkinClosedReason(){
   var s=_todaySched;
-  if(!s) return null;                 // unknown -> let the backend decide (fail-open)
+  if(!s) return 'Loading schedule…';
   if(s.is_day_off) return 'Today is a non-working day — check-in is disabled.';
   if(!s.start_time || !s.end_time) return null;
   var sp=s.start_time.split(':'), ep=s.end_time.split(':');
