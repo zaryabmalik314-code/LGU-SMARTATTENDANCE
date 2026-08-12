@@ -15,7 +15,7 @@ from .database import engine, get_db, run_simple_migrations, SessionLocal
 from .geofence import pick_best_reading, check_location, check_impossible_movement, check_gps_spoofing
 from .face_verify import verify_face_from_frames, enroll_from_frames, embeddings_to_str
 from .auth import hash_pin, verify_pin, hash_password, verify_password
-from .ws_manager import manager
+from .ws_manager import manager, faculty_status_manager
 from . import push
 
 models.Base.metadata.create_all(bind=engine)
@@ -29,7 +29,9 @@ _scheduler = None
 
 @app.on_event("startup")
 async def on_startup():
-    manager.set_loop(asyncio.get_running_loop())
+    loop = asyncio.get_running_loop()
+    manager.set_loop(loop)
+    faculty_status_manager.set_loop(loop)
     _start_checkout_reminder_scheduler()
 
 
@@ -449,6 +451,31 @@ async def hod_websocket(websocket: WebSocket, token: str):
         manager.disconnect(websocket)
 
 
+@app.websocket("/ws/faculty-status")
+async def faculty_status_websocket(websocket: WebSocket, teacher_id: str):
+    """Faculty connects after signup to receive live approval/rejection updates."""
+    await faculty_status_manager.connect(teacher_id, websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except Exception:
+        pass
+    finally:
+        faculty_status_manager.disconnect(teacher_id, websocket)
+
+
+@app.get("/api/faculty/check-status/{teacher_id}")
+def check_faculty_status(teacher_id: str, db: Session = Depends(get_db)):
+    """Public endpoint — returns only the approval status (no sensitive data)."""
+    faculty = db.query(models.Faculty).filter(models.Faculty.teacher_id == teacher_id).first()
+    if not faculty:
+        raise HTTPException(status_code=404, detail="No account found for this Teacher ID")
+    return {
+        "status": faculty.approval_status,
+        "review_note": faculty.review_note if faculty.approval_status == "rejected" else None,
+    }
+
+
 @app.get("/")
 def root():
     return {"status": "ok", "service": "smartattend-backend"}
@@ -526,6 +553,11 @@ def approve_faculty(
     manager.broadcast_threadsafe({
         "event": "approval_update",
         "data": {"faculty_id": faculty.id, "faculty_name": faculty.name, "status": faculty.approval_status}
+    })
+    faculty_status_manager.notify_threadsafe(faculty.teacher_id, {
+        "event": "status_update",
+        "status": faculty.approval_status,
+        "review_note": faculty.review_note,
     })
     return faculty
 

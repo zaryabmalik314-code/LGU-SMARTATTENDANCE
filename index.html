@@ -2674,6 +2674,23 @@ function uploadAvatarPhoto(dataUrl){
   });
 }
 
+function uploadPendingDp(teacherId, pin){
+  var dp=localStorage.getItem('sa_pending_dp');
+  if(!dp)return;
+  apiRequest('/api/faculty/upload-photo','POST',{
+    teacher_id:teacherId, pin:pin, photo_base64:dp
+  }).then(function(resp){
+    if(resp&&resp.status==='ok'){
+      var synced=(resp.faculty&&resp.faculty.profile_photo)||dp;
+      setPhoto(synced);
+      applyAvatarPhoto();
+    }
+    localStorage.removeItem('sa_pending_dp');
+  }).catch(function(){
+    localStorage.removeItem('sa_pending_dp');
+  });
+}
+
 function getLocalHistory(){
   try{return JSON.parse(localStorage.getItem(LS_HISTORY)||'[]');}catch(e){return [];}
 }
@@ -3109,6 +3126,7 @@ function doLogin(){
       setLoggedIn(true);
       document.getElementById('liTeacherId').value='';
       document.getElementById('liPin').value='';
+      uploadPendingDp(teacherId, pin);
       enterMainApp();
     } else if(status==='pending'){
       err.textContent='Your account is still waiting on admin approval.';err.style.display='block';

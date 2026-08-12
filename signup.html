@@ -308,13 +308,20 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
 
   <!-- ══════════════ PENDING APPROVAL ══════════════ -->
   <div class="screen" id="scr-pending">
-    <div class="splash-bg">
-      <div class="pending-hero"><svg class="i"><use href="#ic-loader"/></svg></div>
-      <div class="app-title" style="font-size:22px">Pending Approval</div>
-      <div class="app-sub" style="margin-bottom:20px">Your registration has been submitted</div>
+    <div class="splash-bg" style="justify-content:flex-start;padding-top:28px">
+      <div class="pending-hero" id="pendHeroIcon"><svg class="i"><use href="#ic-loader"/></svg></div>
+      <div class="app-title" style="font-size:22px" id="pendTitle">Pending Approval</div>
+      <div class="app-sub" style="margin-bottom:20px" id="pendSubtitle">Your registration has been submitted</div>
+
+      <!-- Live status indicator -->
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:20px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:8px 16px">
+        <div id="pendLiveDot" style="width:8px;height:8px;border-radius:50%;background:#4ade80;animation:livePulse 1.4s infinite;flex-shrink:0"></div>
+        <span id="pendLiveText" style="font-size:11px;color:rgba(255,255,255,.7);font-weight:500">Listening for updates&hellip;</span>
+      </div>
+
       <div class="login-card" style="text-align:center">
         <div style="font-size:12px;color:rgba(255,255,255,.6);line-height:1.7;margin-bottom:16px">
-          An administrator needs to review and approve your account before you can log in. This usually takes 1&ndash;2 working days.
+          An administrator needs to review and approve your account before you can log in. You&rsquo;ll be notified automatically &mdash; no need to refresh.
         </div>
         <div style="background:rgba(255,255,255,.06);border-radius:12px;padding:12px;margin-bottom:16px;text-align:left">
           <div style="font-size:10px;color:var(--gold2);letter-spacing:.05em;margin-bottom:4px">SUBMITTED AS</div>
@@ -325,9 +332,41 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
           <div style="font-size:10px;color:#f87171;letter-spacing:.05em;margin-bottom:4px">NOTE FROM ADMIN</div>
           <div style="font-size:12px;color:#fff;line-height:1.5" id="pendNoteText">&mdash;</div>
         </div>
-        <button class="btn-outline" style="color:#fff;border-color:rgba(255,255,255,.25)" onclick="checkApprovalStatus()"><span class="btn-ico"><svg class="i"><use href="#ic-refresh"/></svg></span>Check Status</button>
-        <button class="link-btn" style="margin-top:6px" onclick="clearSignupAndRestart()">Start over with different details</button>
       </div>
+
+      <!-- While you wait: DP + Notifications -->
+      <div id="pendSetupCards" style="width:100%;margin-top:8px">
+        <div style="font-size:10px;color:var(--gold2);letter-spacing:.1em;font-weight:600;margin-bottom:12px;text-align:center">WHILE YOU WAIT</div>
+
+        <!-- Add profile photo -->
+        <div id="pendDpCard" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:16px;margin-bottom:12px;display:flex;align-items:center;gap:14px">
+          <div style="width:48px;height:48px;border-radius:50%;background:rgba(201,168,76,.15);border:1.5px dashed rgba(201,168,76,.4);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:22px;color:var(--gold2);overflow:hidden" id="pendDpPreview">
+            <svg class="i"><use href="#ic-camera"/></svg>
+          </div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:600;color:#fff;margin-bottom:3px">Add a profile photo</div>
+            <div style="font-size:11px;color:rgba(255,255,255,.45);line-height:1.4">Your colleagues will see this on the dashboard</div>
+          </div>
+          <label style="background:rgba(201,168,76,.18);border:1px solid rgba(201,168,76,.35);color:var(--gold2);font-size:11px;padding:7px 14px;border-radius:20px;font-weight:600;cursor:pointer;flex-shrink:0;letter-spacing:.02em">
+            Upload
+            <input type="file" accept="image/*" id="pendDpInput" style="display:none" onchange="handlePendDp(this)">
+          </label>
+        </div>
+
+        <!-- Enable notifications -->
+        <div id="pendNotifCard" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:16px;display:flex;align-items:center;gap:14px">
+          <div style="width:48px;height:48px;border-radius:14px;background:rgba(59,130,246,.15);border:1.5px solid rgba(59,130,246,.25);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:22px;color:#60a5fa">
+            <svg class="i" viewBox="0 0 24 24" style="fill:none;stroke:currentColor"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          </div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:600;color:#fff;margin-bottom:3px">Enable notifications</div>
+            <div style="font-size:11px;color:rgba(255,255,255,.45);line-height:1.4">Get notified when your account is approved</div>
+          </div>
+          <button id="pendNotifBtn" onclick="enablePendNotifications()" style="background:rgba(59,130,246,.2);border:1px solid rgba(59,130,246,.35);color:#60a5fa;font-size:11px;padding:7px 14px;border-radius:20px;font-weight:600;cursor:pointer;flex-shrink:0;font-family:inherit;letter-spacing:.02em">Enable</button>
+        </div>
+      </div>
+
+      <button class="link-btn" style="margin-top:16px" onclick="clearSignupAndRestart()">Start over with different details</button>
     </div>
   </div>
 
@@ -1172,10 +1211,16 @@ function finishSignup(facultyId){
   setFaculty(fac);
   setStatus('pending');
   stopBioCamera();
-  document.getElementById('pendName').textContent=fac.name;
-  document.getElementById('pendMeta').textContent=fac.teacherId+' · '+fac.department;
-  renderPendNote(null,false);
+  showPendingScreen(fac, null);
+}
+
+function showPendingScreen(fac, note){
+  document.getElementById('pendName').textContent=fac.name||'—';
+  document.getElementById('pendMeta').textContent=(fac.teacherId||'—')+' · '+(fac.department||'—');
+  renderPendNote(note, false);
   goScreen('scr-pending');
+  connectStatusWS(fac.teacherId);
+  pollStatusOnce(fac.teacherId);
 }
 
 function renderPendNote(note, isRejected){
@@ -1190,45 +1235,165 @@ function renderPendNote(note, isRejected){
   }
 }
 
-function checkApprovalStatus(){
-  var fac=getFaculty();
-  if(!fac||!fac.teacherId){showToast('No account found on this device.');return;}
-  var pin=window.prompt('Enter your PIN to check your approval status:');
-  if(!pin)return;
+// ---- Live WebSocket for approval status ----
+var _statusWS=null;
+var _wsRetryTimer=null;
 
-  showToast('Checking with admin dashboard…');
-  apiRequest('/api/auth/login','POST',{teacher_id:fac.teacherId,pin:pin}).then(function(resp){
-    var status=resp&&resp.status;
-    var note=resp&&resp.faculty&&resp.faculty.review_note;
-    if(status==='approved'){
-      setStatus('approved');
-      showToast("You're approved! Redirecting to login…");
-      setTimeout(function(){window.location.href='index.html';},900);
-    } else if(status==='pending'){
-      fac.reviewNote=note||null;
-      setFaculty(fac);
-      renderPendNote(note,false);
-      showToast('Still pending admin approval.');
-    } else if(status==='rejected'){
-      setStatus('rejected');
-      fac.reviewNote=note||null;
-      setFaculty(fac);
-      renderPendNote(note,true);
-      showToast(note ? 'Your enrollment was rejected — see the note below.' : 'Your enrollment request was rejected by the admin.');
-    } else if(status==='deactivated'){
-      showToast('This account has been deactivated by the admin.');
-    } else {
-      showToast('Incorrect PIN — please try again.');
+function connectStatusWS(teacherId){
+  if(_statusWS){try{_statusWS.close();}catch(e){}_statusWS=null;}
+  if(_wsRetryTimer){clearTimeout(_wsRetryTimer);_wsRetryTimer=null;}
+
+  var wsBase=API_BASE_URL.replace(/^http/,'ws');
+  var url=wsBase+'/ws/faculty-status?teacher_id='+encodeURIComponent(teacherId);
+
+  try{
+    var ws=new WebSocket(url);
+    _statusWS=ws;
+
+    ws.onopen=function(){
+      var dot=document.getElementById('pendLiveDot');
+      var txt=document.getElementById('pendLiveText');
+      if(dot)dot.style.background='#4ade80';
+      if(txt)txt.textContent='Connected — listening for updates';
+    };
+
+    ws.onmessage=function(ev){
+      try{
+        var msg=JSON.parse(ev.data);
+        if(msg.event==='status_update') handleStatusUpdate(msg);
+      }catch(e){}
+    };
+
+    ws.onclose=function(){
+      var dot=document.getElementById('pendLiveDot');
+      var txt=document.getElementById('pendLiveText');
+      if(dot)dot.style.background='#fbbf24';
+      if(txt)txt.textContent='Reconnecting…';
+      _wsRetryTimer=setTimeout(function(){connectStatusWS(teacherId);},5000);
+    };
+
+    ws.onerror=function(){
+      try{ws.close();}catch(e){}
+    };
+  }catch(e){
+    _wsRetryTimer=setTimeout(function(){connectStatusWS(teacherId);},5000);
+  }
+}
+
+function handleStatusUpdate(msg){
+  var fac=getFaculty();
+  if(msg.status==='approved'){
+    setStatus('approved');
+    if(_statusWS){try{_statusWS.close();}catch(e){}}
+    document.getElementById('pendHeroIcon').innerHTML='<svg class="i" style="color:#4ade80"><use href="#ic-check"/></svg>';
+    document.getElementById('pendHeroIcon').style.background='rgba(74,222,128,.15)';
+    document.getElementById('pendHeroIcon').style.borderColor='rgba(74,222,128,.3)';
+    document.getElementById('pendTitle').textContent='You\'re Approved!';
+    document.getElementById('pendSubtitle').textContent='Redirecting to login…';
+    document.getElementById('pendLiveDot').style.background='#4ade80';
+    document.getElementById('pendLiveText').textContent='Account approved';
+    renderPendNote(null, false);
+    showToast('Account approved! Redirecting…');
+    setTimeout(function(){window.location.href='index.html';},1500);
+  } else if(msg.status==='rejected'){
+    setStatus('rejected');
+    if(fac){fac.reviewNote=msg.review_note||null;setFaculty(fac);}
+    document.getElementById('pendHeroIcon').innerHTML='<svg class="i" style="color:#f87171"><use href="#ic-alert"/></svg>';
+    document.getElementById('pendHeroIcon').style.background='rgba(248,113,113,.15)';
+    document.getElementById('pendHeroIcon').style.borderColor='rgba(248,113,113,.3)';
+    document.getElementById('pendTitle').textContent='Enrollment Rejected';
+    document.getElementById('pendSubtitle').textContent='The admin has reviewed your request';
+    renderPendNote(msg.review_note, true);
+    showToast(msg.review_note ? 'Rejected — see the note below.' : 'Your enrollment was rejected.');
+  }
+}
+
+function pollStatusOnce(teacherId){
+  fetch(API_BASE_URL+'/api/faculty/check-status/'+encodeURIComponent(teacherId))
+    .then(function(r){return r.json();})
+    .then(function(data){
+      if(data.status==='approved'||data.status==='rejected'){
+        handleStatusUpdate({event:'status_update',status:data.status,review_note:data.review_note});
+      }
+    }).catch(function(){});
+}
+
+// ---- Profile photo while waiting ----
+function handlePendDp(input){
+  if(!input.files||!input.files[0])return;
+  var file=input.files[0];
+  if(file.size>5*1024*1024){showToast('Photo must be under 5 MB');return;}
+  var reader=new FileReader();
+  reader.onload=function(e){
+    var dataUrl=e.target.result;
+    var preview=document.getElementById('pendDpPreview');
+    if(preview){
+      preview.innerHTML='';
+      preview.style.backgroundImage='url('+dataUrl+')';
+      preview.style.backgroundSize='cover';
+      preview.style.backgroundPosition='center';
+      preview.style.border='2px solid rgba(201,168,76,.5)';
     }
-  }).catch(function(e){
-    showToast((e&&e.message)||'Could not reach the server.');
+    localStorage.setItem('sa_pending_dp',dataUrl);
+    showToast(‘Photo saved — it will be uploaded once approved’);
+
+    var card=document.getElementById('pendDpCard');
+    var label=card&&card.querySelector('label');
+    if(label){label.textContent='Change';label.style.cursor='pointer';
+      var inp=document.createElement('input');inp.type='file';inp.accept='image/*';inp.style.display='none';
+      inp.onchange=function(){handlePendDp(inp);};label.appendChild(inp);
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+// ---- Notification prompt ----
+function enablePendNotifications(){
+  var btn=document.getElementById('pendNotifBtn');
+  if(!('Notification' in window)){
+    showToast('Notifications not supported on this browser');
+    if(btn){btn.textContent='Not supported';btn.disabled=true;}
+    return;
+  }
+  Notification.requestPermission().then(function(perm){
+    if(perm==='granted'){
+      if(btn){btn.textContent='Enabled';btn.disabled=true;btn.style.background='rgba(74,222,128,.2)';btn.style.borderColor='rgba(74,222,128,.35)';btn.style.color='#4ade80';}
+      showToast('Notifications enabled!');
+      if('serviceWorker' in navigator){
+        navigator.serviceWorker.ready.then(function(reg){
+          return fetch(API_BASE_URL+'/api/push/vapid-public-key').then(function(r){return r.json();}).then(function(data){
+            if(!data.key)return;
+            var raw=atob(data.key.replace(/-/g,'+').replace(/_/g,'/'));
+            var arr=new Uint8Array(raw.length);
+            for(var i=0;i<raw.length;i++)arr[i]=raw.charCodeAt(i);
+            return reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:arr});
+          }).then(function(sub){
+            if(!sub)return;
+            var fac=getFaculty();
+            var tid=(fac&&fac.teacherId)||'';
+            return fetch(API_BASE_URL+'/api/push/subscribe',{
+              method:'POST',
+              headers:{'Content-Type':'application/json'},
+              body:JSON.stringify({teacher_id:tid,subscription:sub.toJSON()})
+            });
+          });
+        }).catch(function(){});
+      }
+    } else {
+      showToast('Permission denied — enable in browser settings');
+    }
+  }).catch(function(){
+    showToast('Could not request notification permission');
   });
 }
 
 function clearSignupAndRestart(){
+  if(_statusWS){try{_statusWS.close();}catch(e){}_statusWS=null;}
+  if(_wsRetryTimer){clearTimeout(_wsRetryTimer);_wsRetryTimer=null;}
   localStorage.removeItem(LS_FACULTY);
   localStorage.removeItem(LS_STATUS);
   localStorage.removeItem(LS_SESSION);
+  localStorage.removeItem('sa_pending_dp');
   document.getElementById('suName').value='';
   document.getElementById('suTeacherId').value='';
   document.getElementById('suEmail').value='';
@@ -1273,10 +1438,18 @@ document.addEventListener('DOMContentLoaded', function(){
       return;
     }
     if(fac && (status==='pending' || status==='rejected')){
-      document.getElementById('pendName').textContent=fac.name||'—';
-      document.getElementById('pendMeta').textContent=(fac.teacherId||'—')+' · '+(fac.department||'—');
-      renderPendNote(fac.reviewNote||null, status==='rejected');
-      goScreen('scr-pending');
+      showPendingScreen(fac, fac.reviewNote||null);
+      // Restore saved DP preview
+      var savedDp=localStorage.getItem('sa_pending_dp');
+      if(savedDp){
+        var preview=document.getElementById('pendDpPreview');
+        if(preview){preview.innerHTML='';preview.style.backgroundImage='url('+savedDp+')';preview.style.backgroundSize='cover';preview.style.backgroundPosition='center';preview.style.border='2px solid rgba(201,168,76,.5)';}
+      }
+      // Check if notifications already granted
+      if('Notification' in window && Notification.permission==='granted'){
+        var nb=document.getElementById('pendNotifBtn');
+        if(nb){nb.textContent='Enabled';nb.disabled=true;nb.style.background='rgba(74,222,128,.2)';nb.style.borderColor='rgba(74,222,128,.35)';nb.style.color='#4ade80';}
+      }
     }
   }catch(e){
     console.error('signup routing failed:', e);
