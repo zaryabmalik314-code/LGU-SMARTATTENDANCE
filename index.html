@@ -4541,6 +4541,10 @@ document.addEventListener('DOMContentLoaded', function(){
     window.addEventListener('load', function(){
       navigator.serviceWorker.register('push-sw.js').catch(function(){});
     });
+    var _swReloading=false;
+    navigator.serviceWorker.addEventListener('controllerchange', function(){
+      if(!_swReloading){_swReloading=true;window.location.reload();}
+    });
   }
 });
 </script>
