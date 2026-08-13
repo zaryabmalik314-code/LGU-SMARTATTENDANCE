@@ -7,9 +7,11 @@
    This is the SAFE version of the caching that was retired earlier. The old
    worker was cache-ONLY with no revalidation, so one bad cached copy stranded
    the app on a blank screen until storage was cleared by hand. This one is
-   stale-while-revalidate and self-healing:
-     - every GET is revalidated against the network in the background, so a bad
-       entry is overwritten on the very next load and can never persist,
+   self-healing:
+     - HTML is network-first, so a shipped fix takes effect on the very next
+       launch instead of one launch later (see the fetch handler),
+     - static assets are stale-while-revalidate, so a bad entry is overwritten
+       on the next load and can never persist,
      - only 200 same-origin responses are stored (never API calls or errors),
      - activate() deletes every cache except the current version,
      - bump SHELL_CACHE to force a clean sweep on the next deploy.
@@ -17,7 +19,7 @@
    with the fetch handler removed) recovers every client within one launch —
    that is the kill switch if caching ever needs to come back out. */
 
-var SHELL_CACHE = 'smartattend-shell-v2';
+var SHELL_CACHE = 'smartattend-shell-v3';
 
 /* Only the handful of files needed to paint the first screen. Anything else is
    cached on demand by the fetch handler. Each is added independently so a
@@ -50,6 +52,33 @@ self.addEventListener('fetch', function (event) {
   if (req.method !== 'GET') { return; }              // never touch POST etc.
   var url = new URL(req.url);
   if (url.origin !== self.location.origin) { return; } // API, fonts, CDNs -> straight to network
+
+  // HTML is NETWORK-FIRST. Cache-first on documents meant a shipped bug kept
+  // being served for a whole extra launch -- every client ran the previous
+  // version once more before picking up the fix, and bumping SHELL_CACHE only
+  // masked it. Code has to be fresh; the cache is the offline fallback, not the
+  // source of truth. Static assets stay stale-while-revalidate below, where an
+  // extra-launch delay is harmless and the instant paint is worth having.
+  var isHTML = req.mode === 'navigate' ||
+               (req.headers.get('accept') || '').indexOf('text/html') !== -1;
+
+  if (isHTML) {
+    event.respondWith(
+      fetch(req).then(function (res) {
+        if (res && res.status === 200 && res.type === 'basic') {
+          var copy = res.clone();
+          caches.open(SHELL_CACHE).then(function (cache) { cache.put(req, copy); });
+        }
+        return res;
+      }).catch(function () {
+        // Offline -> last good copy, then the shell, so we never hard-fail.
+        return caches.match(req).then(function (cached) {
+          return cached || caches.match('./index.html');
+        });
+      })
+    );
+    return;
+  }
 
   event.respondWith(
     caches.open(SHELL_CACHE).then(function (cache) {

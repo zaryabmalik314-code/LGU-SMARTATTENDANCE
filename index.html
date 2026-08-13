@@ -3184,7 +3184,16 @@ function doLogin(){
     }
   }).catch(function(e){
     console.warn('login API call failed:',e);
-    err.textContent='Could not reach the server. Please try again.';err.style.display='block';
+    // A thrown error with a .status came BACK from the server — saying "could
+    // not reach the server" there sent us hunting a network fault when the
+    // server was actually answering 429. Only claim unreachable when fetch
+    // itself failed and there is no status to report.
+    if(e&&e.status){
+      err.textContent=(e.message)||('Login failed ('+e.status+')');
+    } else {
+      err.textContent='Could not reach the server. Please try again.';
+    }
+    err.style.display='block';
   }).then(function(){
     if(btn){btn.disabled=false;btn.innerHTML='<span class="btn-ico"><svg class="i"><use href="#ic-lock"/></svg></span>Log In';}
   });

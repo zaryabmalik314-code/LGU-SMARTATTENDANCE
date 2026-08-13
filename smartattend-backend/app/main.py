@@ -50,8 +50,16 @@ class RateLimiter:
             bucket.append(now)
 
 
-_public_limiter = RateLimiter(max_hits=30, window_seconds=60)
+# The IP limiter only exists to blunt a flood from one source. It CANNOT be
+# tight: the whole campus sits behind a single NAT, so every faculty member on
+# university WiFi shares one key here. At 30/min the second and third person to
+# open the app got 429s. Brute-force protection lives in _login_limiter below,
+# keyed per account, which is where it actually belongs.
+_public_limiter = RateLimiter(max_hits=600, window_seconds=60)
 _enroll_limiter = RateLimiter(max_hits=5, window_seconds=300)
+# Per-teacher_id, so one account being guessed at can't be masked by a shared IP
+# and can't lock out everyone else on the same network.
+_login_limiter = RateLimiter(max_hits=10, window_seconds=300)
 
 import ipaddress as _ipaddress
 
@@ -783,6 +791,9 @@ def mark_manual_attendance(
 def login(payload: schemas.LoginRequest, request: Request, db: Session = Depends(get_db), _rl=Depends(rate_limit_public)):
     faculty = db.query(models.Faculty).filter(models.Faculty.teacher_id == payload.teacher_id).first()
     if not faculty or not verify_pin(payload.pin, faculty.pin_hash):
+        # Only failures count against the budget, so a teacher logging in
+        # correctly all day is never throttled.
+        _login_limiter.check(payload.teacher_id)
         return schemas.LoginResponse(status="invalid_credentials", faculty=None)
 
     if faculty.approval_status != "approved":
