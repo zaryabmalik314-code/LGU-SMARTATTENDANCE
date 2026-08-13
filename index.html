@@ -2728,6 +2728,7 @@ function setActiveCheckin(obj){
 }
 
 // ---- Generic API helper (best-effort: falls back gracefully if backend unreachable) ----
+var _sessionExpiredRedirecting=false;
 function apiRequest(path, method, body){
   var headers = {'Content-Type':'application/json'};
   var token = localStorage.getItem(LS_TOKEN);
@@ -2740,6 +2741,12 @@ function apiRequest(path, method, body){
     if(res.status === 401 && token){
       localStorage.removeItem(LS_TOKEN);
       localStorage.removeItem(LS_SESSION);
+      if(!_sessionExpiredRedirecting){
+        _sessionExpiredRedirecting=true;
+        stopBioCamera();stopGeoWatch();
+        showToast('Session expired — please log in again');
+        goScreen('scr-login');
+      }
     }
     return res.json().catch(function(){return {};}).then(function(data){
       if(!res.ok){ var err=new Error(data.detail||'Request failed'); err.data=data; err.status=res.status; throw err; }
@@ -3131,6 +3138,7 @@ function doLogin(){
     if(status==='approved'){
       if(resp.access_token){
         localStorage.setItem(LS_TOKEN, resp.access_token);
+        _sessionExpiredRedirecting=false;
       }
       if(resp.faculty){
         setFaculty({
