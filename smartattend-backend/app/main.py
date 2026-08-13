@@ -1444,10 +1444,15 @@ def admin_recalculate_balance(
     )
 
     unique_days = set()
+    # Same days in PKT, for comparing against leave dates (which are plain
+    # calendar dates). A UTC date would disagree with the local one for any
+    # check-in before 05:00 PKT.
+    attended_days_pkt = set()
     total_late = 0
     for r in check_ins:
         if r.timestamp:
             unique_days.add(r.timestamp.date())
+            attended_days_pkt.add((r.timestamp + timedelta(hours=PKT_OFFSET_HOURS)).date())
             r.late_minutes = compute_late_minutes(r.timestamp, db, faculty.department)
         total_late += r.late_minutes or 0
 
@@ -1474,7 +1479,9 @@ def admin_recalculate_balance(
 
     b.working_days_attended = len(unique_days)
     b.late_margin_used_minutes = total_late
-    b.casual_leave_used = len(approved_leave_days)
+    # Turning up on an approved leave day refunds it: you worked, so it should
+    # not also cost you a leave day.
+    b.casual_leave_used = len(approved_leave_days - attended_days_pkt)
     db.commit()
     db.refresh(b)
 
@@ -2426,7 +2433,9 @@ def analytics_summary(
         present_set = in_window(present_days.get(f.id, set()))
         leave_set = in_window(_leave_days_in_range(leave_by_fac.get(f.id, [])))
         days_present = len(present_set)
-        leave_days = len(leave_set)
+        # Attending on an approved leave day refunds it, so it is not reported
+        # as leave used. Matches the faculty leave-balance rule.
+        leave_days = len(leave_set - present_set)
         # Subtract the UNION. Checking in on an approved leave day is allowed,
         # and subtracting present and leave separately counted such a day twice,
         # quietly cancelling out a genuine absence elsewhere in the range.
