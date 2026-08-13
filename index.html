@@ -3495,28 +3495,25 @@ function startGeoWatch(){
     stopGeoWatch();
     setGeoChip('denied','No location fix — check GPS is on and that this app is allowed to use location. Tap to retry.');
     _armGeoRetry();
-  }, 25000);
+  }, 15000);
 
-  // watchPosition/getCurrentPosition can also throw synchronously. That used to
-  // propagate out of enterMainApp() and strand the intro splash; it is caught
-  // now, so it has to be surfaced here or it disappears into the console.
   try{
-    if(_isIOS){
-      navigator.geolocation.getCurrentPosition(function(pos){
-        _handleGeoPos(pos);
-        _startGeoWatch();
-      },function(err){
-        if(err.code===1){
-          _clearGeoWatchdog();
+    navigator.geolocation.getCurrentPosition(function(pos){
+      _handleGeoPos(pos);
+      _startGeoWatch();
+    },function(err){
+      if(err.code===1){
+        _clearGeoWatchdog();
+        if(_isIOS){
           setGeoChip('denied','Location denied — open Settings → Privacy → Location Services → Safari Websites → Allow');
-          _armGeoRetry();
         } else {
-          _startGeoWatch();
+          setGeoChip('denied','Location permission denied — allow location for this app in Android Settings, then tap to retry');
         }
-      },{enableHighAccuracy:true,timeout:10000,maximumAge:30000});
-      return;
-    }
-    _startGeoWatch();
+        _armGeoRetry();
+      } else {
+        _startGeoWatch();
+      }
+    },{enableHighAccuracy:true,timeout:8000,maximumAge:30000});
   }catch(e){
     console.error('startGeoWatch threw:', e);
     _clearGeoWatchdog();
@@ -3537,7 +3534,7 @@ function _handleGeoPos(pos){
   });
 }
 function _startGeoWatch(){
-  var samples=geoReadings.length, maxSamples=4;
+  var samples=geoReadings.length, maxSamples=2;
   geoWatchId=navigator.geolocation.watchPosition(function(pos){
     samples++;
     geoReadings.push({
@@ -3553,7 +3550,8 @@ function _startGeoWatch(){
     var dist=zInfo.dist;
     var inside=isAllowedLocation(pos.coords.latitude,pos.coords.longitude);
     geoInsideCampus=inside;
-    if(samples>=maxSamples || geoSettled){
+    var goodAccuracy=pos.coords.accuracy && pos.coords.accuracy<50;
+    if(samples>=maxSamples || geoSettled || (samples>=1 && goodAccuracy)){
       geoSettled=true;
       _clearGeoWatchdog();
       stopGeoWatch();
@@ -3582,7 +3580,7 @@ function _startGeoWatch(){
       setGeoChip('denied','Location timed out — tap to retry');
     }
     _armGeoRetry();
-  },{enableHighAccuracy:true,timeout:20000,maximumAge:10000});
+  },{enableHighAccuracy:true,timeout:12000,maximumAge:5000});
 }
 function stopGeoWatch(){
   if(geoWatchId!==null && navigator.geolocation){navigator.geolocation.clearWatch(geoWatchId);}
