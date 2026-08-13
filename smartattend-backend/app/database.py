@@ -74,6 +74,15 @@ def run_simple_migrations():
                 conn.commit()
                 print("[migration] Added missing column: faculty.face_photos")
 
+            # Snapshot of the thumbnails a re-enrolment replaced, kept only when
+            # the new face did NOT match the stored one. Without it the old face
+            # is overwritten and an admin reviewing the change has nothing to
+            # compare the new one against.
+            if "previous_face_photos" not in existing_columns:
+                conn.execute(text("ALTER TABLE faculty ADD COLUMN previous_face_photos TEXT"))
+                conn.commit()
+                print("[migration] Added missing column: faculty.previous_face_photos")
+
             if "review_note" not in existing_columns:
                 conn.execute(text("ALTER TABLE faculty ADD COLUMN review_note TEXT"))
                 conn.commit()

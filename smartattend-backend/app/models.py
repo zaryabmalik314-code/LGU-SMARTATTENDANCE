@@ -20,6 +20,9 @@ class Faculty(Base):
     # Small compressed JPEG thumbnails (one per angle bucket), JSON list of
     # data: URLs — for admin approval review only, not used in matching.
     face_photos = Column(Text, nullable=True)
+    # The thumbnails a re-enrolment replaced, kept only when the new face did
+    # not match the stored one, so an admin reviewing the swap can compare.
+    previous_face_photos = Column(Text, nullable=True)
     pin_hash = Column(String, nullable=False)  # bcrypt hash of login PIN
     approval_status = Column(String, default="pending", nullable=False)  # "pending" | "approved" | "rejected"
     review_note = Column(Text, nullable=True)  # admin's feedback when rejecting/flagging an enrollment — shown to the faculty on their pending/rejected screen

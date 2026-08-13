@@ -92,8 +92,12 @@ class FacultyOut(BaseModel):
     on_leave_today: bool = False  # computed by the HOD endpoint — True if an approved leave request covers today (PKT)
     profile_photo: Optional[str] = None
     face_photos: Optional[List[str]] = None  # up to 3 small thumbnails, one per enrolled angle — admin review only
+    # Set only when a re-enrollment replaced a face that did NOT match the
+    # stored one. Gives the admin the previous face to compare against before
+    # approving what might be a different person.
+    previous_face_photos: Optional[List[str]] = None
 
-    @field_validator("face_photos", mode="before")
+    @field_validator("face_photos", "previous_face_photos", mode="before")
     @classmethod
     def parse_face_photos(cls, v):
         # Stored in the DB as a JSON-encoded string; ORM hands it over raw.

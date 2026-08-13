@@ -16,7 +16,7 @@ import time
 from . import models, schemas
 from .database import engine, get_db, run_simple_migrations, SessionLocal
 from .geofence import pick_best_reading, check_location, check_impossible_movement, check_gps_spoofing
-from .face_verify import verify_face_from_frames, enroll_from_frames, embeddings_to_str
+from .face_verify import verify_face_from_frames, enroll_from_frames, embeddings_to_str, FACE_MATCH_THRESHOLD
 from .auth import hash_pin, verify_pin, hash_password, verify_password
 from .ws_manager import manager, faculty_status_manager
 from . import push
@@ -845,13 +845,22 @@ def login(payload: schemas.LoginRequest, request: Request, db: Session = Depends
 
 
 @app.post("/api/auth/re-enroll-face", response_model=schemas.ReEnrollFaceResponse)
-def re_enroll_face(payload: schemas.ReEnrollFaceRequest, db: Session = Depends(get_db)):
+def re_enroll_face(payload: schemas.ReEnrollFaceRequest, db: Session = Depends(get_db), _rl=Depends(rate_limit_enroll)):
     """
     Lets a teacher replace their stored face descriptor — either an
     already-approved teacher refreshing it (bad lighting, wants to redo
     it), or a rejected/flagged one retrying enrollment after reading the
     admin's note. Requires teacher_id + PIN, same as login, so a stranger
     can't overwrite someone else's biometric data.
+
+    A PIN alone is NOT enough to swap in a different person, though: for an
+    approved teacher the new face is compared against the currently enrolled
+    one first.
+      match    -> embeddings replaced, still approved, no interruption
+      mismatch -> embeddings replaced but the account drops to "pending", the
+                  superseded photos are kept in previous_face_photos, and the
+                  admins are notified, so a swap has to survive human review
+                  before it can be used to mark attendance.
     """
     faculty = db.query(models.Faculty).filter(models.Faculty.teacher_id == payload.teacher_id).first()
     if not faculty or not verify_pin(payload.pin, faculty.pin_hash):
@@ -867,16 +876,69 @@ def re_enroll_face(payload: schemas.ReEnrollFaceRequest, db: Session = Depends(g
         raise HTTPException(status_code=400, detail=f"No usable face detected in any submitted frame: {enroll_result['reason']}")
 
     was_rejected = faculty.approval_status == "rejected"
+
+    # An approved teacher replacing their own face used to be accepted silently
+    # and stay approved, so anyone who knew their own PIN could enrol a FRIEND's
+    # face and have that friend check in as them from then on — proxy attendance,
+    # the exact thing the biometric exists to prevent, and far easier than
+    # defeating the liveness checks. Compare the new face against the stored one
+    # BEFORE overwriting it: a genuine refresh matches and passes straight
+    # through; a different person goes back to the admin for review.
+    face_changed = False
+    similarity = None
+    if not was_rejected and faculty.face_embeddings:
+        try:
+            check = verify_face_from_frames(payload.face_images, faculty.face_embeddings)
+            similarity = check.get("score")
+            # "verified" is the STRING "pass"/"fail", not a bool — a truthiness
+            # test on it is always true and would fail open, silently accepting
+            # the swapped face this check exists to catch.
+            face_changed = check.get("verified") != "pass"
+        except Exception:
+            # Never fail open on an unusable comparison — route it to review.
+            face_changed = True
+
+    old_photos = faculty.face_photos
     faculty.face_embeddings = embeddings_to_str(enroll_result["embeddings"])
     faculty.face_photos = json.dumps(enroll_result["thumbnails"])
+
     if was_rejected:
         # Retrying after a rejection puts them back in the review queue —
         # the admin's earlier note has been addressed, so clear it rather
         # than leaving stale feedback attached to a fresh attempt.
         faculty.approval_status = "pending"
         faculty.review_note = None
+        faculty.previous_face_photos = None
+    elif face_changed:
+        faculty.approval_status = "pending"
+        faculty.previous_face_photos = old_photos
+        sim_txt = f" (similarity {similarity:.2f}, threshold {FACE_MATCH_THRESHOLD:.2f})" if similarity is not None else ""
+        faculty.review_note = (
+            "Face re-enrollment did not match the previously enrolled face"
+            + sim_txt
+            + ". Approve only if this is genuinely the same person — compare against the previous photos."
+        )
+
     db.commit()
     db.refresh(faculty)
+
+    if face_changed and not was_rejected:
+        manager.broadcast_threadsafe({
+            "event": "face_reenroll_mismatch",
+            "data": {
+                "faculty_id": faculty.id,
+                "faculty_name": faculty.name,
+                "teacher_id": faculty.teacher_id,
+                "similarity": similarity,
+            },
+        })
+        push.push_to_all_admins(
+            db,
+            "Face re-enrollment needs review",
+            f"{faculty.name} ({faculty.teacher_id}) enrolled a face that does not match their existing one.",
+            url="./smartattend-admin.html", tag=f"reenroll-{faculty.id}",
+        )
+        return schemas.ReEnrollFaceResponse(status="resubmitted", faculty=faculty)
 
     return schemas.ReEnrollFaceResponse(status="resubmitted" if was_rejected else "ok", faculty=faculty)
 
