@@ -638,7 +638,10 @@ function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,
   var STEP_TIMEOUT_MS=20000;
   var HOLD_SAMPLES=1;
   var LOST_FACE_MS=1200;
-  var FALLBACK_AFTER_MS=2500;
+  // Measured from the moment the tracker first FINDS a face, not from when
+  // capture starts. 2.5s from capture start meant the coaching was abandoned
+  // while the user was still squaring up to the camera.
+  var FALLBACK_AFTER_MS=8000;
   // Mediapipe pulls ~6.5 MB of wasm before it can track anything, so on a
   // phone it is routinely still loading 2.5s after the camera opens. Treating
   // that as "tracking failed" turned every enrolment into a blind timed
@@ -663,6 +666,8 @@ function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,
   // Elapsed ms at which fallback engaged, so the timed-capture window is
   // measured from that moment rather than from a fixed constant.
   var fallbackAt=meshFallback?0:null;
+  // Elapsed ms at which the tracker first found a face, or null if it never has.
+  var firstSeenAt=null;
   var meshBusy=false;
 
   var lastLivenessPixels=null;
@@ -972,13 +977,19 @@ function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,
       // Only conclude that tracking is unusable once the tracker has actually
       // produced a result. Before that it is still downloading, not failing.
       if(!meshFallback && capturedOrder.length===0){
-        var meshLive=faceMeshEverRan;
-        var giveUpAt=meshLive?FALLBACK_AFTER_MS:MESH_WARMUP_MAX_MS;
+        // faceMeshEverRan goes true on the tracker's first *result*, including
+        // results containing no face at all, so it flips within a frame or two
+        // and is useless as a readiness signal. Gate on having actually FOUND a
+        // face (faceMeshLastSeen), and run the coaching window from that point.
+        if(faceMeshLastSeen>0 && firstSeenAt===null) firstSeenAt=elapsed;
+        var giveUpAt=(firstSeenAt===null)?MESH_WARMUP_MAX_MS:(firstSeenAt+FALLBACK_AFTER_MS);
         if(elapsed>=giveUpAt){
           meshFallback=true;
           fallbackAt=elapsed;
-          console.warn('[enroll] falling back to timed capture after '+elapsed+
-            'ms (tracker '+(meshLive?'ran but captured no angle':'never loaded')+')');
+          console.warn('[enroll] falling back to timed capture at '+elapsed+'ms ('+
+            (firstSeenAt===null
+              ? 'tracker never found a face'
+              : 'face found at '+firstSeenAt+'ms but no angle captured')+')');
           label.textContent='Turn your head slowly';
           val.textContent='Center, then left, then right';
         }
@@ -1026,6 +1037,8 @@ function startFaceCapture(video,canvas,oval,beam,rec,label,val,bar,btn,progress,
           // Tracker still downloading — say so, rather than telling them to
           // centre a face that nothing is looking at yet.
           framing='Preparing face scanner…';
+        } else if(firstSeenAt===null){
+          framing='Looking for your face — good light helps';
         } else if(!tracking){
           framing='Center your face in the frame';
         } else if(currentFaceSpan<0.09){
