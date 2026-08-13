@@ -3191,7 +3191,16 @@ function doLogin(){
     if(e&&e.status){
       err.textContent=(e.message)||('Login failed ('+e.status+')');
     } else {
-      err.textContent='Could not reach the server. Please try again.';
+      // fetch() itself threw, so there is no status to report. Show the raw
+      // reason rather than a flat "could not reach the server" — on a device
+      // that loads the page fine but cannot open the API host, the underlying
+      // text (DNS, TLS, blocked, offline) is the only clue there is, and
+      // swallowing it cost a long debugging detour.
+      var why=(e&&(e.message||e.name))||'unknown error';
+      err.textContent='Could not reach the server ('+why+'). '+
+        (navigator.onLine===false
+          ? 'Your phone reports it is offline.'
+          : 'Try mobile data instead of WiFi, and turn off any VPN or Private DNS.');
     }
     err.style.display='block';
   }).then(function(){
