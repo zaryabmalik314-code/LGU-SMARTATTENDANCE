@@ -1288,7 +1288,7 @@ async function api(path, options = {}) {
   const res = await fetch(`${BASE_URL}${path}`, { ...options, headers });
   if (!res.ok) {
     let msg = `Request failed (${res.status})`;
-    try { const body = await res.json(); if (body.detail) msg = body.detail; } catch(e){}
+    try { const body = await res.json(); if (body.detail) msg = Array.isArray(body.detail) ? body.detail.map(e => e.msg || e).join('; ') : body.detail; } catch(e){}
     throw new Error(msg);
   }
   if (res.status === 204) return null;
@@ -3477,26 +3477,6 @@ function deleteHodPrompt(email, name) {
       showToast('Failed: ' + err.message, true);
     }
   });
-}
-
-async function createHod() {
-  const name = (document.getElementById('hod-name') || {}).value || '';
-  const email = (document.getElementById('hod-email') || {}).value || '';
-  const department = (document.getElementById('hod-department') || {}).value || '';
-  const password = (document.getElementById('hod-password') || {}).value || '';
-  if (!email || !department || !password) { showToast('Email, department, and password are required', true); return; }
-  try {
-    await api('/api/admin/hods', {
-      method: 'POST',
-      body: JSON.stringify({ name, email, department, password })
-    });
-    showToast('HOD created');
-    ['hod-name','hod-email','hod-password'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
-    document.getElementById('hod-department').value = '';
-    loadHods();
-  } catch (err) {
-    showToast('Failed: ' + err.message, true);
-  }
 }
 
 /* =========================================================================
