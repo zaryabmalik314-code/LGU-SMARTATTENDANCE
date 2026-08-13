@@ -2387,17 +2387,28 @@ def analytics_summary(
                 late_incidents[r.faculty_id] += 1
                 late_minutes_total[r.faculty_id] += r.late_minutes
 
-    # Working days per department (memoized — same for all faculty in a dept)
+    # A day can only be an absence if it has actually happened AND the teacher
+    # already existed. Counting the whole requested range did neither, so a
+    # range ending in the future charged every remaining working day as absent,
+    # and anyone enrolled mid-term started life with a full term of absences —
+    # which is where the nonsense counts like 112 came from.
+    eff_end = min(end_d, today_local)
+
+    # Working days, memoized per (department, start, end) — the start now
+    # varies by faculty, so department alone is no longer a sufficient key.
     wd_cache = {}
-    def working_days_for(dept):
-        if dept not in wd_cache:
-            wd_cache[dept] = _working_days_in_range(db, dept, start_d, end_d)
-        return wd_cache[dept]
+    def working_days_for(dept, s, e):
+        key = (dept, s, e)
+        if key not in wd_cache:
+            wd_cache[key] = _working_days_in_range(db, dept, s, e) if s <= e else 0
+        return wd_cache[key]
 
     per_faculty = []
     dept_agg = {}
     for f in faculty_list:
-        wd = working_days_for(f.department)
+        joined = (f.created_at + timedelta(hours=PKT_OFFSET_HOURS)).date() if f.created_at else start_d
+        f_start = max(start_d, joined)
+        wd = working_days_for(f.department, f_start, eff_end)
         days_present = len(present_days.get(f.id, set()))
         leave_days = len(_leave_days_in_range(leave_by_fac.get(f.id, [])))
         days_absent = max(0, wd - days_present - leave_days)
@@ -2760,8 +2771,14 @@ def get_leave_balance(faculty_id: int, db: Session = Depends(get_db), authorizat
             sem_start = _date.fromisoformat(active_sem.start_date)
             today = (datetime.utcnow() + timedelta(hours=PKT_OFFSET_HOURS)).date()
             end = min(today, _date.fromisoformat(active_sem.end_date))
-            if sem_start <= end:
-                elapsed = _working_days_in_range(db, faculty.department, sem_start, end)
+            # Count only from the day this teacher joined. Counting from the
+            # semester start billed anyone enrolled mid-term for every working
+            # day before they existed, so the app's "Days absent" KPI opened at
+            # something like 112 on their first day.
+            joined = (faculty.created_at + timedelta(hours=PKT_OFFSET_HOURS)).date() if faculty.created_at else sem_start
+            eff_start = max(sem_start, joined)
+            if eff_start <= end:
+                elapsed = _working_days_in_range(db, faculty.department, eff_start, end)
         except Exception:
             pass
 
