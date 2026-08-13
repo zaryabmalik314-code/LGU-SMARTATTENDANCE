@@ -248,6 +248,11 @@ class LeaveBalanceOut(BaseModel):
     working_days_attended: int
     working_days_remaining: int
     working_days_elapsed: int = 0
+    # Authoritative absent count. The app used to derive this as
+    # elapsed - attended - leave_used, which double-subtracted any day that was
+    # both attended and on approved leave. Computed server-side from the union
+    # of those day sets instead.
+    working_days_absent: int = 0
     late_margin_total: int
     late_margin_used: int
     late_margin_remaining: int

@@ -4341,7 +4341,13 @@ function animateSemRings(){
   var earned=num(SEM_DATA.earnedDays);
   setText('kpiEarnUsed', earned);
   setText('kpiEarnFoot', (earned===1?'1 day':earned+' days')+' checked in this semester');
-  var absentDays=Math.max(0, num(SEM_DATA.elapsedDays) - earned - num(SEM_DATA.leaveUsed));
+  // Use the server's figure. Deriving it here as elapsed - attended - leave
+  // double-subtracted any day that was both attended and on approved leave,
+  // silently cancelling a real absence. Fall back to the old derivation only
+  // for a backend that predates working_days_absent.
+  var absentDays = (SEM_DATA.absentDays===null || SEM_DATA.absentDays===undefined)
+    ? Math.max(0, num(SEM_DATA.elapsedDays) - earned - num(SEM_DATA.leaveUsed))
+    : num(SEM_DATA.absentDays);
   setText('kpiAbsentUsed', absentDays);
   setText('kpiAbsentOf', absentDays===1?'day':'days');
   setText('kpiAbsentFoot', absentDays+' working '+(absentDays===1?'day':'days')+' missed this semester');
@@ -4404,6 +4410,9 @@ function syncLeaveBalance(){
           earnedDays: data.working_days_attended,
           earnedTotal: data.working_days_total,
           elapsedDays: data.working_days_elapsed || 0,
+          // Left undefined by an older backend, which triggers the local
+          // fallback derivation in renderSemesterKpis().
+          absentDays: data.working_days_absent,
           lateMins: data.late_margin_used,
           lateTotal: data.late_margin_total
         };

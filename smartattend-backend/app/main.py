@@ -1451,19 +1451,30 @@ def admin_recalculate_balance(
             r.late_minutes = compute_late_minutes(r.timestamp, db, faculty.department)
         total_late += r.late_minutes or 0
 
-    approved_leaves = (
-        db.query(func.count())
-        .select_from(models.LeaveRequest)
+    # Count leave DAYS, not leave requests. This was a COUNT(*) over requests,
+    # so a single approved 3-day leave registered as 1 — the balance under-
+    # reported days used, and because the app subtracts this from elapsed
+    # working days, the other 2 days showed up as absences instead.
+    # A set also collapses any overlap between two approved requests.
+    approved_leave_rows = (
+        db.query(models.LeaveRequest)
         .filter(
             models.LeaveRequest.faculty_id == faculty_id,
             models.LeaveRequest.status == "approved",
         )
-        .scalar()
+        .all()
     )
+    approved_leave_days = set()
+    for lr in approved_leave_rows:
+        d = lr.start_date.date()
+        last = lr.end_date.date()
+        while d <= last:
+            approved_leave_days.add(d)
+            d += timedelta(days=1)
 
     b.working_days_attended = len(unique_days)
     b.late_margin_used_minutes = total_late
-    b.casual_leave_used = approved_leaves or 0
+    b.casual_leave_used = len(approved_leave_days)
     db.commit()
     db.refresh(b)
 
@@ -2409,9 +2420,17 @@ def analytics_summary(
         joined = (f.created_at + timedelta(hours=PKT_OFFSET_HOURS)).date() if f.created_at else start_d
         f_start = max(start_d, joined)
         wd = working_days_for(f.department, f_start, eff_end)
-        days_present = len(present_days.get(f.id, set()))
-        leave_days = len(_leave_days_in_range(leave_by_fac.get(f.id, [])))
-        days_absent = max(0, wd - days_present - leave_days)
+        # Restrict both sets to the same window wd was counted over, or the
+        # subtraction below is comparing against days that were never counted.
+        in_window = lambda s: {d for d in s if f_start <= d <= eff_end}
+        present_set = in_window(present_days.get(f.id, set()))
+        leave_set = in_window(_leave_days_in_range(leave_by_fac.get(f.id, [])))
+        days_present = len(present_set)
+        leave_days = len(leave_set)
+        # Subtract the UNION. Checking in on an approved leave day is allowed,
+        # and subtracting present and leave separately counted such a day twice,
+        # quietly cancelling out a genuine absence elsewhere in the range.
+        days_absent = max(0, wd - len(present_set | leave_set))
         pct = round((days_present / wd) * 100, 1) if wd else 0.0
         row = {
             "faculty_id": f.id,
@@ -2764,6 +2783,7 @@ def get_leave_balance(faculty_id: int, db: Session = Depends(get_db), authorizat
     b = get_or_create_leave_balance(db, faculty_id)
 
     elapsed = 0
+    absent = 0
     active_sem = db.query(models.Semester).filter(models.Semester.is_active == True).first()  # noqa: E712
     if active_sem:
         try:
@@ -2779,6 +2799,33 @@ def get_leave_balance(faculty_id: int, db: Session = Depends(get_db), authorizat
             eff_start = max(sem_start, joined)
             if eff_start <= end:
                 elapsed = _working_days_in_range(db, faculty.department, eff_start, end)
+
+                # A day counts as covered if it was attended OR on approved
+                # leave. Union, not sum — checking in during approved leave is
+                # allowed, and subtracting the two separately would cancel out
+                # a genuine absence elsewhere in the semester.
+                win_start_utc = datetime(eff_start.year, eff_start.month, eff_start.day) - timedelta(hours=PKT_OFFSET_HOURS)
+                win_end_utc = datetime(end.year, end.month, end.day) + timedelta(days=1) - timedelta(hours=PKT_OFFSET_HOURS)
+                covered = set()
+                for r in db.query(models.AttendanceRecord).filter(
+                    models.AttendanceRecord.faculty_id == faculty_id,
+                    models.AttendanceRecord.record_type == "check_in",
+                    models.AttendanceRecord.status == "present",
+                    models.AttendanceRecord.timestamp >= win_start_utc,
+                    models.AttendanceRecord.timestamp < win_end_utc,
+                ).all():
+                    if r.timestamp:
+                        covered.add((r.timestamp + timedelta(hours=PKT_OFFSET_HOURS)).date())
+                for lr in db.query(models.LeaveRequest).filter(
+                    models.LeaveRequest.faculty_id == faculty_id,
+                    models.LeaveRequest.status == "approved",
+                ).all():
+                    d = max(lr.start_date.date(), eff_start)
+                    last = min(lr.end_date.date(), end)
+                    while d <= last:
+                        covered.add(d)
+                        d += timedelta(days=1)
+                absent = max(0, elapsed - len(covered))
         except Exception:
             pass
 
@@ -2792,6 +2839,7 @@ def get_leave_balance(faculty_id: int, db: Session = Depends(get_db), authorizat
         working_days_attended=b.working_days_attended,
         working_days_remaining=max(0, b.working_days_total - b.working_days_attended),
         working_days_elapsed=elapsed,
+        working_days_absent=absent,
         late_margin_total=b.late_margin_total_minutes,
         late_margin_used=b.late_margin_used_minutes,
         late_margin_remaining=max(0, b.late_margin_total_minutes - b.late_margin_used_minutes),
