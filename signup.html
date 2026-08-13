@@ -36,8 +36,9 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
 <noscript><link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet"></noscript>
 <style>
-#introSplash{position:fixed;top:0;left:0;width:100%;height:100%;background:#0a1628;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999999;transition:opacity 0.6s ease}
+#introSplash{position:fixed;top:0;left:0;width:100%;height:100%;background:#0a1628;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999999;transition:opacity 0.6s ease;animation:splashFade 0.6s ease 2s forwards}
 #introSplash.hide{opacity:0;pointer-events:none}
+@keyframes splashFade{to{opacity:0;pointer-events:none}}
 #introSplash img{width:150px;height:auto;object-fit:contain}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 .i{width:1em;height:1em;display:inline-block;vertical-align:-0.14em;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
@@ -391,7 +392,7 @@ function getStatus(){return localStorage.getItem(LS_STATUS)||'';}
 function setStatus(s){localStorage.setItem(LS_STATUS, s);}
 
 function goScreen(id){
-  document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('active');});
+  var _scrs=document.querySelectorAll('.screen');for(var _i=0;_i<_scrs.length;_i++)_scrs[_i].classList.remove('active');
   document.getElementById(id).classList.add('active');
 }
 
@@ -1417,7 +1418,8 @@ function clearSignupAndRestart(){
 // ============================================================
 document.addEventListener('DOMContentLoaded', function(){
   var LOGO_SRC='./icon-192x192.png';
-  document.querySelectorAll('.app-logo-img').forEach(function(img){ img.src=LOGO_SRC; });
+  var logos=document.querySelectorAll('.app-logo-img');
+  for(var i=0;i<logos.length;i++) logos[i].src=LOGO_SRC;
 
   // Schedule the splash teardown before any routing runs. It used to sit at the
   // end, so a throw while routing - or the early return on the approved path -
