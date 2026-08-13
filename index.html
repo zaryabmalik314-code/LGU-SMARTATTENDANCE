@@ -1642,6 +1642,26 @@ function getFaceMesh(){
   return faceMeshInstance;
 }
 
+// Mediapipe pulls ~6.5 MB of wasm, and only starts once the tracker is first
+// constructed. Constructing it when the camera opens means it is still loading
+// during the scan, so the capture falls back to a blind timed one. Start it on
+// load instead — check-in is the daily path and the head start is free.
+// The CDN script tag is async, so poll briefly for the global to appear.
+function warmUpFaceMesh(){
+  var tries=0;
+  (function attempt(){
+    if(typeof FaceMesh !== 'undefined'){
+      try{
+        var fm=getFaceMesh();
+        if(fm && typeof fm.initialize==='function'){ fm.initialize().catch(function(){}); }
+      }catch(e){}
+      return;
+    }
+    if(++tries>60)return;   // ~30s — the CDN script never arrived
+    setTimeout(attempt,500);
+  })();
+}
+
 
 // Unified capture loop for enroll / reenroll / check-in / check-out.
 // Records for a fixed duration, sampling frames on a timer, then hands
@@ -4528,6 +4548,9 @@ document.addEventListener('DOMContentLoaded', function(){
   // shows the login screen) but came up dead on the next launch after login,
   // when it runs enterMainApp() and touches geolocation, the DOM and network.
   setTimeout(hideIntroSplash, 900);
+
+  // Start the face tracker download now, not when the camera opens.
+  try{warmUpFaceMesh();}catch(e){}
   // Belt and braces: the splash must never outlive startup, whatever happens.
   window.addEventListener('load', function(){ setTimeout(hideIntroSplash, 1500); });
 
