@@ -53,6 +53,20 @@ class RateLimiter:
 _public_limiter = RateLimiter(max_hits=30, window_seconds=60)
 _enroll_limiter = RateLimiter(max_hits=5, window_seconds=300)
 
+import ipaddress as _ipaddress
+
+_CAMPUS_NETS: list = []
+_raw = os.environ.get("CAMPUS_IPS", "")
+if _raw.strip():
+    for part in _raw.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            _CAMPUS_NETS.append(_ipaddress.ip_network(part, strict=False))
+        except ValueError:
+            pass
+
 
 def _real_ip(request: Request) -> str:
     forwarded = request.headers.get("x-forwarded-for")
@@ -70,6 +84,21 @@ def rate_limit_enroll(request: Request):
 
 
 app = FastAPI(title="SmartAttend API")
+
+
+@app.get("/api/campus-network-check")
+def campus_network_check(request: Request):
+    if not _CAMPUS_NETS:
+        return {"on_campus_network": False}
+    ip_str = _real_ip(request)
+    try:
+        addr = _ipaddress.ip_address(ip_str)
+        for net in _CAMPUS_NETS:
+            if addr in net:
+                return {"on_campus_network": True}
+    except ValueError:
+        pass
+    return {"on_campus_network": False}
 
 
 _scheduler = None

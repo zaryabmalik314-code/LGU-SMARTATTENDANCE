@@ -3470,6 +3470,23 @@ function isDesktopDevice(){
   return true;
 }
 
+function _tryCampusWifi(){
+  var conn=navigator.connection||navigator.mozConnection||navigator.webkitConnection;
+  if(!conn || conn.type!=='wifi') return;
+  setGeoChip('locating','Checking campus network…');
+  apiRequest('/api/campus-network-check','GET').then(function(r){
+    if(r && r.on_campus_network){
+      geoSettled=true;
+      geoInsideCampus=true;
+      _clearGeoWatchdog();
+      stopGeoWatch();
+      setGeoChip('ready','On campus WiFi');
+      paintCheckinButton();
+      if(!attendanceMarked && !checkinClosedReason() && !faceRan){openScanFace();runFace();}
+    }
+  }).catch(function(){});
+}
+
 function startGeoWatch(){
   geoReadings=[];geoSettled=false;
   _clearGeoWatchdog();
@@ -3480,6 +3497,7 @@ function startGeoWatch(){
     return;
   }
   setGeoChip('locating','Checking your location…');
+  _tryCampusWifi();
   if(!navigator.geolocation){
     setGeoChip('denied','GPS not supported on this device');
     return;
