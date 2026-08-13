@@ -4293,7 +4293,7 @@ function syncLeaveBalance(){
     var labelEl = document.getElementById('semTermLabel');
     var badgeEl = document.getElementById('semActiveBadge');
     if(labelEl && sem && sem.label) {
-      labelEl.innerHTML = '<svg class="i"><use href="#ic-grad"/></svg> ' + sem.label;
+      labelEl.innerHTML = '<svg class="i"><use href="#ic-grad"/></svg> ' + escapeHtml(sem.label);
     }
     if(badgeEl && sem) {
       badgeEl.textContent = sem.start_date + ' – ' + sem.end_date;
@@ -4340,7 +4340,7 @@ function syncLeaveBalance(){
         // Fallback: use semester_label from balance if active semester call returned nothing
         var labelEl = document.getElementById('semTermLabel');
         if(labelEl && data.semester_label && labelEl.textContent === 'Current Semester') {
-          labelEl.innerHTML = '<svg class="i"><use href="#ic-grad"/></svg> ' + data.semester_label;
+          labelEl.innerHTML = '<svg class="i"><use href="#ic-grad"/></svg> ' + escapeHtml(data.semester_label);
         }
       }
       animateSemRings();

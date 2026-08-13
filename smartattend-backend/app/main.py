@@ -37,6 +37,11 @@ class RateLimiter:
     def check(self, key: str):
         now = time.monotonic()
         with self._lock:
+            if len(self._hits) > 10000:
+                cutoff = now - self._window
+                dead = [k for k, v in self._hits.items() if not v or v[-1] < cutoff]
+                for k in dead:
+                    del self._hits[k]
             bucket = self._hits[key]
             cutoff = now - self._window
             self._hits[key] = bucket = [t for t in bucket if t > cutoff]
@@ -49,14 +54,19 @@ _public_limiter = RateLimiter(max_hits=30, window_seconds=60)
 _enroll_limiter = RateLimiter(max_hits=5, window_seconds=300)
 
 
+def _real_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
 def rate_limit_public(request: Request):
-    ip = request.client.host if request.client else "unknown"
-    _public_limiter.check(ip)
+    _public_limiter.check(_real_ip(request))
 
 
 def rate_limit_enroll(request: Request):
-    ip = request.client.host if request.client else "unknown"
-    _enroll_limiter.check(ip)
+    _enroll_limiter.check(_real_ip(request))
 
 
 app = FastAPI(title="SmartAttend API")

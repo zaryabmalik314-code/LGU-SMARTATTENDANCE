@@ -18,6 +18,13 @@ class GPSReading(BaseModel):
 class CheckInRequest(BaseModel):
     faculty_id: int
     gps_readings: List[GPSReading]  # send 3-5 readings from frontend, backend picks best
+
+    @field_validator("gps_readings")
+    @classmethod
+    def validate_gps_readings(cls, v):
+        if len(v) > 20:
+            raise ValueError("Too many GPS readings (max 20)")
+        return v
     wifi_ssid: Optional[str] = None
     face_images: List[str]  # base64 candidate frames (from ~5s video, client-filtered for blur); backend picks the best one and embeds it
     captured_at: Optional[datetime] = None  # for offline-queued check-ins — see main.py validation
@@ -26,6 +33,8 @@ class CheckInRequest(BaseModel):
     @field_validator("face_images")
     @classmethod
     def validate_face_images(cls, v):
+        if len(v) > 15:
+            raise ValueError("Too many face images (max 15)")
         for img in v:
             if len(img) > 1_500_000:
                 raise ValueError("Image payload too large (max 1.5M base64 characters)")
@@ -55,6 +64,8 @@ class FacultyEnrollRequest(BaseModel):
     @field_validator("face_images")
     @classmethod
     def validate_face_images(cls, v):
+        if len(v) > 15:
+            raise ValueError("Too many face images (max 15)")
         for img in v:
             if len(img) > 1_500_000:
                 raise ValueError("Image payload too large (max 1.5M base64 characters)")
@@ -128,6 +139,8 @@ class ReEnrollFaceRequest(BaseModel):
     @field_validator("face_images")
     @classmethod
     def validate_face_images(cls, v):
+        if len(v) > 15:
+            raise ValueError("Too many face images (max 15)")
         for img in v:
             if len(img) > 1_500_000:
                 raise ValueError("Image payload too large (max 1.5M base64 characters)")
@@ -167,6 +180,13 @@ class ManualAttendanceRequest(BaseModel):
 class CheckOutRequest(BaseModel):
     faculty_id: int
     gps_readings: List[GPSReading]
+
+    @field_validator("gps_readings")
+    @classmethod
+    def validate_gps_readings(cls, v):
+        if len(v) > 20:
+            raise ValueError("Too many GPS readings (max 20)")
+        return v
     wifi_ssid: Optional[str] = None
     face_images: List[str]  # base64 candidate frames, same as check-in
     captured_at: Optional[datetime] = None  # for offline-queued check-outs
@@ -175,6 +195,8 @@ class CheckOutRequest(BaseModel):
     @field_validator("face_images")
     @classmethod
     def validate_face_images(cls, v):
+        if len(v) > 15:
+            raise ValueError("Too many face images (max 15)")
         for img in v:
             if len(img) > 1_500_000:
                 raise ValueError("Image payload too large (max 1.5M base64 characters)")

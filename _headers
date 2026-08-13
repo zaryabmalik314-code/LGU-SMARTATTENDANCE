@@ -4,6 +4,8 @@
 # kept the old worker resident through four releases.
 /sw.js
   Cache-Control: no-cache, no-store, must-revalidate
+/push-sw.js
+  Cache-Control: no-cache, no-store, must-revalidate
 
 # Pages carry the recovery snippet, so they must never be served stale either.
 /

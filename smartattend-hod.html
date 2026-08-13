@@ -671,13 +671,14 @@ document.getElementById('logout-btn').addEventListener('click', function() {
    ========================================================================= */
 var ws = null;
 var wsReconnectTimer = null;
+var wsReconnectDelay = 3000;
 
 function connectWebSocket() {
   if (!authToken) return;
   var wsBase = BASE_URL.replace(/^https:/, 'wss:').replace(/^http:/, 'ws:');
   var url = wsBase + '/ws/hod?token=' + encodeURIComponent(authToken);
   ws = new WebSocket(url);
-  ws.onopen = function() { console.log('[ws] HOD connected'); };
+  ws.onopen = function() { console.log('[ws] HOD connected'); wsReconnectDelay = 3000; };
   ws.onmessage = function(evt) {
     var msg;
     try { msg = JSON.parse(evt.data); } catch(e) { return; }
@@ -698,7 +699,8 @@ function connectWebSocket() {
   ws.onclose = function(evt) {
     if (evt.code === 4401) return;
     clearTimeout(wsReconnectTimer);
-    wsReconnectTimer = setTimeout(connectWebSocket, 3000);
+    wsReconnectTimer = setTimeout(connectWebSocket, wsReconnectDelay);
+    wsReconnectDelay = Math.min(wsReconnectDelay * 2, 60000);
   };
 }
 
