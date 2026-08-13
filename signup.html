@@ -168,7 +168,9 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
 </svg>
 
 <div id="introSplash">
-  <img class="app-logo-img" alt="Logo">
+  <!-- src is hardcoded as well as set by JS: relying on script alone meant a
+       single syntax error anywhere in the block left every logo broken. -->
+  <img class="app-logo-img" src="./icon-192x192.png" alt="Logo">
 </div>
 
 <div class="app-shell">
@@ -180,7 +182,7 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
   <!-- ══════════════ SIGNUP STEP 1 ══════════════ -->
   <div class="screen active" id="scr-signup">
     <div class="splash-bg" style="justify-content:flex-start;padding-top:36px">
-      <img class="app-logo-img logo-img" alt="Logo">
+      <img class="app-logo-img logo-img" src="./icon-192x192.png" alt="Logo">
       <div class="app-title">Create Account</div>
       <div class="app-sub">FACULTY REGISTRATION &nbsp;·&nbsp; ONE-TIME SETUP</div>
       <div class="login-card">
@@ -234,7 +236,7 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
     <div class="topnav">
       <button class="nav-back" onclick="goScreen('scr-signup')" aria-label="Back"><svg class="i"><use href="#ic-chevron-left"/></svg></button>
       <div class="nav-brand">
-        <img class="app-logo-img nav-logo-img" alt="Logo">
+        <img class="app-logo-img nav-logo-img" src="./icon-192x192.png" alt="Logo">
         <div class="nav-title">Face Enrollment<span>Step 2 of 2</span></div>
       </div>
       <span class="nav-pill">Signup</span>
@@ -1340,7 +1342,7 @@ function handlePendDp(input){
       preview.style.border='2px solid rgba(201,168,76,.5)';
     }
     localStorage.setItem('sa_pending_dp',dataUrl);
-    showToast(‘Photo saved — it will be uploaded once approved’);
+    showToast('Photo saved — it will be uploaded once approved');
 
     var card=document.getElementById('pendDpCard');
     var label=card&&card.querySelector('label');
