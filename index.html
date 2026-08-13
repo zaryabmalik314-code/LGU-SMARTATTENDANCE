@@ -3388,7 +3388,6 @@ function enterMainApp(){
   // to propagate out through routeOnLoad() and strand the intro splash on top
   // of everything, which read as "the app won't open".
   _safe('resetCheckin', resetCheckin);
-  _safe('startGeoWatch', startGeoWatch);
   _safe('renderExitAvailability', renderExitAvailability);
   _safe('tick', tick);
   _safe('syncLeaveBalance', syncLeaveBalance);
@@ -3628,11 +3627,19 @@ function refreshTodaySchedule(){
   return apiRequest('/api/time-windows/today','GET').then(function(s){
     _todaySched=s;
     if(typeof paintCheckinButton==='function') paintCheckinButton();
-    if(geoSettled && geoInsideCampus && !attendanceMarked && !checkinClosedReason() && !faceRan){
+    var closed=checkinClosedReason();
+    if(!closed && !geoSettled && !attendanceMarked){
+      startGeoWatch();
+    }
+    if(geoSettled && geoInsideCampus && !attendanceMarked && !closed && !faceRan){
       openScanFace(); runFace();
     }
     return s;
-  }).catch(function(){ _todaySched=_todaySched||{start_time:'08:00',end_time:'16:00',grace_minutes:10}; paintCheckinButton(); });
+  }).catch(function(){
+    _todaySched=_todaySched||{start_time:'08:00',end_time:'16:00',grace_minutes:10};
+    paintCheckinButton();
+    if(!checkinClosedReason() && !geoSettled && !attendanceMarked) startGeoWatch();
+  });
 }
 function _to12h(t){ if(!t) return '—'; var p=t.split(':'),h=+p[0],m=+p[1],ap=h>=12?'PM':'AM'; h=h%12||12; return h+':'+(m<10?'0':'')+m+' '+ap; }
 function _nowMinLocal(){ var d=new Date(); return d.getHours()*60+d.getMinutes(); }
