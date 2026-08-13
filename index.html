@@ -2738,12 +2738,13 @@ function apiRequest(path, method, body){
     headers: headers,
     body: body ? JSON.stringify(body) : undefined
   }).then(function(res){
-    if(res.status === 401 && token){
+    if(res.status === 401 && (token || localStorage.getItem(LS_FACULTY))){
       localStorage.removeItem(LS_TOKEN);
       localStorage.removeItem(LS_SESSION);
       if(!_sessionExpiredRedirecting){
         _sessionExpiredRedirecting=true;
-        stopBioCamera();stopGeoWatch();
+        try{stopBioCamera();}catch(e){}
+        try{stopGeoWatch();}catch(e){}
         showToast('Session expired — please log in again');
         goScreen('scr-login');
       }

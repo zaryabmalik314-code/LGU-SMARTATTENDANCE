@@ -17,7 +17,7 @@
    with the fetch handler removed) recovers every client within one launch —
    that is the kill switch if caching ever needs to come back out. */
 
-var SHELL_CACHE = 'smartattend-shell-v1';
+var SHELL_CACHE = 'smartattend-shell-v2';
 
 /* Only the handful of files needed to paint the first screen. Anything else is
    cached on demand by the fetch handler. Each is added independently so a
