@@ -216,6 +216,13 @@ def _start_checkout_reminder_scheduler():
 # Add any new real domain here before pointing a frontend at this backend.
 ALLOWED_ORIGINS = [
     "https://zaryabmalik314-code.github.io",
+    # The Android TWA loads one of these, so a miss here is fatal for the app:
+    # a blocked origin surfaces as "Could not reach the server", which looks
+    # like a network fault and not a CORS rejection.
+    #   lgusmartattendanc  (no trailing "e") - current site, current APK
+    #   lgusmartattendance (trailing "e")    - older site + already-installed APKs
+    "https://lgusmartattendanc.netlify.app",
+    "https://lgusmartattendance.netlify.app",
     "http://localhost:5500",
     "http://127.0.0.1:5500",
     "http://localhost:8000",
@@ -227,7 +234,6 @@ ALLOWED_ORIGINS = [
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_origin_regex=r"https://lgusmartattendance\.netlify\.app",
     allow_methods=["*"],
     allow_headers=["*"],
 )

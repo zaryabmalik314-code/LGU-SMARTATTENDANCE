@@ -1,4 +1,7 @@
-# Netlify config for lgusmartattendance.netlify.app
+# Netlify config for lgusmartattendanc.netlify.app (no trailing "e" — the
+# current site, and the origin the shipped TWA loads). The older
+# lgusmartattendance.netlify.app site is superseded; both are kept in
+# ALLOWED_ORIGINS and assetlinks.json so already-installed APKs keep working.
 # The repo root is the site root, so /index.html, /manifest.json, /push-sw.js,
 # /SmartAttend.apk and /.well-known/assetlinks.json are all served at the domain root.
 [build]

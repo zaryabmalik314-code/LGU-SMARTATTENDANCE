@@ -2,6 +2,14 @@
   "relation": ["delegate_permission/common.handle_all_urls"],
   "target": {
     "namespace": "android_app",
+    "package_name": "app.netlify.lgusmartattendanc.twa",
+    "sha256_cert_fingerprints": ["54:35:BB:B3:22:08:84:18:EB:8D:E9:89:C1:59:C7:57:63:98:E2:86:6F:1D:B2:CC:13:AC:76:11:D7:A9:DF:4B"]
+  }
+},
+{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
     "package_name": "app.netlify.lgusmartattendance.twa",
     "sha256_cert_fingerprints": ["BD:36:D2:5D:19:B9:DB:38:D6:14:02:14:3C:92:B8:37:2D:3B:AB:3C:FC:FB:F0:F9:41:F8:B7:86:2A:A9:79:89"]
   }

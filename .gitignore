@@ -5,3 +5,15 @@ node_modules/
 # distribution from the site.
 *.apk
 !SmartAttend.apk
+
+# App signing material from the PWABuilder package. This repo is public, and
+# the keystore plus its password is everything needed to publish a forged
+# update under this app's identity. It is also unrecoverable — losing it means
+# never being able to update the app again. Keep it in offline backup only.
+*.aab
+*.keystore
+*.jks
+signing-key-info.txt
+*.pepk
+*.p12
+*.pem
