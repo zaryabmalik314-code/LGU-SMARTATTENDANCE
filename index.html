@@ -3584,7 +3584,7 @@ function _startGeoWatch(){
       if(inside){
         setGeoChip('ready','On campus · '+dist+'m from '+zInfo.label);
         paintCheckinButton();
-        if(!attendanceMarked && !checkinClosedReason()){openScanFace();runFace();}
+        if(!attendanceMarked && !checkinClosedReason() && !faceRan){openScanFace();runFace();}
       } else {
         setGeoChip('denied','Outside allowed zone · '+dist+'m from '+zInfo.label);
       }
@@ -3769,7 +3769,9 @@ function hideScanVerifying(containerId){
   var o=c.querySelector('.scan-verifying');if(o)o.remove();
 }
 
+var _checkinSubmitting=false;
 function onCheckinScanComplete(faceImages){
+  if(_checkinSubmitting){console.warn('check-in already submitting');return;}
   try{
     assertFaceImagesNonEmpty(faceImages,'check-in');
   }catch(e){
@@ -3808,18 +3810,16 @@ function onCheckinScanComplete(faceImages){
     device_fingerprint: getDeviceFingerprint()
   };
 
+  _checkinSubmitting=true;
   var btn=document.getElementById('faceBtn');
   btn.disabled=true;btn.innerHTML='<span class="btn-ico"><svg class="i"><use href="#ic-loader"/></svg></span>Submitting…';
 
   apiRequest('/api/attendance/check-in','POST',payload).then(function(resp){
+    _checkinSubmitting=false;
     console.log('[check-in] response:', resp);
     finishCheckin(now, dist, resp, null);
   }).catch(function(e){
-    // Previously this called finishCheckin(now, dist, null), and finishCheckin's
-    // `(resp && resp.status) || 'present'` treated a null resp as a successful
-    // check-in — silently showing "Attendance Marked!" even though the request
-    // never succeeded. Pass the real error through instead so the UI shows what
-    // actually happened.
+    _checkinSubmitting=false;
     console.warn('check-in API call failed:', e);
     var cmsg=(e&&e.message)||'';
     if(/failed to fetch|networkerror|load failed|timeout|network request failed/i.test(cmsg))

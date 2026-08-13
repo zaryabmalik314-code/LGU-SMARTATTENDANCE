@@ -1961,6 +1961,17 @@ def _enforce_device_binding(db, faculty, fp, client_ip):
     )
 
 
+_attendance_locks: dict[int, threading.Lock] = {}
+_attendance_locks_guard = threading.Lock()
+
+
+def _faculty_lock(faculty_id: int) -> threading.Lock:
+    with _attendance_locks_guard:
+        if faculty_id not in _attendance_locks:
+            _attendance_locks[faculty_id] = threading.Lock()
+        return _attendance_locks[faculty_id]
+
+
 def _pkt_day_bounds_utc():
     """UTC start/end of the current PKT calendar day (same convention used elsewhere)."""
     local_now = datetime.utcnow() + timedelta(hours=PKT_OFFSET_HOURS)
@@ -2044,6 +2055,16 @@ def check_in(payload: schemas.CheckInRequest, request: Request, db: Session = De
     if not faculty.is_active:
         raise HTTPException(status_code=403, detail="This faculty account has been deactivated. Contact the admin.")
 
+    lock = _faculty_lock(faculty.id)
+    if not lock.acquire(timeout=10):
+        raise HTTPException(status_code=429, detail="Another check-in is already in progress — please wait.")
+    try:
+        return _do_check_in(payload, request, db, faculty)
+    finally:
+        lock.release()
+
+
+def _do_check_in(payload, request, db, faculty):
     now_utc = datetime.utcnow()
     if faculty.face_locked_until and faculty.face_locked_until > now_utc:
         remaining = int((faculty.face_locked_until - now_utc).total_seconds() / 60) + 1
@@ -2503,11 +2524,6 @@ def get_late_comers(
 
 @app.post("/api/attendance/check-out", response_model=schemas.CheckInResponse)
 def check_out(payload: schemas.CheckOutRequest, request: Request, db: Session = Depends(get_db), auth_faculty: models.Faculty = Depends(get_current_faculty)):
-    """
-    Marks the teacher's exit from campus. Same GPS + face verification as
-    check-in, but does NOT log the teacher out of the app and does NOT
-    affect leave/attendance counters — it's just an exit timestamp record.
-    """
     if auth_faculty.id != payload.faculty_id:
         raise HTTPException(status_code=403, detail="Token does not match faculty_id")
     faculty = auth_faculty
@@ -2517,6 +2533,16 @@ def check_out(payload: schemas.CheckOutRequest, request: Request, db: Session = 
     if not faculty.is_active:
         raise HTTPException(status_code=403, detail="This faculty account has been deactivated. Contact the admin.")
 
+    lock = _faculty_lock(faculty.id)
+    if not lock.acquire(timeout=10):
+        raise HTTPException(status_code=429, detail="Another check-out is already in progress — please wait.")
+    try:
+        return _do_check_out(payload, request, db, faculty)
+    finally:
+        lock.release()
+
+
+def _do_check_out(payload, request, db, faculty):
     now_utc = datetime.utcnow()
     if faculty.face_locked_until and faculty.face_locked_until > now_utc:
         remaining = int((faculty.face_locked_until - now_utc).total_seconds() / 60) + 1
