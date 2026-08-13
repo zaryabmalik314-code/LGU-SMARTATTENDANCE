@@ -335,6 +335,22 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
           <div style="font-size:10px;color:#f87171;letter-spacing:.05em;margin-bottom:4px">NOTE FROM ADMIN</div>
           <div style="font-size:12px;color:#fff;line-height:1.5" id="pendNoteText">&mdash;</div>
         </div>
+        <!-- Rejected users used to have no way back: their account already
+             exists, so re-registering fails on the duplicate check. This
+             re-runs the face scan against /api/auth/re-enroll-face, which
+             puts them back to pending. -->
+        <div id="pendRetryBox" style="display:none;margin-bottom:4px">
+          <div style="font-size:10px;color:var(--gold2);letter-spacing:.05em;margin-bottom:6px;text-align:left">CONFIRM YOUR 4-DIGIT PIN</div>
+          <input id="pendRetryPin" type="password" inputmode="numeric" maxlength="4" placeholder="••••"
+                 style="width:100%;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.15);background:rgba(0,0,0,.25);color:#fff;font-size:15px;letter-spacing:.3em;text-align:center;margin-bottom:10px">
+          <button class="btn-primary" id="pendRetryBtn" onclick="startRejectedRetry()" style="border-radius:14px;padding:14px;font-size:14px;width:100%">
+            <span class="btn-ico"><svg class="i"><use href="#ic-camera"/></svg></span>Redo face scan &amp; resubmit
+          </button>
+          <div style="font-size:11px;color:rgba(255,255,255,.5);margin-top:8px;line-height:1.5">
+            Fix what the note mentions, then scan again — your request goes back to the admin for review.
+          </div>
+          <div id="pendRetryErr" style="display:none;font-size:12px;color:#f87171;margin-top:8px"></div>
+        </div>
       </div>
 
       <!-- While you wait: DP + Notifications -->
@@ -1230,6 +1246,73 @@ function runEnrollFace(){
   });
 }
 
+/* ---- Rejected -> redo face scan -> back to pending ----
+   The account already exists, so /api/faculty/enroll would fail the duplicate
+   check. /api/auth/re-enroll-face replaces the stored embeddings and moves a
+   rejected account back to pending, which is the only way back in. */
+var retryMode=false;
+var retryPin=null;
+
+function startRejectedRetry(){
+  var fac=getFaculty();
+  var err=document.getElementById('pendRetryErr');
+  var pin=(document.getElementById('pendRetryPin')||{}).value||'';
+  pin=pin.trim();
+  function fail(m){ if(err){err.textContent=m;err.style.display='block';} }
+  if(err)err.style.display='none';
+
+  if(!fac||!fac.teacherId){ fail('Could not read your Teacher ID — tap "Start over with different details".'); return; }
+  if(!/^\d{4}$/.test(pin)){ fail('Enter the 4-digit PIN you chose when you signed up.'); return; }
+
+  retryMode=true;
+  retryPin=pin;
+  enrollFaceImages=null;
+  goScreen('scr-enroll');
+  setTimeout(function(){runEnrollFace();},400);
+}
+
+function submitReEnroll(){
+  var fac=getFaculty()||{};
+  var btn=document.getElementById('enSubmitBtn');
+  var errBox=document.getElementById('enSubmitErr');
+  if(errBox)errBox.style.display='none';
+  btn.disabled=true;btn.innerHTML='<span class="btn-ico"><svg class="i"><use href="#ic-loader"/></svg></span>Resubmitting&hellip;';
+
+  apiRequest('/api/auth/re-enroll-face','POST',{
+    teacher_id:fac.teacherId,
+    pin:retryPin,
+    face_images:enrollFaceImages
+  }).then(function(resp){
+    var st=resp&&resp.status;
+    if(st==='resubmitted'||st==='ok'){
+      retryMode=false;retryPin=null;enrollFaceImages=null;
+      stopBioCamera();
+      setStatus('pending');
+      if(resp.faculty){
+        var f=getFaculty()||{};
+        f.reviewNote=null;
+        setFaculty(f);
+      }
+      showToast('Resubmitted — the admin will review it again.');
+      // Back to pending, and drop the note: it refers to the old scan.
+      showPendingScreen(getFaculty()||{}, null, false);
+      return;
+    }
+    if(st==='invalid_credentials'){
+      throw new Error('That PIN does not match this Teacher ID.');
+    }
+    if(st==='not_approved'){
+      throw new Error('This account is already awaiting review — nothing to resubmit.');
+    }
+    throw new Error((resp&&resp.detail)||'Could not resubmit — please try again.');
+  }).catch(function(e){
+    var msg=(e&&e.message)||'Could not resubmit — please try again.';
+    showToast(msg);
+    if(errBox){errBox.textContent=msg;errBox.style.display='block';}
+    btn.disabled=false;btn.innerHTML='<span class="btn-ico"><svg class="i"><use href="#ic-check"/></svg></span>Submit for Approval';
+  });
+}
+
 function onEnrollScanComplete(faceImages){
   enrollFaceImages=(faceImages && faceImages.length) ? faceImages : null;
   if(!enrollFaceImages){
@@ -1241,6 +1324,13 @@ function onEnrollScanComplete(faceImages){
 }
 
 function submitSignup(){
+  // A rejected teacher redoing their scan has no signupDraft — they are
+  // replacing the face on an account that already exists.
+  if(retryMode){
+    try{ assertFaceImagesNonEmpty(enrollFaceImages,'reenroll'); }catch(e){return;}
+    submitReEnroll();
+    return;
+  }
   if(!signupDraft){showToast('Please fill the signup form first.');goScreen('scr-signup');return;}
   try{
     assertFaceImagesNonEmpty(enrollFaceImages,'enroll');
@@ -1287,10 +1377,30 @@ function finishSignup(facultyId){
   showPendingScreen(fac, null);
 }
 
-function showPendingScreen(fac, note){
+function showPendingScreen(fac, note, isRejected){
   document.getElementById('pendName').textContent=fac.name||'—';
   document.getElementById('pendMeta').textContent=(fac.teacherId||'—')+' · '+(fac.department||'—');
-  renderPendNote(note, false);
+  // Set BOTH states explicitly. Only painting the rejected case left the red
+  // "Enrollment Rejected" heading in place after a successful resubmit.
+  var hero=document.getElementById('pendHeroIcon');
+  if(isRejected){
+    document.getElementById('pendTitle').textContent='Enrollment Rejected';
+    document.getElementById('pendSubtitle').textContent='The admin has reviewed your request';
+    if(hero){
+      hero.innerHTML='<svg class="i" style="color:#f87171"><use href="#ic-alert"/></svg>';
+      hero.style.background='rgba(248,113,113,.15)';
+      hero.style.borderColor='rgba(248,113,113,.3)';
+    }
+  } else {
+    document.getElementById('pendTitle').textContent='Pending Approval';
+    document.getElementById('pendSubtitle').textContent='Your registration has been submitted';
+    if(hero){
+      hero.innerHTML='<svg class="i"><use href="#ic-loader"/></svg>';
+      hero.style.background='';
+      hero.style.borderColor='';
+    }
+  }
+  renderPendNote(note, !!isRejected);
   goScreen('scr-pending');
   connectStatusWS(fac.teacherId);
   pollStatusOnce(fac.teacherId);
@@ -1299,13 +1409,22 @@ function showPendingScreen(fac, note){
 function renderPendNote(note, isRejected){
   var box=document.getElementById('pendNoteBox');
   var txt=document.getElementById('pendNoteText');
-  if(!box||!txt)return;
-  if(note && note.trim()){
-    txt.textContent=note;
-    box.style.display='block';
-  } else {
-    box.style.display='none';
+  if(box&&txt){
+    if(note && note.trim()){
+      txt.textContent=note;
+      box.style.display='block';
+    } else {
+      box.style.display='none';
+    }
   }
+  // isRejected was accepted and then ignored, so a rejected teacher saw the
+  // note with no way to act on it — and could not re-register either, because
+  // their account already exists and enrol rejects the duplicate. This is the
+  // only route back to pending.
+  var retry=document.getElementById('pendRetryBox');
+  if(retry) retry.style.display = isRejected ? 'block' : 'none';
+  var setup=document.getElementById('pendSetupCards');
+  if(setup) setup.style.display = isRejected ? 'none' : 'block';
 }
 
 // ---- Live WebSocket for approval status ----
@@ -1471,6 +1590,7 @@ function enablePendNotifications(){
 }
 
 function clearSignupAndRestart(){
+  retryMode=false;retryPin=null;enrollFaceImages=null;
   if(_statusWS){try{_statusWS.close();}catch(e){}_statusWS=null;}
   if(_wsRetryTimer){clearTimeout(_wsRetryTimer);_wsRetryTimer=null;}
   localStorage.removeItem(LS_FACULTY);
@@ -1525,7 +1645,7 @@ document.addEventListener('DOMContentLoaded', function(){
       return;
     }
     if(fac && (status==='pending' || status==='rejected')){
-      showPendingScreen(fac, fac.reviewNote||null);
+      showPendingScreen(fac, fac.reviewNote||null, status==='rejected');
       // Restore saved DP preview
       var savedDp=localStorage.getItem('sa_pending_dp');
       if(savedDp){
