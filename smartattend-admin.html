@@ -1549,6 +1549,12 @@ function connectWebSocket() {
       // Admin approved/rejected a faculty — reload faculty directory if visible.
       const facView = document.getElementById('view-faculty');
       if (facView && facView.style.display !== 'none') loadFaculty();
+    } else if (msg.event === 'device_switch_request' && msg.data) {
+      const badge = document.getElementById('device-count');
+      if (badge) badge.textContent = (parseInt(badge.textContent, 10) || 0) + 1;
+      const devView = document.getElementById('view-devices');
+      if (devView && devView.classList.contains('active')) loadDeviceSwitches();
+      showToast('New device switch request: ' + (msg.data.faculty_name || 'Unknown'));
     } else if (msg.event === 'spoof_attempt' && msg.data) {
       const badge = document.getElementById('spoof-count');
       if (badge) badge.textContent = (parseInt(badge.textContent, 10) || 0) + 1;

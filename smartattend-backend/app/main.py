@@ -2581,7 +2581,10 @@ def analytics_summary(
     range_start_utc = datetime(start_d.year, start_d.month, start_d.day) - timedelta(hours=PKT_OFFSET_HOURS)
     range_end_utc = datetime(end_d.year, end_d.month, end_d.day) + timedelta(days=1) - timedelta(hours=PKT_OFFSET_HOURS)
 
-    fac_q = db.query(models.Faculty).filter(models.Faculty.is_active == True)  # noqa: E712
+    fac_q = db.query(models.Faculty).filter(
+        models.Faculty.is_active == True,  # noqa: E712
+        models.Faculty.approval_status == "approved",
+    )
     if hod:
         fac_q = fac_q.filter(models.Faculty.department == hod.department)
     faculty_list = fac_q.all()
