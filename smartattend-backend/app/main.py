@@ -1418,6 +1418,16 @@ def admin_decide_device_switch(
     db.commit()
     db.refresh(req)
 
+    manager.broadcast_threadsafe({
+        "event": "device_switch_decided",
+        "data": {
+            "request_id": req.id,
+            "faculty_id": req.faculty_id,
+            "faculty_name": req.faculty.name if req.faculty else None,
+            "status": req.status,
+        },
+    })
+
     item = schemas.DeviceSwitchRequestOut.model_validate(req)
     item.faculty_name = req.faculty.name if req.faculty else None
     item.department = req.faculty.department if req.faculty else None

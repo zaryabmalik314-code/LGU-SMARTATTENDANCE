@@ -1468,6 +1468,10 @@ function enterApp() {
   api('/api/spoof-attempts/count').then(c => {
     document.getElementById('spoof-count').textContent = c.unresolved || '';
   }).catch(() => {});
+  api('/api/admin/device-switch-requests').then(list => {
+    const pending = list.filter(r => r.status === 'pending').length;
+    document.getElementById('device-count').textContent = pending || '';
+  }).catch(() => {});
   connectWebSocket();
 }
 
@@ -1555,6 +1559,13 @@ function connectWebSocket() {
       const devView = document.getElementById('view-devices');
       if (devView && devView.classList.contains('active')) loadDeviceSwitches();
       showToast('New device switch request: ' + (msg.data.faculty_name || 'Unknown'));
+    } else if (msg.event === 'device_switch_decided' && msg.data) {
+      const devView = document.getElementById('view-devices');
+      if (devView && devView.classList.contains('active')) loadDeviceSwitches();
+      api('/api/admin/device-switch-requests').then(list => {
+        const pending = list.filter(r => r.status === 'pending').length;
+        document.getElementById('device-count').textContent = pending || '';
+      }).catch(() => {});
     } else if (msg.event === 'spoof_attempt' && msg.data) {
       const badge = document.getElementById('spoof-count');
       if (badge) badge.textContent = (parseInt(badge.textContent, 10) || 0) + 1;
