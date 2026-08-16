@@ -1608,6 +1608,12 @@ def admin_clear_activity(
         },
         synchronize_session=False,
     )
+    # Reset join dates so the analytics absent calculation starts fresh from
+    # now instead of counting every past working day as an absence.
+    db.query(models.Faculty).update(
+        {models.Faculty.created_at: datetime.utcnow()},
+        synchronize_session=False,
+    )
     db.commit()
 
     print(f"[clear-activity] {admin.email} deleted {deleted_attendance} attendance, "
@@ -2662,6 +2668,12 @@ def analytics_summary(
     # which is where the nonsense counts like 112 came from.
     eff_end = min(end_d, today_local)
 
+    # Absences should only count COMPLETED days — today isn't over yet, so
+    # nobody should be marked absent for a day that's still in progress.
+    # Present/late stats still include today so real-time check-ins show up.
+    yesterday = today_local - timedelta(days=1)
+    eff_end_absence = min(end_d, yesterday)
+
     # Working days, memoized per (department, start, end) — the start now
     # varies by faculty, so department alone is no longer a sufficient key.
     wd_cache = {}
@@ -2676,20 +2688,20 @@ def analytics_summary(
     for f in faculty_list:
         joined = (f.created_at + timedelta(hours=PKT_OFFSET_HOURS)).date() if f.created_at else start_d
         f_start = max(start_d, joined)
-        wd = working_days_for(f.department, f_start, eff_end)
-        # Restrict both sets to the same window wd was counted over, or the
-        # subtraction below is comparing against days that were never counted.
+        # Present/late use the full range (including today) so real-time
+        # check-ins show up immediately.
         in_window = lambda s: {d for d in s if f_start <= d <= eff_end}
         present_set = in_window(present_days.get(f.id, set()))
         leave_set = in_window(_leave_days_in_range(leave_by_fac.get(f.id, [])))
         days_present = len(present_set)
-        # Attending on an approved leave day refunds it, so it is not reported
-        # as leave used. Matches the faculty leave-balance rule.
         leave_days = len(leave_set - present_set)
-        # Subtract the UNION. Checking in on an approved leave day is allowed,
-        # and subtracting present and leave separately counted such a day twice,
-        # quietly cancelling out a genuine absence elsewhere in the range.
-        days_absent = max(0, wd - len(present_set | leave_set))
+        # Absent uses completed-days range only — today isn't over, so nobody
+        # should be marked absent for a day that's still in progress.
+        wd = working_days_for(f.department, f_start, eff_end_absence)
+        in_completed = lambda s: {d for d in s if f_start <= d <= eff_end_absence}
+        days_absent = max(0, wd - len(in_completed(present_set) | in_completed(leave_set)))
+        # Attendance % based on completed working days only, so it doesn't dip
+        # every morning before the first check-in and then jump back up.
         pct = round((days_present / wd) * 100, 1) if wd else 0.0
         row = {
             "faculty_id": f.id,
