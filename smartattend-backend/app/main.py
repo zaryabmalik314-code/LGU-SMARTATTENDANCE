@@ -758,12 +758,22 @@ def mark_manual_attendance(
     if not faculty.is_active:
         raise HTTPException(status_code=400, detail="Cannot mark attendance — this faculty account is deactivated.")
 
-    # GPS/face columns are non-nullable on this table since every normal
-    # record goes through real verification. A manual entry has neither, so
-    # it uses sentinel values (0.0 / "manual_review") rather than loosening
-    # those columns for every other record — the note+status makes it clear
-    # this one was an admin override, not a real geofenced check-in.
+    _enforce_once_per_day(db, faculty.id, payload.type)
+    _enforce_time_window(db, payload.type)
+
     now = datetime.utcnow()
+    local_now = now + timedelta(hours=PKT_OFFSET_HOURS)
+
+    late_minutes = 0
+    if payload.type == "check_in":
+        expected = resolve_expected_start(local_now, db, faculty.department)
+        if expected:
+            start_h, start_m, grace = expected
+            expected_min = start_h * 60 + start_m + (grace or 0)
+            actual_min = local_now.hour * 60 + local_now.minute
+            if actual_min > expected_min:
+                late_minutes = actual_min - expected_min
+
     record = models.AttendanceRecord(
         faculty_id=faculty.id,
         record_type=payload.type,
@@ -776,6 +786,7 @@ def mark_manual_attendance(
         wifi_ssid=None,
         face_match_score=0.0,
         face_verified="manual_review",
+        late_minutes=late_minutes if payload.type == "check_in" else None,
         notes=f"Manual entry by admin ({admin.email}). {payload.note or ''}".strip(),
     )
     db.add(record)
