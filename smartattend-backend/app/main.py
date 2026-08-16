@@ -1439,6 +1439,83 @@ def admin_reset_device(
     return {"status": "ok", "message": f"Device binding cleared for {faculty.name}"}
 
 
+class ClearActivityRequest(BaseModel):
+    # Must equal CLEAR_ACTIVITY_PHRASE for anything to be deleted. Without it
+    # the endpoint only reports what WOULD go, so an accidental or curious call
+    # can never destroy anything.
+    confirm: Optional[str] = None
+
+
+CLEAR_ACTIVITY_PHRASE = "DELETE ALL ATTENDANCE AND LEAVE"
+
+
+@app.post("/api/admin/clear-activity")
+def admin_clear_activity(
+    payload: ClearActivityRequest,
+    db: Session = Depends(get_db),
+    admin: models.Admin = Depends(get_current_admin),
+):
+    """
+    Admin-only reset of accumulated ACTIVITY, for clearing test data before a
+    real rollout. Deletes attendance records and leave requests, and zeroes the
+    derived leave-balance counters.
+
+    Deliberately does NOT touch people or configuration: faculty (including
+    their enrolled faces), admins, HODs, sessions, holidays, time windows and
+    semesters all survive.
+
+    Call with no confirm phrase for a dry run — it reports the counts and
+    deletes nothing. This is irreversible, so it should be removed again once
+    the reset has been done.
+    """
+    counts = {
+        "attendance_records": db.query(func.count()).select_from(models.AttendanceRecord).scalar() or 0,
+        "leave_requests": db.query(func.count()).select_from(models.LeaveRequest).scalar() or 0,
+        "leave_balances_to_reset": db.query(func.count()).select_from(models.LeaveBalance).scalar() or 0,
+    }
+    preserved = {
+        "faculty": db.query(func.count()).select_from(models.Faculty).scalar() or 0,
+        "admins": db.query(func.count()).select_from(models.Admin).scalar() or 0,
+        "hods": db.query(func.count()).select_from(models.HOD).scalar() or 0,
+    }
+
+    if payload.confirm != CLEAR_ACTIVITY_PHRASE:
+        return {
+            "status": "dry_run",
+            "would_delete": counts,
+            "preserved": preserved,
+            "message": f'Nothing deleted. Re-send with confirm="{CLEAR_ACTIVITY_PHRASE}" to apply.',
+        }
+
+    deleted_attendance = db.query(models.AttendanceRecord).delete(synchronize_session=False)
+    deleted_leave = db.query(models.LeaveRequest).delete(synchronize_session=False)
+    # Zero the counters rather than dropping the rows, so each faculty keeps
+    # their allowances (casual_leave_total, working_days_total, late margin)
+    # and any manual admin adjustment to those.
+    reset_balances = db.query(models.LeaveBalance).update(
+        {
+            models.LeaveBalance.casual_leave_used: 0,
+            models.LeaveBalance.working_days_attended: 0,
+            models.LeaveBalance.late_margin_used_minutes: 0,
+        },
+        synchronize_session=False,
+    )
+    db.commit()
+
+    print(f"[clear-activity] {admin.email} deleted {deleted_attendance} attendance, "
+          f"{deleted_leave} leave requests, reset {reset_balances} balances")
+
+    return {
+        "status": "ok",
+        "deleted": {
+            "attendance_records": deleted_attendance,
+            "leave_requests": deleted_leave,
+            "leave_balances_reset": reset_balances,
+        },
+        "preserved": preserved,
+    }
+
+
 ADJUSTABLE_BALANCE_FIELDS = {
     "casual_leave_used",
     "casual_leave_total",
