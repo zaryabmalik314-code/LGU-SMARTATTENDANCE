@@ -1439,6 +1439,93 @@ def admin_reset_device(
     return {"status": "ok", "message": f"Device binding cleared for {faculty.name}"}
 
 
+class DeleteFacultyRequest(BaseModel):
+    teacher_ids: List[str]
+    confirm: Optional[str] = None
+
+
+DELETE_FACULTY_PHRASE = "DELETE THESE ACCOUNTS"
+
+
+@app.post("/api/admin/delete-faculty")
+def admin_delete_faculty(
+    payload: DeleteFacultyRequest,
+    db: Session = Depends(get_db),
+    admin: models.Admin = Depends(get_current_admin),
+):
+    """
+    Admin-only PERMANENT deletion of faculty accounts, by teacher_id, for
+    clearing junk test accounts. The Faculty Directory's "Remove" button only
+    deactivates — the row stays listed — so there was no way to actually get
+    rid of one.
+
+    Removes the account and every row that references it, so nothing is left
+    orphaned pointing at a faculty_id that no longer exists.
+
+    Dry run unless confirm matches the phrase: it resolves the teacher_ids to
+    names first so the caller can check they are deleting who they think.
+    This is irreversible — the enrolled face is destroyed with the account.
+    """
+    rows = db.query(models.Faculty).filter(models.Faculty.teacher_id.in_(payload.teacher_ids)).all()
+    found = {f.teacher_id for f in rows}
+    missing = [t for t in payload.teacher_ids if t not in found]
+
+    targets = [
+        {
+            "teacher_id": f.teacher_id,
+            "name": f.name,
+            "email": f.email,
+            "department": f.department,
+            "approval_status": f.approval_status,
+            "attendance_records": db.query(func.count()).select_from(models.AttendanceRecord)
+                                    .filter(models.AttendanceRecord.faculty_id == f.id).scalar() or 0,
+        }
+        for f in rows
+    ]
+
+    if payload.confirm != DELETE_FACULTY_PHRASE:
+        return {
+            "status": "dry_run",
+            "would_delete": targets,
+            "not_found": missing,
+            "message": f'Nothing deleted. Re-send with confirm="{DELETE_FACULTY_PHRASE}" to apply.',
+        }
+
+    ids = [f.id for f in rows]
+    if not ids:
+        return {"status": "ok", "deleted": [], "not_found": missing}
+
+    # Order matters only for readability here — no DB-level cascade is
+    # configured, so every referencing table has to be cleared explicitly.
+    for model, col in (
+        (models.AttendanceRecord, models.AttendanceRecord.faculty_id),
+        (models.LeaveRequest, models.LeaveRequest.faculty_id),
+        (models.LeaveBalance, models.LeaveBalance.faculty_id),
+        (models.SalaryRecord, models.SalaryRecord.faculty_id),
+        (models.FacultySession, models.FacultySession.faculty_id),
+        (models.DeviceSwitchRequest, models.DeviceSwitchRequest.faculty_id),
+        (models.SpoofAttempt, models.SpoofAttempt.faculty_id),
+        (models.SemesterSnapshot, models.SemesterSnapshot.faculty_id),
+    ):
+        db.query(model).filter(col.in_(ids)).delete(synchronize_session=False)
+
+    # Push subscriptions are not a foreign key — they are keyed by
+    # (subscriber_type, subscriber_id), so they need matching on both or a
+    # deleted teacher's id could collide with an admin's.
+    db.query(models.PushSubscription).filter(
+        models.PushSubscription.subscriber_type == "faculty",
+        models.PushSubscription.subscriber_id.in_(ids),
+    ).delete(synchronize_session=False)
+
+    db.query(models.Faculty).filter(models.Faculty.id.in_(ids)).delete(synchronize_session=False)
+    db.commit()
+
+    print(f"[delete-faculty] {admin.email} permanently deleted: "
+          + ", ".join(f"{t['teacher_id']} ({t['name']})" for t in targets))
+
+    return {"status": "ok", "deleted": targets, "not_found": missing}
+
+
 class ClearActivityRequest(BaseModel):
     # Must equal CLEAR_ACTIVITY_PHRASE for anything to be deleted. Without it
     # the endpoint only reports what WOULD go, so an accidental or curious call
