@@ -229,6 +229,7 @@ tbody tr:hover td{background:rgba(22,31,54,.4)}
 .pill-absent{background:var(--red-bg);color:var(--red)}
 .pill-leave{background:var(--blue-bg);color:var(--blue)}
 .pill-waiting{background:rgba(148,163,184,.12);color:var(--text-3)}
+.pill-off{background:rgba(148,163,184,.12);color:var(--text-3)}
 .pill-pending{background:var(--amber-bg);color:var(--amber)}
 .pill-approved{background:var(--green-bg);color:var(--green)}
 .pill-rejected{background:var(--red-bg);color:var(--red)}
@@ -708,7 +709,7 @@ function enterApp() {
   document.getElementById('login-view').style.display = 'none';
   document.getElementById('app-view').style.display = 'block';
   document.getElementById('hod-dept-label').textContent = hodInfo?.department || '—';
-  document.getElementById('dept-desc').textContent = "Today’s present/absent status for " + (hodInfo?.department || 'your department');
+  updateDeptDesc();
   api('/api/time-windows/today').then(function(tw){ todayTimeWindow = tw; }).catch(function(){}).finally(function(){ loadFaculty(); });
   loadLeaveRequests();
   connectWebSocket();
@@ -759,10 +760,35 @@ function isBeforeWindow() {
 
 function isOnLeaveToday(f) { return f.on_leave_today === true; }
 
+// Sundays and holidays resolve to no schedule, and the API says so with
+// is_day_off. Nobody is expected in, so nobody can be absent. This was not
+// checked at all: a day off has start_time null, isBeforeWindow() bails out
+// to false on that, and every faculty member fell through to "Absent" —
+// so the whole department showed absent every Sunday and every holiday.
+function isDayOff() {
+  return !!(todayTimeWindow && todayTimeWindow.is_day_off);
+}
+
+// Say why the table is empty of attendance, rather than leaving a header that
+// implies people were expected in.
+function updateDeptDesc() {
+  var el = document.getElementById('dept-desc');
+  if (!el) return;
+  var dept = (hodInfo && hodInfo.department) || 'your department';
+  if (isDayOff()) {
+    var day = (todayTimeWindow && todayTimeWindow.weekday) || 'Today';
+    el.textContent = day + ' is a non-working day — no attendance expected for ' + dept;
+  } else {
+    el.textContent = 'Today’s present/absent status for ' + dept;
+  }
+}
+
 function facultyStatus(f) {
   // Present wins over leave deliberately: if someone on approved leave checked
   // in anyway, they worked, and the attendance record is the ground truth.
+  // It also wins over a day off, for the same reason.
   if (isPresentToday(f)) return 'present';
+  if (isDayOff()) return 'off';
   if (isOnLeaveToday(f)) return 'leave';
   if (isBeforeWindow()) return 'waiting';
   return 'absent';
@@ -774,15 +800,22 @@ function renderFacultyTable() {
   document.getElementById('stat-total').textContent = active.length;
   var present = 0, absent = 0, onLeave = 0;
   var beforeWindow = isBeforeWindow();
+  var dayOff = isDayOff();
+  // enterApp() paints this before /time-windows/today resolves, so refresh it
+  // here now that the day-off state is actually known.
+  updateDeptDesc();
   active.forEach(function(f){
     if (isPresentToday(f)) present++;
+    // Nobody is due in on a day off, so nothing here counts as absent or as
+    // leave — approved leave on a Sunday should not burn a leave day either.
+    else if (dayOff) return;
     // Counted separately, never as absent - that is what inflated the absence
     // figure for anyone with approved leave.
     else if (isOnLeaveToday(f)) onLeave++;
     else if (!beforeWindow) absent++;
   });
   document.getElementById('stat-present').textContent = present;
-  document.getElementById('stat-absent').textContent = beforeWindow ? '—' : absent;
+  document.getElementById('stat-absent').textContent = (dayOff || beforeWindow) ? '—' : absent;
   var leaveStat = document.getElementById('stat-leave');
   if (leaveStat) leaveStat.textContent = onLeave;
 
@@ -797,7 +830,7 @@ function renderFacultyTable() {
     tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state"><div class="empty-title">' + (q ? 'No matches' : 'No approved faculty yet') + '</div><div class="empty-sub">' + (q ? 'Try a different name or teacher ID.' : 'Faculty in your department will show up here once approved.') + '</div></div></td></tr>';
     return;
   }
-  var statusLabels = {present:'Present', absent:'Absent', waiting:'Not Started', leave:'On Leave'};
+  var statusLabels = {present:'Present', absent:'Absent', waiting:'Not Started', leave:'On Leave', off:'Day Off'};
   tbody.innerHTML = active.map(function(f) {
     var st = facultyStatus(f);
     var safeName = escapeHtml((f.name||'').replace(/'/g,"\\'"));
