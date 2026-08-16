@@ -3494,6 +3494,30 @@ function removeFacultyPrompt(id, name) {
   });
 }
 
+// Permanent delete. Deliberately only offered on an ALREADY-DEACTIVATED
+// account, so getting rid of someone is always two deliberate steps and can
+// never be one misclick next to "Mark In". "Remove" only deactivates, which is
+// why removed accounts kept showing up in this directory.
+function deleteFacultyPrompt(teacherId, name) {
+  requirePin(
+    'Delete Forever',
+    `Permanently delete "${name}" (${teacherId})? This erases the account, its enrolled face, and all attendance and leave history. It CANNOT be undone.`,
+    async () => {
+      try {
+        const res = await api('/api/admin/delete-faculty', {
+          method: 'POST',
+          body: JSON.stringify({ teacher_ids: [teacherId], confirm: 'DELETE THESE ACCOUNTS' })
+        });
+        const gone = (res && res.deleted && res.deleted.length) ? res.deleted.length : 0;
+        showToast(gone ? `${name} deleted permanently` : `Nothing deleted — ${teacherId} not found`, !gone);
+        loadFaculty();
+      } catch (err) {
+        showToast('Failed: ' + err.message, true);
+      }
+    }
+  );
+}
+
 function reactivateFacultyPrompt(id, name) {
   requirePin('Reactivate Faculty', `Reactivate "${name}"? They'll be able to log in and check in again.`, async () => {
     try {
@@ -3678,8 +3702,10 @@ function renderFacultyTable() {
       ${isActive(f)
         ? `<button class="btn-reject" style="font-size:11px;padding:3px 8px"
             onclick="removeFacultyPrompt('${id(f)}','${escapeHtml((f.name||'').replace(/'/g,"\\'"))}')">Remove</button>`
-        : `<button class="btn-approve" style="font-size:11px;padding:3px 8px"
-            onclick="reactivateFacultyPrompt('${id(f)}','${escapeHtml((f.name||'').replace(/'/g,"\\'"))}')">Reactivate</button>`}
+        : `<button class="btn-approve" style="font-size:11px;padding:3px 8px;margin-right:4px"
+            onclick="reactivateFacultyPrompt('${id(f)}','${escapeHtml((f.name||'').replace(/'/g,"\\'"))}')">Reactivate</button>
+           <button class="btn-reject" style="font-size:11px;padding:3px 8px"
+            onclick="deleteFacultyPrompt('${escapeHtml((f.teacher_id||'').replace(/'/g,"\\'"))}','${escapeHtml((f.name||'').replace(/'/g,"\\'"))}')">Delete forever</button>`}
     </td>
   </tr>`).join('');
 }
